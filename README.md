@@ -1,69 +1,110 @@
 # 🕵️ KeywordHunter - Dark Web CTI Analyst Tool
 
 ![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=for-the-badge&logo=go&logoColor=white)
-![CTI Analyst](https://img.shields.io/badge/CTI-Analyst-red?style=for-the-badge)
-![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
+![CTI Analyst](https://img.shields.io/badge/Status-Active-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-**KeywordHunter**, Dark Web kaynaklarından (17+ arama motoru) veri toplayan, bu verileri kategorize eden ve kritiklik seviyelerine göre analistlere sunan interaktif bir siber tehdit istihbaratı (CTI) aracıdır.
-
----
-
-## 🚀 Docker ile Hızlı Başlangıç
-
-Sistemi tek komutla ayağa kaldırmak için:
-
-```bash
-docker-compose up -d
-```
-
-Bu komut:
-
-1. **Tor Proxy** servisini başlatır.
-2. **CTI Dashboard** uygulamasını builder stage ile derler ve çalıştırır.
-3. Uygulama `http://localhost:8080` adresinden erişilebilir olur.
-
-**Giriş Bilgileri:**
-
-- **Kullanıcı:** `admin`
-- **Şifre:** `admin123`
+**KeywordHunter**, Dark Web verilerini (17+ arama motoru ve .onion siteleri) tarayan, analiz eden ve görselleştiren gelişmiş bir Siber Tehdit İstihbaratı (CTI) aracıdır. Analistlerin veriler arasındaki ilişkileri görmesini, kaynak dağılımlarını incelemesini ve kritiklik seviyelerine göre tehditleri önceliklendirmesini sağlar.
 
 ---
 
-## ✨ CTI Özellikleri
+## 🚀 Kurulum ve Başlatma (Local)
 
-- **Otomatik Sınıflandırma:** Toplanan veriler içeriklerine göre *Ransomware*, *Veri Sızıntısı*, *Illegal Market* gibi kategorilere otomatik atanır.
-- **Kritiklik Derecelendirmesi:** Veriler 1-5 arası kritiklik seviyesiyle işaretlenir (Örn: Sızıntı verileri Seviye 5).
-- **Graf Görselleştirme:** Veriler arasındaki ilişkileri D3.js tabanlı ağ haritasında izleme.
-- **Analist Kontrol Paneli:** Bulguların kategorilerini ve kritikliklerini manuel olarak düzenleme imkanı.
-- **Detaylı Analiz:** Ham metin içerikleri üzerinden derinlemesine inceleme.
+Hızlıca başlamak için bu adımları izleyin:
+
+1.  **Gereksinimler:**
+    *   Bilgisayarınızda **Tor Browser** kurulu ve çalışıyor olmalıdır (Proxy port: `9150` varsayılır).
+    *   **Go** yüklü olmalıdır.
+
+2.  **Projeyi İndirin:**
+    ```bash
+    git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
+    cd Keyword-Hunter
+    ```
+
+3.  **Başlatma:**
+    Uygulamayı başlatmak için bat dosyasını çalıştırın. Bu script port çakışmalarını otomatik çözer.
+    ```bash
+    baslat.bat
+    ```
+
+4.  **Erişim:**
+    Tarayıcınızdan `http://localhost:8080` adresine gidin.
+    *   **Kullanıcı Adı:** `admin`
+    *   **Şifre:** `admin123`
 
 ---
 
-## 🏗️ Mimari ve Teknolojiler
+## 📸 Arayüz ve Özellikler
 
-- **Backend:** Pure Go 1.24, Gin Framework
-- **Database:** SQLite (modernc.org/sqlite - No CGO)
-- **Frontend:** TailwindCSS, D3.js
-- **Proxy:** Tor Network (Dockerized)
+Uygulama, siber istihbarat analistlerinin iş akışını kolaylaştırmak için modüler sayfalardan oluşur.
+
+**(Ekran görüntülerini `docs/screenshots/` klasörüne ekleyip aşağıdaki ilgili alanlara yerleştirebilirsiniz)**
+
+### 1. 🖥️ Dashboard (Kontrol Paneli)
+Merkezi yönetim ekranıdır. Sistemdeki toplam veri özetini, en son yapılan aramaları ve tespit edilen bulguların kritiklik dağılımını gösterir.
+*   **Özellik:** "Toplam Analiz" kartının üzerine gelerek son 5 arama geçmişini anlık görebilirsiniz.
+*   **Özellik:** Kritiklik seviyelerinin (Level 1-5) üzerine gelerek detaylı açıklamalarını okuyabilirsiniz.
+
+![Dashboard Ekran Görüntüsü](docs/screenshots/dashboard_placeholder.png)
+
+### 2. 📊 Analiz Hub (Analytics)
+Verilerin derinlemesine istatistiksel analizini sunar.
+*   **Zaman Çizelgesi (Timeline):** Tehditlerin zaman içindeki değişimini (Saatlik/Günlük/Haftalık) izleyin.
+*   **Kaynak Dağılımı:** Hangi arama motorundan ne kadar veri geldiğini pasta grafikte görün.
+*   **Sorgu Performansı:** En çok sonuç getiren anahtar kelimeleri inceleyin.
+
+![Analytics Ekran Görüntüsü](docs/screenshots/analytics_placeholder.png)
+
+### 3. 🔍 Arama (Search)
+Dark Web üzerinde anahtar kelime veya domain bazlı arama yapmanızı sağlar.
+*   **.Onion Desteği:** Tor ağı üzerinden güvenli tarama.
+*   **Gelişmiş Regex:** Gereksiz sonuçları filtreleyen akıllı regex motoru.
+
+![Search Ekran Görüntüsü](docs/screenshots/search_placeholder.png)
+
+### 4. 📝 Bulgular (Results)
+Arama sonuçlarının listelendiği, detaylarının görüntülendiği sayfadır.
+*   Her sonucun başlığı, URL'i ve özeti listelenir.
+*   Analistler buradan manuel olarak kritiklik seviyesi atayabilir veya düzenleyebilir.
+
+![Results Ekran Görüntüsü](docs/screenshots/results_placeholder.png)
+
+### 5. 🕸️ İlişki Ağı (Graph)
+Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır.
+*   Düğümler arası ilişkileri keşfedin.
+*   Domain ve anahtar kelime kümelerini görsel olarak analiz edin.
+
+![Graph Ekran Görüntüsü](docs/screenshots/graph_placeholder.png)
 
 ---
 
-## 🔍 Başlık Üretim Mantığı
+## 🛡️ Kritiklik Seviyeleri (Criticality Levels)
 
-Sistem, dark web kaynaklarından gelen ham HTML içeriklerini parse ederken:
+Sistem, tespit edilen içerikleri otomatik veya manuel olarak derecelendirir:
 
-1. `<a>` tagları arasındaki metni alır.
-2. HTML entity'lerini decode eder ve tagları temizler.
-3. Eğer metin anlamsızsa (çok kısa veya hash ise), URL yapısından (path) anlamlı bir başlık üretir.
-4. Çıkarılan başlık, CTI analizi (PredictCTI) modülünden geçirilerek kategori atanır.
+*   🔴 **Level 5 (Kritik):** Ransomware duyuruları, Veri sızıntıları, Acil tehditler.
+*   🟠 **Level 4 (Yüksek):** Database satışları, Zero-day exploit tartışmaları.
+*   🟡 **Level 3 (Orta):** Hack forum tartışmaları, illegal marketplace aktiviteleri.
+*   🔵 **Level 2 (Düşük):** Genel dark web sohbetleri, şüpheli aktiviteler.
+*   ⚪ **Level 1 (Bilgi):** Genel bilgiler, doğrulanmamış içerikler.
+
+---
+
+## 🏗️ Teknoloji Yığını
+
+*   **Backend:** Golang (Performans odaklı mimari)
+*   **Veritabanı:** SQLite (Kolay taşınabilirlik)
+*   **Frontend:** HTML5, TailwindCSS, Chart.js (Modern ve responsive tasarım)
+*   **Ağ:** Tor Network (Anonim veri toplama)
 
 ---
 
 ## ⚖️ Yasal Uyarı
 
-Bu araç siber güvenlik araştırmacıları ve öğrenciler için eğitim amaçlı geliştirilmiştir. Yasadışı faaliyetler için kullanımı kesinlikle yasaktır.
+Bu yazılım **Siber Güvenlik Uzmanları** ve **CTI Analistleri** için araştırma ve eğitim amaçlı geliştirilmiştir. Yasadışı faaliyetlerde kullanılması kesinlikle yasaktır ve tüm sorumluluk kullanıcıya aittir.
 
 ---
 
 **Geliştirici:** Mehmet Yasin Uzun
-**Proje Durumu:** MVP (CTI Refactor)
+**Sürüm:** v0.3
