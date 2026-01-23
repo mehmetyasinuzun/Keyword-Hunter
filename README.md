@@ -44,7 +44,7 @@ Merkezi yönetim ekranıdır. Sistemdeki toplam veri özetini, en son yapılan a
 *   "Toplam Analiz" kartının üzerine gelerek son 5 arama geçmişini anlık görebilirsiniz.
 *   Kritiklik seviyelerinin (Level 1-5) üzerine gelerek detaylı açıklamalarını okuyabilirsiniz.
 
-![Dashboard Ekran Görüntüsü](docs/screenshots/dashboard.png)
+![Dashboard Ekran Görüntüsü](docs/screenshots/dashboard_view.jpg)
 
 ### 2. Analiz Hub (Analytics)
 Verilerin derinlemesine istatistiksel analizini sunar.
@@ -52,21 +52,21 @@ Verilerin derinlemesine istatistiksel analizini sunar.
 *   **Kaynak Dağılımı:** Hangi arama motorundan ne kadar veri geldiğini pasta grafikte görün.
 *   **Sorgu Performansı:** En çok sonuç getiren anahtar kelimeleri inceleyin.
 
-![Analytics Ekran Görüntüsü](docs/screenshots/analytics.png)
+![Analytics Ekran Görüntüsü](docs/screenshots/analytics_view.png)
 
 ### 3. Arama (Search)
 Dark Web üzerinde anahtar kelime veya domain bazlı arama yapmanızı sağlar.
 *   **.Onion Desteği:** Tor ağı üzerinden güvenli tarama.
 *   **Gelişmiş Regex:** Gereksiz sonuçları filtreleyen akıllı regex motoru.
 
-![Search Ekran Görüntüsü](docs/screenshots/search.png)
+![Search Ekran Görüntüsü](docs/screenshots/search_view.png)
 
 ### 4. Bulgular (Results)
 Arama sonuçlarının listelendiği, detaylarının görüntülendiği sayfadır.
 *   Her sonucun başlığı, URL'i ve özeti listelenir.
 *   Analistler buradan manuel olarak kritiklik seviyesi atayabilir veya düzenleyebilir.
 
-![Results Ekran Görüntüsü](docs/screenshots/results.png)
+![Results Ekran Görüntüsü](docs/screenshots/results_view.png)
 
 ### 5. İlişki Ağı (Graph)
 Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır.
