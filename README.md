@@ -1,14 +1,14 @@
-# 🕵️ KeywordHunter - Dark Web CTI Analyst Tool
+# KeywordHunter - Dark Web CTI Analyst Tool
 
-![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=for-the-badge&logo=go&logoColor=white)
-![CTI Analyst](https://img.shields.io/badge/Status-Active-green?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go&logoColor=white)
+![CTI Analyst](https://img.shields.io/badge/Status-Active-green?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
 
 **KeywordHunter**, Dark Web verilerini (17+ arama motoru ve .onion siteleri) tarayan, analiz eden ve görselleştiren gelişmiş bir Siber Tehdit İstihbaratı (CTI) aracıdır. Analistlerin veriler arasındaki ilişkileri görmesini, kaynak dağılımlarını incelemesini ve kritiklik seviyelerine göre tehditleri önceliklendirmesini sağlar.
 
 ---
 
-## 🚀 Kurulum ve Başlatma (Local)
+## Kurulum ve Başlatma (Local)
 
 Hızlıca başlamak için bu adımları izleyin:
 
@@ -35,63 +35,61 @@ Hızlıca başlamak için bu adımları izleyin:
 
 ---
 
-## 📸 Arayüz ve Özellikler
+## Arayüz ve Özellikler
 
 Uygulama, siber istihbarat analistlerinin iş akışını kolaylaştırmak için modüler sayfalardan oluşur.
 
-**(Ekran görüntülerini `docs/screenshots/` klasörüne ekleyip aşağıdaki ilgili alanlara yerleştirebilirsiniz)**
-
-### 1. 🖥️ Dashboard (Kontrol Paneli)
+### 1. Dashboard (Kontrol Paneli)
 Merkezi yönetim ekranıdır. Sistemdeki toplam veri özetini, en son yapılan aramaları ve tespit edilen bulguların kritiklik dağılımını gösterir.
-*   **Özellik:** "Toplam Analiz" kartının üzerine gelerek son 5 arama geçmişini anlık görebilirsiniz.
-*   **Özellik:** Kritiklik seviyelerinin (Level 1-5) üzerine gelerek detaylı açıklamalarını okuyabilirsiniz.
+*   "Toplam Analiz" kartının üzerine gelerek son 5 arama geçmişini anlık görebilirsiniz.
+*   Kritiklik seviyelerinin (Level 1-5) üzerine gelerek detaylı açıklamalarını okuyabilirsiniz.
 
-![Dashboard Ekran Görüntüsü](docs/screenshots/dashboard_placeholder.png)
+![Dashboard Ekran Görüntüsü](docs/screenshots/dashboard.png)
 
-### 2. 📊 Analiz Hub (Analytics)
+### 2. Analiz Hub (Analytics)
 Verilerin derinlemesine istatistiksel analizini sunar.
 *   **Zaman Çizelgesi (Timeline):** Tehditlerin zaman içindeki değişimini (Saatlik/Günlük/Haftalık) izleyin.
 *   **Kaynak Dağılımı:** Hangi arama motorundan ne kadar veri geldiğini pasta grafikte görün.
 *   **Sorgu Performansı:** En çok sonuç getiren anahtar kelimeleri inceleyin.
 
-![Analytics Ekran Görüntüsü](docs/screenshots/analytics_placeholder.png)
+![Analytics Ekran Görüntüsü](docs/screenshots/analytics.png)
 
-### 3. 🔍 Arama (Search)
+### 3. Arama (Search)
 Dark Web üzerinde anahtar kelime veya domain bazlı arama yapmanızı sağlar.
 *   **.Onion Desteği:** Tor ağı üzerinden güvenli tarama.
 *   **Gelişmiş Regex:** Gereksiz sonuçları filtreleyen akıllı regex motoru.
 
-![Search Ekran Görüntüsü](docs/screenshots/search_placeholder.png)
+![Search Ekran Görüntüsü](docs/screenshots/search.png)
 
-### 4. 📝 Bulgular (Results)
+### 4. Bulgular (Results)
 Arama sonuçlarının listelendiği, detaylarının görüntülendiği sayfadır.
 *   Her sonucun başlığı, URL'i ve özeti listelenir.
 *   Analistler buradan manuel olarak kritiklik seviyesi atayabilir veya düzenleyebilir.
 
-![Results Ekran Görüntüsü](docs/screenshots/results_placeholder.png)
+![Results Ekran Görüntüsü](docs/screenshots/results.png)
 
-### 5. 🕸️ İlişki Ağı (Graph)
+### 5. İlişki Ağı (Graph)
 Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır.
 *   Düğümler arası ilişkileri keşfedin.
 *   Domain ve anahtar kelime kümelerini görsel olarak analiz edin.
 
-![Graph Ekran Görüntüsü](docs/screenshots/graph_placeholder.png)
+![Graph Ekran Görüntüsü](docs/screenshots/graph_radial.jpg)
 
 ---
 
-## 🛡️ Kritiklik Seviyeleri (Criticality Levels)
+## Kritiklik Seviyeleri (Criticality Levels)
 
 Sistem, tespit edilen içerikleri otomatik veya manuel olarak derecelendirir:
 
-*   🔴 **Level 5 (Kritik):** Ransomware duyuruları, Veri sızıntıları, Acil tehditler.
-*   🟠 **Level 4 (Yüksek):** Database satışları, Zero-day exploit tartışmaları.
-*   🟡 **Level 3 (Orta):** Hack forum tartışmaları, illegal marketplace aktiviteleri.
-*   🔵 **Level 2 (Düşük):** Genel dark web sohbetleri, şüpheli aktiviteler.
-*   ⚪ **Level 1 (Bilgi):** Genel bilgiler, doğrulanmamış içerikler.
+*   **Level 5 (Kritik):** Ransomware duyuruları, Veri sızıntıları, Acil tehditler.
+*   **Level 4 (Yüksek):** Database satışları, Zero-day exploit tartışmaları.
+*   **Level 3 (Orta):** Hack forum tartışmaları, illegal marketplace aktiviteleri.
+*   **Level 2 (Düşük):** Genel dark web sohbetleri, şüpheli aktiviteler.
+*   **Level 1 (Bilgi):** Genel bilgiler, doğrulanmamış içerikler.
 
 ---
 
-## 🏗️ Teknoloji Yığını
+## Teknoloji Yığını
 
 *   **Backend:** Golang (Performans odaklı mimari)
 *   **Veritabanı:** SQLite (Kolay taşınabilirlik)
@@ -100,7 +98,7 @@ Sistem, tespit edilen içerikleri otomatik veya manuel olarak derecelendirir:
 
 ---
 
-## ⚖️ Yasal Uyarı
+## Yasal Uyarı
 
 Bu yazılım **Siber Güvenlik Uzmanları** ve **CTI Analistleri** için araştırma ve eğitim amaçlı geliştirilmiştir. Yasadışı faaliyetlerde kullanılması kesinlikle yasaktır ve tüm sorumluluk kullanıcıya aittir.
 
