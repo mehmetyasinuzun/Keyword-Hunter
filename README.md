@@ -52,21 +52,21 @@ Verilerin derinlemesine istatistiksel analizini sunar.
 *   **Kaynak Dağılımı:** Hangi arama motorundan ne kadar veri geldiğini pasta grafikte görün.
 *   **Sorgu Performansı:** En çok sonuç getiren anahtar kelimeleri inceleyin.
 
-![Analytics Ekran Görüntüsü](docs/screenshots/analytics_view.png)
+![Analytics Ekran Görüntüsü](docs/screenshots/analytics_view.jpg)
 
 ### 3. Arama (Search)
 Dark Web üzerinde anahtar kelime veya domain bazlı arama yapmanızı sağlar.
 *   **.Onion Desteği:** Tor ağı üzerinden güvenli tarama.
 *   **Gelişmiş Regex:** Gereksiz sonuçları filtreleyen akıllı regex motoru.
 
-![Search Ekran Görüntüsü](docs/screenshots/search_view.png)
+![Search Ekran Görüntüsü](docs/screenshots/search_view.jpg)
 
 ### 4. Bulgular (Results)
 Arama sonuçlarının listelendiği, detaylarının görüntülendiği sayfadır.
 *   Her sonucun başlığı, URL'i ve özeti listelenir.
 *   Analistler buradan manuel olarak kritiklik seviyesi atayabilir veya düzenleyebilir.
 
-![Results Ekran Görüntüsü](docs/screenshots/results_view.png)
+![Results Ekran Görüntüsü](docs/screenshots/results_view.jpg)
 
 ### 5. İlişki Ağı (Graph)
 Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır. Düğümler arası ilişkileri 3 farklı modda (Radial, Tree, Force) inceleyebilirsiniz.
