@@ -12,9 +12,16 @@
 
 Sistemi tek komutla, bağımlılıklarla uğraşmadan ayağa kaldırmak için Docker kullanın:
 
-```bash
-docker-compose up -d
-```
+1.  **Projeyi İndirin:**
+    ```bash
+    git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
+    cd Keyword-Hunter
+    ```
+
+2.  **Başlatın:**
+    ```bash
+    docker-compose up -d
+    ```
 
 Bu komut:
 1.  **Tor Proxy** servisini başlatır.
