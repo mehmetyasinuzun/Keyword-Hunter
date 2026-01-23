@@ -69,11 +69,23 @@ Arama sonuçlarının listelendiği, detaylarının görüntülendiği sayfadır
 ![Results Ekran Görüntüsü](docs/screenshots/results_view.png)
 
 ### 5. İlişki Ağı (Graph)
-Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır.
-*   Düğümler arası ilişkileri keşfedin.
-*   Domain ve anahtar kelime kümelerini görsel olarak analiz edin.
+Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır. Düğümler arası ilişkileri 3 farklı modda (Radial, Tree, Force) inceleyebilirsiniz.
 
-![Graph Ekran Görüntüsü](docs/screenshots/graph_radial.jpg)
+#### Radial View (Dairesel Görünüm)
+Merkezi odaklı analiz için idealdir.
+![Graph Radial View](docs/screenshots/graph_radial.jpg)
+
+#### Tree View (Ağaç Görünümü)
+Hiyerarşik yapıları ve alt kırılımları görmek için kullanılır.
+![Graph Tree View](docs/screenshots/graph_tree.jpg)
+
+#### Network/Force View (Ağ Görünümü)
+Dağınık ilişkileri ve kümeleri serbest düzende gösterir.
+![Graph Network View](docs/screenshots/graph_network.jpg)
+
+#### Context Menu & Details
+Düğümlere sağ tıklayarak detaylı aksiyon menüsüne (Derinleştir, Linki Kopyala vb.) erişebilirsiniz.
+![Graph Context Menu](docs/screenshots/graph_context.jpg)
 
 ---
 
