@@ -8,13 +8,32 @@
 
 ---
 
-## Kurulum ve Başlatma (Local)
+## Docker ile Hızlı Başlangıç (Önerilen)
 
-Hızlıca başlamak için bu adımları izleyin:
+Sistemi tek komutla, bağımlılıklarla uğraşmadan ayağa kaldırmak için Docker kullanın:
+
+```bash
+docker-compose up -d
+```
+
+Bu komut:
+1.  **Tor Proxy** servisini başlatır.
+2.  **KeywordHunter** uygulamasını derler ve çalıştırır.
+3.  Uygulama `http://localhost:8080` adresinden erişilebilir olur.
+
+**Giriş Bilgileri:**
+*   **Kullanıcı:** `admin`
+*   **Şifre:** `admin123`
+
+---
+
+## Manuel Kurulum (Alternatif)
+
+Docker kullanmak istemezseniz manuel olarak da kurabilirsiniz:
 
 1.  **Gereksinimler:**
-    *   Bilgisayarınızda **Tor Browser** kurulu ve çalışıyor olmalıdır (Proxy port: `9150` varsayılır).
-    *   **Go** yüklü olmalıdır.
+    *   **Tor Browser** (Proxy port: `9150` açık olmalı).
+    *   **Go** (1.24+).
 
 2.  **Projeyi İndirin:**
     ```bash
@@ -23,15 +42,10 @@ Hızlıca başlamak için bu adımları izleyin:
     ```
 
 3.  **Başlatma:**
-    Uygulamayı başlatmak için bat dosyasını çalıştırın. Bu script port çakışmalarını otomatik çözer.
+    Otomatik port yönetimi için `baslat.bat` kullanabilirsiniz:
     ```bash
     baslat.bat
     ```
-
-4.  **Erişim:**
-    Tarayıcınızdan `http://localhost:8080` adresine gidin.
-    *   **Kullanıcı Adı:** `admin`
-    *   **Şifre:** `admin123`
 
 ---
 
