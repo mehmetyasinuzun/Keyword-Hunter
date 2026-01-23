@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeywordHunter - Sonuç Haritası</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="/static/css/graph.css">
+</head>
+
+<body class="min-h-screen graph-page">
+    <!-- Compact Navbar -->
+    <nav class="bg-gray-900/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+        <div class="max-w-full mx-auto px-6 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <span class="text-3xl">🕵️</span>
+                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
+                    <span
+                        class="bg-blue-500/20 text-blue-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded tracking-widest ml-2">Harita</span>
+                </div>
+
+
+
+                <div class="flex items-center space-x-6 text-sm">
+                    <a href="/dashboard" class="text-gray-400 hover:text-white transition">Dashboard</a>
+                    <a href="/results" class="text-gray-400 hover:text-white transition">Bulgular</a>
+                    <a href="/results/graph" class="text-blue-400 font-bold transition">Harita</a>
+                    <a href="/analytics" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                        <span>📊</span> Analiz
+                    </a>
+                    <a href="/search" class="text-gray-400 hover:text-white transition">Arama</a>
+                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-xs">Çıkış</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Query Panel -->
+    <div class="query-panel">
+        <div class="query-selector">
+            <label>📌 Sorgu:</label>
+            <select id="query-select" onchange="loadSelectedQuery()">
+                <option value="">Yükleniyor...</option>
+            </select>
+        </div>
+        <div class="query-search">
+            <input type="text" id="quick-search" placeholder="Yeni arama..."
+                onkeypress="if(event.key==='Enter') quickSearch()">
+            <button onclick="quickSearch()" class="search-btn">🔍</button>
+        </div>
+        <div class="query-info">
+            <span id="current-query-label"></span>
+        </div>
+    </div>
+
+    <!-- Graph Container -->
+    <div id="graph-container">
+        <!-- Stats Panel -->
+        <div class="panel stats">
+            <h3>📊 İstatistikler</h3>
+            <div class="stats-item">
+                <span>Sorgu:</span>
+                <span class="stats-value" id="stat-queries">0</span>
+            </div>
+            <div class="stats-item">
+                <span>Motor:</span>
+                <span class="stats-value" id="stat-engines">0</span>
+            </div>
+            <div class="stats-item">
+                <span>Sonuç:</span>
+                <span class="stats-value" id="stat-results">0</span>
+            </div>
+            <div class="stats-item">
+                <span>Çoklu:</span>
+                <span class="stats-value" style="color: #ed8936;" id="stat-multi">0</span>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="panel controls">
+            <button class="control-btn primary" onclick="showFullMap()" title="Tüm derinleştirmeleri aç">
+                🗺️ Full Map
+            </button>
+            <button class="control-btn" onclick="collapseAll()" title="Tüm node'ları kapat">
+                📁 Kapat
+            </button>
+            <button class="control-btn" onclick="resetView()" title="Görünümü sıfırla">
+                🎯 Sıfırla
+            </button>
+            <button class="control-btn" onclick="fitToScreen()" title="Ekrana sığdır">
+                ⬜ Sığdır
+            </button>
+        </div>
+
+        <!-- Layout Selector -->
+        <div class="layout-selector">
+            <button class="layout-btn active" onclick="setLayout('radial')" id="layout-radial"
+                title="Dairesel yerleşim">
+                ◉ Radial
+            </button>
+            <button class="layout-btn" onclick="setLayout('tree')" id="layout-tree" title="Yatay ağaç">
+                🌳 Tree
+            </button>
+            <button class="layout-btn" onclick="setLayout('force')" id="layout-force" title="Force-directed">
+                🔮 Force
+            </button>
+        </div>
+
+        <!-- Zoom Controls -->
+        <div class="zoom-controls">
+            <button class="zoom-btn" onclick="zoomIn()" title="Yakınlaştır">+</button>
+            <button class="zoom-btn" onclick="zoomOut()" title="Uzaklaştır">−</button>
+        </div>
+
+        <!-- Legend -->
+        <div class="panel legend">
+            <h3>🏷️ Açıklama</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #4299e1;"></div>
+                <span>Sorgu</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #48bb78;"></div>
+                <span>Motor</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #718096;"></div>
+                <span>Sonuç</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ed8936;"></div>
+                <span>Çoklu ⭐</span>
+            </div>
+            <div class="legend-divider">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #48bb78;"></div>
+                    <span>İç Link</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ed64a6;"></div>
+                    <span>Dış Link</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graf Ayarları Paneli -->
+        <div class="panel settings-panel" id="settings-panel" style="display: none;">
+            <h3>⚙️ Graf Ayarları</h3>
+            <div class="settings-group">
+                <label>Yazı Boyutu</label>
+                <input type="range" id="font-size-slider" min="10" max="22" value="14" oninput="updateGraphSettings()">
+                <span id="font-size-value">14px</span>
+            </div>
+            <div class="settings-group">
+                <label>Node Aralığı</label>
+                <input type="range" id="spacing-slider" min="0.5" max="3" step="0.25" value="1"
+                    oninput="updateGraphSettings()">
+                <span id="spacing-value">1x</span>
+            </div>
+            <div class="settings-group">
+                <label>Yazı Uzunluğu</label>
+                <input type="range" id="truncate-slider" min="10" max="50" value="25" oninput="updateGraphSettings()">
+                <span id="truncate-value">25 kar.</span>
+            </div>
+            <div class="settings-group">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="show-all-labels" checked onchange="updateGraphSettings()">
+                    Tüm Yazıları Göster
+                </label>
+            </div>
+            <div class="settings-actions">
+                <button class="settings-btn" onclick="resetGraphSettings()">Varsayılan</button>
+                <button class="settings-btn primary" onclick="applyGraphSettings()">Uygula</button>
+            </div>
+        </div>
+
+        <!-- Ayarlar Butonu -->
+        <button class="settings-toggle" id="settings-toggle" onclick="toggleSettingsPanel()" title="Graf Ayarları">
+            ⚙️
+        </button>
+
+        <!-- Tooltip -->
+        <div class="tooltip" id="tooltip" style="display: none;"></div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" onclick="copyLink()">📋 Linki Kopyala</div>
+        <div class="context-menu-item" onclick="copyTitle()">📝 Başlığı Kopyala</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()">🔍 Derinleştir</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="focusNode()">🎯 Odaklan</div>
+        <div class="context-menu-item" onclick="showLinkInfo()">ℹ️ Detaylar</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item danger" onclick="closeContextMenu()">✖️ Kapat</div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Loading -->
+    <div class="expand-loading" id="expand-loading">
+        <div class="spinner"></div>
+        <div style="color: #e2e8f0; font-weight: 500;">Sayfa taranıyor...</div>
+        <div style="color: #a0aec0; font-size: 12px; margin-top: 8px;">Linkler çıkarılıyor</div>
+    </div>
+
+    <!-- Link Info Modal -->
+    <div id="link-modal">
+        <div>
+            <h3 style="color: #63b3ed; font-size: 18px; margin-bottom: 20px;">🔗 Link Detayları</h3>
+            <div id="link-modal-content"></div>
+            <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
+                <button onclick="copyLinkFromModal()"
+                    style="background: linear-gradient(135deg, #4299e1, #3182ce); color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">📋
+                    Kopyala</button>
+                <button onclick="closeLinkModal()"
+                    style="background: #4a5568; color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer;">Kapat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Graph JS -->
+    <script src="/static/js/graph.js"></script>
+    <script>
+        // Pass query parameter to JS
+        window.currentQuery = '{{.query}}';
+
+
+
+        // Load available queries and initialize
+        loadQueries().then(() => {
+            if (window.currentQuery) {
+                document.getElementById('query-select').value = window.currentQuery;
+            }
+            initGraph(window.currentQuery);
+        });
+    </script>
+</body>
+
+</html>

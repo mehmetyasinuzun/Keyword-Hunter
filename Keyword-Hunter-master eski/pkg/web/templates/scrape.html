@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeywordHunter - Scrape</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+        .loader { border-top-color: #3498db; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-gray-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <span class="text-2xl">🕵️</span>
+                    <span class="text-white font-bold text-xl">KeywordHunter</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/dashboard" class="text-gray-300 hover:text-white">Dashboard</a>
+                    <a href="/search" class="text-gray-300 hover:text-white">Arama</a>
+                    <a href="/scrape" class="text-blue-400 hover:text-blue-300 font-medium">Scrape</a>
+                    <a href="/results" class="text-gray-300 hover:text-white">Sonuçlar</a>
+                    <a href="/results/graph" class="text-gray-300 hover:text-white">Harita</a>
+                    <a href="/contents" class="text-gray-300 hover:text-white">İçerikler</a>
+                    <a href="/logout" class="text-red-400 hover:text-red-300">Çıkış</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Scrape Form -->
+        <div class="bg-gray-800 rounded-xl p-6 shadow-lg mb-8">
+            <h2 class="text-xl font-bold text-white mb-4">🔄 URL Scraper</h2>
+            <p class="text-gray-400 mb-4">Arama sonuçlarından bulunan .onion URL'lerini scrape ederek içeriklerini çeker.</p>
+            
+            {{if .error}}
+            <div class="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4">
+                ❌ {{.error}}
+            </div>
+            {{end}}
+            
+            <form method="POST" action="/scrape" id="scrapeForm">
+                <div class="flex gap-4 items-end">
+                    <div>
+                        <label class="block text-gray-300 text-sm mb-2">Kaç URL scrape edilsin?</label>
+                        <select name="limit" class="px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                            <option value="5">5 URL</option>
+                            <option value="10" selected>10 URL</option>
+                            <option value="20">20 URL</option>
+                            <option value="30">30 URL</option>
+                            <option value="50">50 URL</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="scrapeBtn"
+                        class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-lg transition flex items-center gap-2">
+                        <span>🔄</span> Scrape Başlat
+                    </button>
+                </div>
+            </form>
+            
+            <p class="text-gray-500 text-sm mt-4">
+                ⚠️ Scrape işlemi Tor üzerinden yapılır ve uzun sürebilir. Her URL için 45-60 saniye beklenebilir.
+            </p>
+        </div>
+
+        {{if .scraped}}
+        <!-- Results Summary -->
+        <div class="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    ✅ <strong>{{.total}}</strong> URL işlendi: 
+                    <strong>{{.success}}</strong> başarılı, 
+                    <strong>{{.failed}}</strong> başarısız
+                </div>
+                <div class="text-sm">⏱️ {{.duration}}</div>
+            </div>
+        </div>
+
+        {{if .scrapeErrors}}
+        <div class="bg-red-500/20 border border-red-500 rounded-lg p-4 mb-6">
+            <h3 class="text-red-400 font-medium mb-2">⚠️ Hatalar:</h3>
+            <ul class="text-red-300 text-sm space-y-1">
+                {{range .scrapeErrors}}
+                <li>• {{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if .contents}}
+        <!-- Recent Contents -->
+        <div class="bg-gray-800 rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-white">📄 Son Scrape Edilen İçerikler</h2>
+                <a href="/contents" class="text-blue-400 hover:text-blue-300 text-sm">Tümünü Gör →</a>
+            </div>
+            
+            <div class="space-y-3">
+                {{range .contents}}
+                <div class="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1 min-w-0">
+                            <a href="/content/{{.ID}}" class="text-white font-medium hover:text-blue-400">
+                                {{truncate .Title 60}}
+                            </a>
+                            <p class="text-gray-400 text-sm mt-1">{{truncate .RawContent 150}}</p>
+                            <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                                <span>📦 {{.ContentSize}} karakter</span>
+                                <span>📅 {{formatTime .ScrapedAt}}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    <script>
+        document.getElementById('scrapeForm').addEventListener('submit', function() {
+            const btn = document.getElementById('scrapeBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loader inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Scrape ediliyor...';
+        });
+    </script>
+</body>
+</html>

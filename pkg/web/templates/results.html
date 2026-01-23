@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeywordHunter - Bulgular</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        .loading-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen text-gray-100">
+    <!-- Navbar -->
+    <nav class="bg-gray-900/90 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <span class="text-3xl">🕵️</span>
+                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
+                </div>
+
+
+
+                <div class="flex items-center space-x-6">
+                    <a href="/dashboard" class="text-gray-400 hover:text-white transition">Dashboard</a>
+                    <a href="/results" class="text-blue-400 font-bold transition">Bulgular</a>
+                    <a href="/results/graph" class="text-gray-400 hover:text-white transition">Harita</a>
+                    <a href="/analytics" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                        <span>📊</span> Analiz
+                    </a>
+                    <a href="/search" class="text-gray-400 hover:text-white transition">Arama</a>
+                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-sm">Çıkış</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Filter and Search -->
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold">📋 Veri Analiz Paneli</h2>
+                    <p class="text-gray-400 text-sm mt-1">Toplam {{.totalResults}} kayıt üzerinden analiz yapılıyor.</p>
+                </div>
+                <div class="flex gap-2">
+                    <a href="/results/graph{{if .query}}?q={{.query}}{{end}}"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition text-sm flex items-center gap-2">
+                        🗺️ Haritada Gör
+                    </a>
+                </div>
+            </div>
+
+            <form method="GET" action="/results" class="flex flex-wrap gap-4">
+                <input type="text" name="q" value="{{.query}}" placeholder="Sorgu, başlık veya URL içinde ara..."
+                    class="flex-1 min-w-[300px] px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                <select name="limit"
+                    class="px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                    <option value="50" {{if eq .limit 50}}selected{{end}}>50 kayıt</option>
+                    <option value="100" {{if eq .limit 100}}selected{{end}}>100 kayıt</option>
+                    <option value="500" {{if eq .limit 500}}selected{{end}}>500 kayıt</option>
+                </select>
+                <button type="submit"
+                    class="bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white font-bold py-3 px-8 rounded-lg transition">
+                    Filtrele
+                </button>
+            </form>
+        </div>
+
+        <!-- Analysis Table -->
+        <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+            {{if .results}}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead
+                        class="bg-gray-900/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b border-gray-700">
+                        <tr>
+                            <th class="px-6 py-4">BAŞLIK & KAYNAK</th>
+                            <th class="px-6 py-4">URL</th>
+                            <th class="px-6 py-4 text-center">KRİTİKLİK</th>
+                            <th class="px-6 py-4">KATEGORİ</th>
+                            <th class="px-6 py-4 text-center">FREKANS</th>
+                            <th class="px-6 py-4 text-right">EYLEM</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700/50">
+                        {{range .results}}
+                        <tr class="hover:bg-gray-700/30 transition group">
+                            <td class="px-6 py-4">
+                                <p class="text-white font-bold mb-0.5">{{truncate .Title 60}}</p>
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        class="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-mono">{{.Source}}</span>
+                                    <span class="text-[10px] text-gray-500 italic">Sorgu: {{.Query}}</span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <a href="{{.URL}}" target="_blank"
+                                    class="text-blue-500 hover:underline font-mono text-xs">{{truncate .URL 40}}</a>
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <select onchange="updateRow('{{.ID}}', this.value, '{{.Category}}')" class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none
+                                    {{if eq .Criticality 5}}text-red-500 font-bold
+                                    {{else if eq .Criticality 4}}text-orange-500
+                                    {{else if eq .Criticality 3}}text-yellow-500
+                                    {{else}}text-blue-400{{end}}">
+                                    {{$currentCrit := .Criticality}}
+                                    {{range $v := (seq 1 5)}}
+                                    <option value="{{$v}}" {{if eq $v $currentCrit}}selected{{end}}>{{$v}}</option>
+                                    {{end}}
+                                </select>
+                            </td>
+                            <td class="px-6 py-4">
+                                <input type="text" value="{{.Category}}"
+                                    onblur="updateRow('{{.ID}}', '{{.Criticality}}', this.value)"
+                                    class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs w-24 outline-none focus:border-blue-500 transition">
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <span id="count-{{.ID}}"
+                                    class="font-mono font-bold text-lg {{if gt .KeywordCount 0}}text-green-500{{else}}text-gray-600{{end}}">
+                                    {{.KeywordCount}}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <button onclick="analyzeResult('{{.ID}}', this)"
+                                    class="bg-gray-700 hover:bg-blue-600 p-2 rounded transition flex items-center justify-center min-w-[32px] mx-auto"
+                                    title="Kelime Sayısını Güncelle">
+                                    <span class="icon">🔍</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <div class="text-center py-24 text-gray-500">
+                <p class="text-5xl mb-4">📭</p>
+                <p class="text-xl">Analiz edilecek veri bulunamadı.</p>
+                <a href="/search" class="text-blue-500 hover:text-blue-400 mt-4 inline-block font-bold">Yeni Arama
+                    Başlat →</a>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div id="toast"
+        class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl transition-all opacity-0 translate-y-10 z-[100]">
+        ✅ Güncellendi
+    </div>
+
+    <script>
+        function updateRow(id, crit, cat) {
+            fetch('/api/update-criticality', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: parseInt(id),
+                    type: 'result',
+                    criticality: parseInt(crit),
+                    category: cat
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    showToast('Güncellendi');
+                }
+            });
+        }
+
+        function analyzeResult(id, btn) {
+            const icon = btn.querySelector('.icon');
+            const originalIcon = icon.innerText;
+            icon.innerText = '⏳';
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+
+            fetch('/api/analyze-result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: parseInt(id) })
+            }).then(r => r.json()).then(data => {
+                icon.innerText = originalIcon;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+
+                if (data.success) {
+                    const countEl = document.getElementById('count-' + id);
+                    countEl.innerText = data.count;
+                    if (data.count > 0) {
+                        countEl.classList.remove('text-gray-600');
+                        countEl.classList.add('text-green-500');
+                    }
+                    showToast('Analiz Tamamlandı: ' + data.count + ' eşleşme');
+                } else {
+                    showToast('Hata: ' + data.error);
+                }
+            }).catch(err => {
+                icon.innerText = originalIcon;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                showToast('Hata oluştu');
+            });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = '✅ ' + msg;
+            t.classList.remove('opacity-0', 'translate-y-10');
+            setTimeout(() => t.classList.add('opacity-0', 'translate-y-10'), 2000);
+        }
+    </script>
+</body>
+
+</html>

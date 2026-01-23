@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  tor:
+    image: pickapp/tor-proxy:latest
+    ports:
+      - "9050:9050"
+    restart: always
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - TOR_PROXY=tor:9050
+      - DB_PATH=/data/keywordhunter.db
+      - LOG_DIR=/data/logs
+    volumes:
+      - ./data:/data
+    depends_on:
+      - tor
+    restart: always

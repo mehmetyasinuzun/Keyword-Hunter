@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeywordHunter - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        .stat-card {
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen text-gray-100">
+    <!-- Navbar -->
+    <nav class="bg-gray-900/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <span class="text-3xl">🕵️</span>
+                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
+                </div>
+
+
+
+                <div class="flex items-center space-x-6">
+                    <a href="/dashboard" class="text-blue-400 font-bold transition">Dashboard</a>
+                    <a href="/results" class="text-gray-400 hover:text-white transition">Bulgular</a>
+                    <a href="/results/graph" class="text-gray-400 hover:text-white transition">Harita</a>
+                    <a href="/analytics" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                        <span>📊</span> Analiz
+                    </a>
+                    <a href="/search" class="text-gray-400 hover:text-white transition">Arama</a>
+                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-sm">Çıkış</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Overview Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-xl backdrop-blur-sm stat-card">
+                <p class="text-gray-400 text-sm font-medium">Toplam Bulgu</p>
+                <div class="flex items-center justify-between mt-1">
+                    <p class="text-3xl font-black text-white">{{.totalResults}}</p>
+                    <div class="text-2xl opacity-50">📊</div>
+                </div>
+            </div>
+            <div
+                class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-xl backdrop-blur-sm stat-card group relative cursor-help">
+                <p class="text-gray-400 text-sm font-medium">Toplam Analiz</p>
+                <div class="flex items-center justify-between mt-1">
+                    <p class="text-3xl font-black text-white">{{.totalSearches}}</p>
+                    <div class="text-2xl opacity-50">🔍</div>
+                </div>
+
+                <!-- Tooltip: Recent Searches -->
+                <div
+                    class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-4 py-3 bg-gray-900 text-white text-xs rounded-lg shadow-2xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-64 z-20 pointer-events-none">
+                    <div class="font-bold mb-2 text-blue-400 border-b border-gray-700 pb-1">🕒 Son Aramalar</div>
+                    <ul class="space-y-1.5 text-left">
+                        {{range $i, $h := .searchHistory}}
+                        {{if lt $i 5}}
+                        <li class="flex justify-between items-center text-gray-300">
+                            <span class="truncate font-mono text-blue-200">{{$h.Query}}</span>
+                            <span
+                                class="text-[10px] bg-gray-800 px-1.5 py-0.5 rounded text-gray-400">{{$h.ResultCount}}</span>
+                        </li>
+                        {{end}}
+                        {{else}}
+                        <li class="text-gray-500 italic">Henüz arama yapılmadı.</li>
+                        {{end}}
+                    </ul>
+                    <!-- Arrow -->
+                    <div
+                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1 border-4 border-transparent border-b-gray-900">
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-xl backdrop-blur-sm stat-card">
+                <p class="text-gray-400 text-sm font-medium">Kritik Bulgular</p>
+                <div class="flex items-center justify-between mt-1">
+                    <p class="text-3xl font-black text-red-500">{{index .criticalityStats 5}}</p>
+                    <div class="text-2xl opacity-50">⚠️</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Category Distribution -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span>📂</span> Kategori Dağılımı
+                </h2>
+                <div class="space-y-4">
+                    {{range $cat, $count := .categoryStats}}
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span>{{$cat}}</span>
+                            <span class="font-bold">{{$count}}</span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full" style="width: 20%"></div> <!-- Mock width -->
+                        </div>
+                    </div>
+                    {{else}}
+                    <p class="text-gray-500 text-center py-4">Veri bulunamadı.</p>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Criticality Levels -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg overflow-visible">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span>🛡️</span> Kritiklik Dereceleri
+                </h2>
+                <div class="grid grid-cols-5 gap-2">
+                    {{range $i := (seq 1 5)}}
+                    <div class="group relative cursor-help text-center p-3 rounded-lg border transition duration-200
+                        {{if eq $i 1}}bg-blue-900/20 border-blue-800 hover:bg-blue-900/40
+                        {{else if eq $i 2}}bg-cyan-900/20 border-cyan-800 hover:bg-cyan-900/40
+                        {{else if eq $i 3}}bg-yellow-900/20 border-yellow-800 hover:bg-yellow-900/40
+                        {{else if eq $i 4}}bg-orange-900/20 border-orange-800 hover:bg-orange-900/40
+                        {{else}}bg-red-900/20 border-red-800 hover:bg-red-900/40{{end}}">
+
+                        <div class="text-xs text-gray-400 mb-1">Seviye {{$i}}</div>
+                        <div class="text-xl font-bold text-white">{{index $.criticalityStats $i}}</div>
+
+                        <!-- Tooltip -->
+                        <div
+                            class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-48 z-10 pointer-events-none">
+                            <div class="text-left font-bold mb-1">
+                                {{if eq $i 1}}🔵 Düşük Risk
+                                {{else if eq $i 2}}🔵 Orta Risk
+                                {{else if eq $i 3}}🟡 Yüksek Risk
+                                {{else if eq $i 4}}🟠 Kritik Risk
+                                {{else}}🔴 Acil Risk{{end}}
+                            </div>
+                            <p class="text-left leading-tight text-gray-300">
+                                {{index $.critDescs $i}}
+                            </p>
+                            <!-- Arrow -->
+                            <div
+                                class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900">
+                            </div>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold border-l-4 border-blue-500 pl-3">📋 Son Bulgular</h2>
+                <a href="/results" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Tümünü Gör →</a>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left text-gray-400 text-xs border-b border-gray-700">
+                            <th class="pb-3 font-medium">BAŞLIK / URL</th>
+                            <th class="pb-3 font-medium">KATEGORİ</th>
+                            <th class="pb-3 font-medium text-center">KRİTİKLİK</th>
+                            <th class="pb-3 font-medium text-center">FREKANS</th>
+                            <th class="pb-3 font-medium text-right">TARİH</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700/50">
+                        {{range .recentResults}}
+                        <tr class="group hover:bg-gray-700/30 transition">
+                            <td class="py-4">
+                                <p class="text-sm font-bold truncate max-w-md">{{truncate .Title 80}}</p>
+                                <p class="text-xs text-blue-500 truncate max-w-md">{{truncate .URL 60}}</p>
+                            </td>
+                            <td class="py-4">
+                                <span
+                                    class="bg-gray-700 px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider">{{.Category}}</span>
+                            </td>
+                            <td class="py-4 text-center">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-black 
+                                    {{if eq .Criticality 5}}bg-red-500/20 text-red-500
+                                    {{else if eq .Criticality 4}}bg-orange-500/20 text-orange-500
+                                    {{else if eq .Criticality 3}}bg-yellow-500/20 text-yellow-500
+                                    {{else}}bg-blue-500/20 text-blue-500{{end}}">
+                                    {{.Criticality}} / 5
+                                </span>
+                            </td>
+                            <td class="py-4 text-center font-mono font-bold">
+                                {{.KeywordCount}}
+                            </td>
+                            <td class="py-4 text-right text-xs text-gray-500 font-mono">
+                                {{formatTime .CreatedAt}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

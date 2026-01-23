@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeywordHunter - Analiz Merkezi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e2e8f0;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        .chart-container.large {
+            height: 400px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+    <!-- Navbar -->
+    <nav class="bg-gray-900/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <span class="text-3xl">🕵️</span>
+                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
+                </div>
+
+
+
+                <div class="flex items-center space-x-6">
+                    <a href="/dashboard" class="text-gray-400 hover:text-white transition">Dashboard</a>
+                    <a href="/results" class="text-gray-400 hover:text-white transition">Bulgular</a>
+                    <a href="/results/graph" class="text-gray-400 hover:text-white transition">Harita</a>
+                    <a href="/analytics" class="text-blue-400 font-bold transition flex items-center gap-1">
+                        <span>📊</span> Analiz
+                    </a>
+                    <a href="/search" class="text-gray-400 hover:text-white transition">Arama</a>
+                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-sm">Çıkış</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <header class="mb-8 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-2">📊 Analiz Merkezi</h1>
+                <p class="text-gray-400">Veri tabanındaki tüm arama sonuçlarının görsel derinlemesine analizi.</p>
+            </div>
+            <button onclick="loadData()"
+                class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition">
+                <span>🔄</span> Yenile
+            </button>
+        </header>
+
+        <!-- Filtreler -->
+        <div class="card mb-8">
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                <span>⚡</span> Kaynak Filtresi
+            </h3>
+            <div id="source-filters" class="flex flex-wrap gap-3">
+                <!-- Checkboxlar JS ile buraya gelecek -->
+                <div class="animate-pulse bg-gray-700 h-8 w-24 rounded"></div>
+                <div class="animate-pulse bg-gray-700 h-8 w-24 rounded"></div>
+                <div class="animate-pulse bg-gray-700 h-8 w-24 rounded"></div>
+            </div>
+        </div>
+
+        <!-- Üst Grafikler -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Kaynak Dağılımı (Pasta) -->
+            <div class="card col-span-1">
+                <h3 class="text-lg font-bold mb-4">🥧 Kaynak Dağılımı</h3>
+                <div class="chart-container">
+                    <canvas id="sourcesChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Sorgu Performansı (Bar) -->
+            <div class="card col-span-2">
+                <h3 class="text-lg font-bold mb-4">🏆 En Aktif Sorgular</h3>
+                <div class="chart-container">
+                    <canvas id="queriesChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zaman Tüneli -->
+        <div class="card">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold" id="timeline-title">📈 Zaman Tüneli (Günlük)</h3>
+                <div class="flex bg-gray-800 rounded-lg p-1 border border-gray-700">
+                    <button onclick="changeInterval('hour')"
+                        class="interval-btn px-3 py-1 text-xs rounded hover:bg-gray-700 transition"
+                        data-int="hour">Saatlik</button>
+                    <button onclick="changeInterval('day')"
+                        class="interval-btn px-3 py-1 text-xs rounded bg-blue-600 text-white transition"
+                        data-int="day">Günlük</button>
+                    <button onclick="changeInterval('week')"
+                        class="interval-btn px-3 py-1 text-xs rounded hover:bg-gray-700 transition"
+                        data-int="week">Haftalık</button>
+                    <button onclick="changeInterval('month')"
+                        class="interval-btn px-3 py-1 text-xs rounded hover:bg-gray-700 transition"
+                        data-int="month">Aylık</button>
+                </div>
+            </div>
+            <div class="chart-container large">
+                <canvas id="timelineChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global data storage
+        let rawData = null;
+        let charts = {};
+        let currentInterval = 'day';
+
+        // Renk Paleti (Cyberpunk / Neon)
+        const colors = [
+            '#f72585', '#b5179e', '#7209b7', '#560bad', '#480ca8',
+            '#3a0ca3', '#3f37c9', '#4361ee', '#4895ef', '#4cc9f0',
+            '#ffbe0b', '#fb5607', '#ff006e', '#8338ec', '#3a86ff'
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => loadData('day'));
+
+        function changeInterval(interval) {
+            currentInterval = interval;
+
+            // Buton stillerini güncelle
+            document.querySelectorAll('.interval-btn').forEach(btn => {
+                if (btn.dataset.int === interval) {
+                    btn.className = 'interval-btn px-3 py-1 text-xs rounded bg-blue-600 text-white transition';
+                } else {
+                    btn.className = 'interval-btn px-3 py-1 text-xs rounded hover:bg-gray-700 transition text-gray-400';
+                }
+            });
+
+            // Başlığı güncelle
+            const titles = {
+                'hour': 'Saatlik', 'day': 'Günlük', 'week': 'Haftalık', 'month': 'Aylık'
+            };
+            document.getElementById('timeline-title').innerText = `📈 Zaman Tüneli (${titles[interval]})`;
+
+            loadData(interval);
+        }
+
+        async function loadData(interval = 'day') {
+            try {
+                const response = await fetch(`/api/analytics?interval=${interval}`);
+                rawData = await response.json();
+
+                // Update Total Sites Badge
+                const totalSitesBadge = document.getElementById('total-sites-badge');
+                const totalSitesCount = document.getElementById('total-sites-count');
+
+                if (totalSitesCount) {
+                    totalSitesCount.textContent = new Intl.NumberFormat('tr-TR').format(rawData.totalSites);
+                    totalSitesBadge.classList.remove('animate-pulse');
+                }
+
+                initFilters();
+                renderCharts();
+            } catch (error) {
+                console.error('Veri yüklenemedi:', error);
+                // alert('Analiz verileri yüklenirken hata oluştu.'); // Rahatsız etmesin
+            }
+        }
+
+        function initFilters() {
+            const container = document.getElementById('source-filters');
+            container.innerHTML = '';
+
+            // Tüm kaynakları topla
+            const sources = rawData.sources.map(s => s.source);
+
+            // "Tümü" seçeneği
+            const allBtn = document.createElement('button');
+            allBtn.className = 'px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-500 transition border border-blue-500';
+            allBtn.textContent = 'Tümü Seç/Kaldır';
+            allBtn.onclick = toggleAllFilters;
+            container.appendChild(allBtn);
+
+            sources.forEach((source, index) => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center gap-2 cursor-pointer bg-gray-800 px-3 py-1 rounded border border-gray-700 hover:border-gray-500 transition select-none';
+                label.style.borderLeft = `4px solid ${getColor(index)}`;
+
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.value = source;
+                input.checked = true;
+                input.className = 'source-filter form-checkbox h-4 w-4 text-blue-600 transition duration-150 ease-in-out';
+                input.onchange = updateCharts; // Değişince grafikleri güncelle
+
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(source));
+                container.appendChild(label);
+            });
+        }
+
+        function toggleAllFilters() {
+            const checkboxes = document.querySelectorAll('.source-filter');
+            const allChecked = Array.from(checkboxes).every(c => c.checked);
+            checkboxes.forEach(c => c.checked = !allChecked);
+            updateCharts();
+        }
+
+        function getActiveSources() {
+            const checkboxes = document.querySelectorAll('.source-filter');
+            return Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
+        }
+
+        function updateCharts() {
+            const activeSources = getActiveSources();
+
+            // 1. Sources Chart Update
+            const filteredSources = rawData.sources.filter(s => activeSources.includes(s.source));
+            updateChartData(charts.sources,
+                filteredSources.map(s => s.source),
+                filteredSources.map(s => s.count),
+                filteredSources.map((_, i) => getColor(i))
+            );
+
+            // 2. Timeline Chart Update
+            // Karmaşık: Timeline verisini yeniden işle
+            const timelineDatasets = processTimelineData(rawData.timeline, activeSources);
+            charts.timeline.data.datasets = timelineDatasets;
+            charts.timeline.update();
+
+            // 3. Queries Chart (Bu kaynak bazlı değil ama dolaylı etkilenebilir - şimdilik sabit)
+            // İsterseniz query verisini de kaynakla bağlayabilirsiniz ama mevcut API yapımızda query-source ilişkisini burada yapamıyoruz (basitlik için)
+            // O yüzden query chart aynı kalıyor.
+        }
+
+        function renderCharts() {
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.borderColor = 'rgba(148, 163, 184, 0.1)';
+
+            // 1. Sources Chart (Doughnut)
+            const ctxSources = document.getElementById('sourcesChart').getContext('2d');
+            if (charts.sources) charts.sources.destroy();
+
+            charts.sources = new Chart(ctxSources, {
+                type: 'doughnut',
+                data: {
+                    labels: rawData.sources.map(s => s.source),
+                    datasets: [{
+                        data: rawData.sources.map(s => s.count),
+                        backgroundColor: rawData.sources.map((_, i) => getColor(i)),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' }
+                    }
+                }
+            });
+
+            // 2. Queries Chart (Bar)
+            const ctxQueries = document.getElementById('queriesChart').getContext('2d');
+            if (charts.queries) charts.queries.destroy();
+
+            charts.queries = new Chart(ctxQueries, {
+                type: 'bar',
+                data: {
+                    labels: rawData.queries.map(q => q.query),
+                    datasets: [{
+                        label: 'Sonuç Sayısı',
+                        data: rawData.queries.map(q => q.count),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // 3. Timeline Chart (Line)
+            const ctxTimeline = document.getElementById('timelineChart').getContext('2d');
+            if (charts.timeline) charts.timeline.destroy();
+
+            const allSources = rawData.sources.map(s => s.source);
+            const datasets = processTimelineData(rawData.timeline, allSources);
+            // Tarihleri al (unique)
+            const labels = [...new Set(rawData.timeline.map(t => t.date))].sort();
+
+            charts.timeline = new Chart(ctxTimeline, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function processTimelineData(timelineData, activeSources) {
+            // Tarihleri topla
+            const dates = [...new Set(timelineData.map(t => t.date))].sort();
+
+            const datasets = activeSources.map((source, index) => {
+                // Her tarih için bu kaynağın verisini bul
+                const data = dates.map(date => {
+                    const entry = timelineData.find(t => t.date === date && t.source === source);
+                    return entry ? entry.count : 0;
+                });
+
+                return {
+                    label: source,
+                    data: data,
+                    borderColor: getColor(index), // Sabit renk almalı
+                    backgroundColor: getColor(index) + '33', // %20 opacity
+                    fill: false,
+                    tension: 0.4, // Eğrisel çizgiler
+                    borderWidth: 2,
+                    pointRadius: 3
+                };
+            });
+
+            return datasets;
+        }
+
+        function updateChartData(chart, labels, data, colors) {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data;
+            if (colors) chart.data.datasets[0].backgroundColor = colors;
+            chart.update();
+        }
+
+        function getColor(index) {
+            return colors[index % colors.length];
+        }
+    </script>
+</body>
+
+</html>
