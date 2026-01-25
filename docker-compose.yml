@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   tor:
-    image: pickapp/tor-proxy:latest
+    image: osminogin/tor-simple
     ports:
-      - "9050:9050"
+      - "9051:9050"
     restart: always
 
   app:

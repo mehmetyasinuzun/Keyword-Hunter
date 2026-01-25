@@ -89,64 +89,233 @@
                 <button onclick="setQuery('credit card')"
                     class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">credit card</button>
             </div>
-        </div>
 
-        {{if .results}}
-        <!-- Results Summary -->
-        <div class="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg mb-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    ✅ <strong>{{.totalFound}}</strong> sonuç bulundu, <strong>{{.newSaved}}</strong> yeni kayıt eklendi
+            <!-- Live Logs Container -->
+            <div id="live-logs-section" class="mt-6 hidden transition-all duration-300">
+                <div class="bg-gray-900 border border-gray-700 rounded-lg p-0 overflow-hidden shadow-inner">
+                    <div class="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">CANLI İŞLEM
+                            LOGLARI</span>
+                        <div class="flex gap-1.5">
+                            <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                            <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                        </div>
+                    </div>
+                    <div id="log-container"
+                        class="p-4 h-48 overflow-y-auto font-mono text-sm space-y-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+                    </div>
                 </div>
-                <div class="text-sm">⏱️ {{.duration}}</div>
             </div>
         </div>
 
-        <!-- Results List -->
-        <div class="bg-gray-800 rounded-xl p-6 shadow-lg">
-            <h2 class="text-xl font-bold text-white mb-4">📋 Sonuçlar (İlk 20)</h2>
+        <div id="results-area">
+            {{if .results}}
+            <!-- Results Summary -->
+            <div class="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg mb-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        ✅ <strong>{{.totalFound}}</strong> sonuç bulundu, <strong>{{.newSaved}}</strong> yeni kayıt
+                        eklendi
+                    </div>
+                    <div class="text-sm">⏱️ {{.duration}}</div>
+                </div>
+            </div>
 
-            <div class="space-y-3">
-                {{range .results}}
-                <div class="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition">
-                    <div class="flex items-start justify-between">
-                        <div class="flex-1 min-w-0">
-                            <p class="text-white font-medium">{{truncate .Title 80}}</p>
-                            <a href="{{.URL}}" target="_blank" rel="noopener"
-                                class="text-blue-400 hover:text-blue-300 text-sm break-all mt-1 block">
-                                {{truncate .URL 100}}
-                            </a>
-                            <div class="mt-2">
-                                <span class="bg-blue-600/30 text-blue-400 px-2 py-1 rounded text-xs">{{.Source}}</span>
+            <!-- Results List -->
+            <div class="bg-gray-800 rounded-xl p-6 shadow-lg">
+                <h2 class="text-xl font-bold text-white mb-4">📋 Sonuçlar (İlk 20)</h2>
+
+                <div class="space-y-3">
+                    {{range .results}}
+                    <div class="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-white font-medium">{{truncate .Title 80}}</p>
+                                <a href="{{.URL}}" target="_blank" rel="noopener"
+                                    class="text-blue-400 hover:text-blue-300 text-sm break-all mt-1 block">
+                                    {{truncate .URL 100}}
+                                </a>
+                                <div class="mt-2">
+                                    <span
+                                        class="bg-blue-600/30 text-blue-400 px-2 py-1 rounded text-xs">{{.Source}}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {{end}}
+                </div>
+
+                {{if gt .totalFound 20}}
+                <div class="mt-6 text-center">
+                    <a href="/results?q={{.query}}" class="text-blue-400 hover:text-blue-300">
+                        Tüm {{.totalFound}} sonucu görüntüle →
+                    </a>
                 </div>
                 {{end}}
             </div>
-
-            {{if gt .totalFound 20}}
-            <div class="mt-6 text-center">
-                <a href="/results?q={{.query}}" class="text-blue-400 hover:text-blue-300">
-                    Tüm {{.totalFound}} sonucu görüntüle →
-                </a>
-            </div>
             {{end}}
         </div>
-        {{end}}
     </div>
 
     <script>
-
-
         function setQuery(q) {
             document.querySelector('input[name="query"]').value = q;
         }
 
-        document.getElementById('searchForm').addEventListener('submit', function () {
+        // ========================
+        // LIVE LOGS / SSE
+        // ========================
+        const logContainer = document.getElementById('log-container');
+        const searchBtn = document.getElementById('searchBtn');
+        let refreshInterval;
+
+        // Log ekleme fonksiyonu
+        function addLog(data) {
+            const div = document.createElement('div');
+            div.className = 'text-sm font-mono py-1 border-b border-gray-800 last:border-0 hover:bg-white/5 transition px-2 flex items-start gap-3';
+
+            const time = new Date().toLocaleTimeString('tr-TR', { hour12: false });
+            let content = '';
+            let status = '[INFO]';
+            let colorClass = 'text-gray-400';
+
+            switch (data.type) {
+                case 'engine_start':
+                    status = '[SCAN]';
+                    colorClass = 'text-blue-400';
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">Target:</span> <span class="text-white">${data.engine}</span>`;
+                    break;
+                case 'engine_end':
+                    if (data.message.includes('SUCCESS')) {
+                        status = '[DONE]';
+                        colorClass = 'text-green-500';
+                    } else if (data.message.includes('ERROR') || data.message.includes('FAILED')) {
+                        status = '[FAIL]';
+                        colorClass = 'text-red-500';
+                    } else {
+                        status = '[INFO]';
+                    }
+                    const cleanMsg = data.message.replace('SEARCH ENGINE SUCCESS:', '').replace('SEARCH ENGINE ERROR:', '');
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">${data.engine}:</span> <span class="text-gray-300">${cleanMsg}</span>`;
+                    break;
+                case 'info':
+                    status = '[INFO]';
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-blue-300 font-bold w-16">${status}</span> <span class="text-gray-400">${data.message}</span>`;
+                    break;
+                case 'error':
+                    status = '[ERR ]';
+                    colorClass = 'text-red-500';
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-300">${data.message}</span>`;
+                    break;
+                case 'success':
+                    status = '[SUCC]';
+                    colorClass = 'text-green-400 font-bold';
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-200">${data.message}</span>`;
+                    break;
+                default:
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-gray-600 w-16">[LOG ]</span> <span class="text-gray-500">${data.message}</span>`;
+            }
+
+            div.innerHTML = content;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // SSE Başlat
+        function startEventStream() {
+            logContainer.innerHTML = '';
+            document.getElementById('live-logs-section').classList.remove('hidden');
+
+            if (window.eventSource) {
+                window.eventSource.close();
+            }
+
+            window.eventSource = new EventSource('/events');
+
+            window.eventSource.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addLog(data);
+                } catch (e) {
+                    console.error("Log parse error", e);
+                }
+            };
+
+            window.eventSource.onerror = function () {
+                // Hata veya kapanma durumunda sessizce kapat
+                window.eventSource.close();
+            };
+        }
+
+        // Form Submit Handler (AJAX)
+        document.getElementById('searchForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
             const btn = document.getElementById('searchBtn');
+            const form = this;
+            const formData = new FormData(form);
+
+            // UI Update
             btn.disabled = true;
-            btn.innerHTML = '<span class="loader inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Aranıyor...';
+            btn.innerHTML = '<span class="loader inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></span> Aranıyor...';
+
+            // Clear previous results
+            const resultsArea = document.getElementById('results-area');
+            if (resultsArea) {
+                resultsArea.innerHTML = '<div class="text-center text-gray-400 py-8 animate-pulse">Sonuçlar bekleniyor...</div>';
+            }
+
+            // Logs Start
+            startEventStream();
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const html = await response.text();
+
+                    // SSE bağlantısını kapat (işlem bitti)
+                    if (window.eventSource) window.eventSource.close();
+
+                    // Parse new HTML
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+
+                    // Update Results Area
+                    const newResultsHelper = doc.getElementById('results-area');
+                    const currentResults = document.getElementById('results-area');
+
+                    if (newResultsHelper && currentResults) {
+                        currentResults.replaceWith(newResultsHelper);
+                    } else if (newResultsHelper && !currentResults) {
+                        // Should not happen if we have the wrapper, but just in case
+                        document.querySelector('.max-w-7xl.mx-auto.px-4.py-8').appendChild(newResultsHelper);
+                    }
+
+                    // Re-enable button
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🔍</span> Ara';
+
+                } else {
+                    throw new Error('Arama isteği başarısız');
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+
+                // Hata durumunda butonu eski haline getir
+                btn.disabled = false;
+                btn.innerHTML = '<span>🔍</span> Ara';
+
+                // Hata mesajı göster
+                const errDiv = document.createElement('div');
+                errDiv.className = 'bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4 mt-4';
+                errDiv.textContent = '❌ Bir hata oluştu: ' + error.message;
+                form.insertBefore(errDiv, form.firstChild);
+            }
         });
     </script>
 </body>

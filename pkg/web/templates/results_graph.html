@@ -225,7 +225,10 @@
     </div>
 
     <!-- Load Graph JS -->
-    <script src="/static/js/graph.js"></script>
+    <!-- Load Graph JS Modules -->
+    <script src="/static/js/graph-core.js"></script>
+    <script src="/static/js/graph-render.js"></script>
+    <script src="/static/js/graph-ui.js"></script>
     <script>
         // Pass query parameter to JS
         window.currentQuery = '{{.query}}';

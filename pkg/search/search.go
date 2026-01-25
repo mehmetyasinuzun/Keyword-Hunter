@@ -131,19 +131,25 @@ func (s *Searcher) SearchAll(query string) []Result {
 		go func(eng Engine) {
 			defer wg.Done()
 
+			// Broadcast start
+			shared.Streamer.BroadcastLog("engine_start", "Starting search...", eng.Name)
+
 			engineResults, err := s.searchEngine(eng, query)
 			if err != nil {
 				logger.SearchEngineResult(eng.Name, 0, err)
+				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("SEARCH ENGINE ERROR: %v", err), eng.Name)
 				return
 			}
 
 			if len(engineResults) > 0 {
 				logger.SearchEngineResult(eng.Name, len(engineResults), nil)
+				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("SEARCH ENGINE SUCCESS: %d results found", len(engineResults)), eng.Name)
 				mu.Lock()
 				results = append(results, engineResults...)
 				mu.Unlock()
 			} else {
 				logger.SearchEngineResult(eng.Name, 0, nil)
+				shared.Streamer.BroadcastLog("engine_end", "SEARCH ENGINE SUCCESS: 0 results found", eng.Name)
 			}
 		}(engine)
 	}
@@ -154,6 +160,7 @@ func (s *Searcher) SearchAll(query string) []Result {
 	deduped := s.deduplicate(results)
 
 	logger.SearchCompleted(query, len(deduped), time.Since(startTime))
+	shared.Streamer.BroadcastLog("success", fmt.Sprintf("SEARCH COMPLETED: %d unique results found in %v", len(deduped), time.Since(startTime).Round(time.Millisecond)), "")
 
 	return deduped
 }

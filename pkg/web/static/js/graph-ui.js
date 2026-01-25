@@ -1,0 +1,213 @@
+/**
+ * KeywordHunter - Graph Visualization JavaScript (UI)
+ * UI Interactions, Event Handlers, Controls
+ */
+
+// Settings Panel
+function toggleSettingsPanel() {
+    const panel = document.getElementById('settings-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function updateGraphSettings() {
+    const fontSize = document.getElementById('font-size-slider').value;
+    const spacing = document.getElementById('spacing-slider').value;
+    const truncateLength = document.getElementById('truncate-slider').value;
+    const showAllLabels = document.getElementById('show-all-labels').checked;
+
+    document.getElementById('font-size-value').textContent = fontSize + 'px';
+    document.getElementById('spacing-value').textContent = spacing + 'x';
+    document.getElementById('truncate-value').textContent = truncateLength + ' kar.';
+
+    GraphSettings.fontSize = parseInt(fontSize);
+    GraphSettings.spacing = parseFloat(spacing);
+    GraphSettings.truncateLength = parseInt(truncateLength);
+    GraphSettings.showAllLabels = showAllLabels;
+
+    renderLayout();
+}
+
+function applyGraphSettings() {
+    updateGraphSettings();
+    renderLayout();
+    showToast('Ayarlar uygulandı', 'success');
+}
+
+function resetGraphSettings() {
+    document.getElementById('font-size-slider').value = 14;
+    document.getElementById('spacing-slider').value = 1;
+    document.getElementById('truncate-slider').value = 25;
+    document.getElementById('show-all-labels').checked = true;
+
+    GraphSettings.fontSize = 14;
+    GraphSettings.spacing = 1;
+    GraphSettings.truncateLength = 25;
+    GraphSettings.showAllLabels = true;
+
+    updateGraphSettings();
+    renderLayout();
+    showToast('Ayarlar sıfırlandı', 'info');
+}
+
+// Event Handlers
+function handleNodeClick(event, d) {
+    event.stopPropagation();
+    if (d.children || d._children) {
+        toggle(d);
+        renderLayout();
+    } else if (d.data.url) {
+        GraphState.selectedNode = d;
+        copyLink();
+    }
+}
+
+function handleContextMenu(event, d) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (d.data.url || d.children || d._children) {
+        GraphState.selectedNode = d;
+        showContextMenu(event.pageX, event.pageY);
+    }
+}
+
+// Zoom Controls
+function zoomIn() {
+    GraphState.svg.transition().duration(300).call(GraphState.zoom.scaleBy, 1.5);
+}
+
+function zoomOut() {
+    GraphState.svg.transition().duration(300).call(GraphState.zoom.scaleBy, 0.67);
+}
+
+function resetView() {
+    GraphState.svg.transition().duration(500).call(GraphState.zoom.transform, d3.zoomIdentity);
+}
+
+function fitToScreen() {
+    const bounds = GraphState.g.node().getBBox();
+    const scale = 0.85 / Math.max(bounds.width / GraphState.width, bounds.height / GraphState.height);
+    const tx = (GraphState.width - bounds.width * scale) / 2 - bounds.x * scale;
+    const ty = (GraphState.height - bounds.height * scale) / 2 - bounds.y * scale;
+
+    GraphState.svg.transition().duration(500).call(
+        GraphState.zoom.transform,
+        d3.zoomIdentity.translate(tx, ty).scale(scale)
+    );
+}
+
+function updateSemanticZoom(scale) {
+    const container = document.getElementById('graph-container');
+    container.classList.remove('zoom-level-1', 'zoom-level-2', 'zoom-level-3');
+
+    if (scale < 0.4) container.classList.add('zoom-level-1');
+    else if (scale < 0.8) container.classList.add('zoom-level-2');
+    else container.classList.add('zoom-level-3');
+}
+
+function focusNode() {
+    closeContextMenu();
+    if (!GraphState.selectedNode) return;
+
+    GraphState.svg.transition().duration(500).call(
+        GraphState.zoom.transform,
+        d3.zoomIdentity
+            .translate(GraphState.width / 2 - (GraphState.selectedNode.y || 0) * 2,
+                GraphState.height / 2 - (GraphState.selectedNode.x || 0) * 2)
+            .scale(2)
+    );
+}
+
+function setLayout(layout) {
+    GraphState.currentLayout = layout;
+
+    document.querySelectorAll('.layout-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`layout-${layout}`).classList.add('active');
+
+    renderLayout();
+    setTimeout(fitToScreen, 100);
+}
+
+// Tooltip
+function showTooltip(event, d) {
+    const tooltip = document.getElementById('tooltip');
+    let content = `<div class="title">${d.data.name}</div>`;
+
+    if (d.data.url) {
+        content += `<div class="url">${d.data.url}</div>`;
+        if (d.data.url.includes('.onion')) {
+            content += `<div class="onion-warning">🧅 Tor Browser gerektirir</div>`;
+        }
+    }
+
+    if (d.data.count > 1) {
+        content += `<div class="badge">🔥 ${d.data.count} motorda bulundu</div>`;
+    }
+
+    const childCount = (d._children || d.children || []).length;
+    if (childCount > 0) {
+        content += `<div style="margin-top: 8px; color: #a0aec0; font-size: 11px;">📂 ${childCount} alt öğe</div>`;
+    }
+
+    tooltip.innerHTML = content;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (event.pageX + 15) + 'px';
+    tooltip.style.top = (event.pageY - 10) + 'px';
+}
+
+function hideTooltip() {
+    document.getElementById('tooltip').style.display = 'none';
+}
+
+// Context Menu
+function showContextMenu(x, y) {
+    const menu = document.getElementById('context-menu');
+    const expandItem = document.getElementById('expand-menu-item');
+
+    if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
+        const isOnion = GraphState.selectedNode.data.url.includes('.onion');
+        if (GraphState.selectedNode.data.isExpanded) {
+            expandItem.innerHTML = '✅ Derinleştirildi';
+            expandItem.style.opacity = '0.5';
+        } else if (!isOnion) {
+            expandItem.innerHTML = '⚠️ Sadece .onion';
+            expandItem.style.opacity = '0.5';
+        } else {
+            expandItem.innerHTML = '🔍 Derinleştir';
+            expandItem.style.opacity = '1';
+        }
+        expandItem.style.display = 'flex';
+    } else {
+        expandItem.style.display = 'none';
+    }
+
+    menu.style.display = 'block';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+}
+
+function closeContextMenu() {
+    document.getElementById('context-menu').style.display = 'none';
+}
+
+// Copy
+function copyLink() {
+    closeContextMenu();
+    if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
+        navigator.clipboard.writeText(GraphState.selectedNode.data.url).then(() => {
+            showToast('✅ Link kopyalandı!');
+        }).catch(() => fallbackCopy(GraphState.selectedNode.data.url));
+    }
+}
+
+// Toast
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast show';
+    if (type === 'error') toast.style.borderColor = '#fc8181';
+    else if (type === 'success') toast.style.borderColor = '#68d391';
+
+    setTimeout(() => {
+        toast.className = 'toast';
+    }, 3000);
+}

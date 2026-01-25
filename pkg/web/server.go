@@ -113,8 +113,11 @@ func (s *Server) setupRoutes() {
 		protected.GET("/api/stats", s.handleStats)
 		protected.GET("/api/graph", s.handleGraphAPI)
 		protected.GET("/api/queries", s.handleQueriesAPI)
-		protected.GET("/api/duplicates", s.handleDuplicatesAPI)
+
 		protected.GET("/api/analytics", s.handleAnalyticsAPI)
+
+		// SSE Events - Gerçek zamanlı loglar için
+		protected.GET("/events", s.handleEvents)
 
 		protected.GET("/analytics", s.handleAnalytics)
 

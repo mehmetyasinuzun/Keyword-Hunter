@@ -120,20 +120,6 @@ func (s *Server) handleQueriesAPI(c *gin.Context) {
 	})
 }
 
-// handleDuplicatesAPI çoklu URL'leri listele
-func (s *Server) handleDuplicatesAPI(c *gin.Context) {
-	duplicates, err := s.db.GetDuplicateURLs()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"duplicates": duplicates,
-		"count":      len(duplicates),
-	})
-}
-
 // handleAnalyticsAPI grafik verilerini JSON olarak döndürür
 func (s *Server) handleAnalyticsAPI(c *gin.Context) {
 	interval := c.DefaultQuery("interval", "day")

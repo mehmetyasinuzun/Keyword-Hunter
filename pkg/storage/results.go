@@ -214,39 +214,3 @@ func (db *DB) GetQueries() ([]QueryInfo, error) {
 	}
 	return queries, nil
 }
-
-// GetDuplicateURLs birden fazla kaynakta bulunan URL'leri getirir
-func (db *DB) GetDuplicateURLs() ([]map[string]interface{}, error) {
-	rows, err := db.conn.Query(`
-		SELECT url, title, COUNT(DISTINCT source) as source_count, 
-			   GROUP_CONCAT(DISTINCT source) as sources,
-			   COUNT(DISTINCT query) as query_count,
-			   GROUP_CONCAT(DISTINCT query) as queries
-		FROM search_results 
-		GROUP BY url 
-		HAVING source_count > 1 OR query_count > 1
-		ORDER BY source_count DESC, query_count DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var duplicates []map[string]interface{}
-	for rows.Next() {
-		var url, title, sources, queries string
-		var sourceCount, queryCount int
-		if err := rows.Scan(&url, &title, &sourceCount, &sources, &queryCount, &queries); err != nil {
-			continue
-		}
-		duplicates = append(duplicates, map[string]interface{}{
-			"url":          url,
-			"title":        title,
-			"source_count": sourceCount,
-			"sources":      sources,
-			"query_count":  queryCount,
-			"queries":      queries,
-		})
-	}
-	return duplicates, nil
-}
