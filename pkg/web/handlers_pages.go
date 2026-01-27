@@ -93,15 +93,87 @@ func (s *Server) handleDashboard(c *gin.Context) {
 		5: "🔴 Seviye 5 (Acil): Ransomware, 0day exploitler, devlet sırları ve çok yüksek riskli içerikler.",
 	}
 
+	// ═══════════════════════════════════════════════════════════════════════
+	// ALGORITHM HEALTH METRICS - Kategorizasyon etkinliğini ölç
+	// ═══════════════════════════════════════════════════════════════════════
+
+	// 1. Sınıflandırma Oranı: "Genel" dışı kategorilerin yüzdesi
+	classifiedCount := 0
+	genelCount := 0
+	for cat, count := range categoryStats {
+		if cat == "Genel" || cat == "" {
+			genelCount += count
+		} else {
+			classifiedCount += count
+		}
+	}
+	classificationRate := 0.0
+	if totalResults > 0 {
+		classificationRate = float64(classifiedCount) / float64(totalResults) * 100
+	}
+
+	// 2. Kritiklik Çeşitliliği: Tüm seviyelerin kullanım dengesi (0-100)
+	// Sadece Seviye 1'e yığılma = düşük çeşitlilik
+	critDiversity := 0.0
+	usedLevels := 0
+	for i := 1; i <= 5; i++ {
+		if criticalityStats[i] > 0 {
+			usedLevels++
+		}
+	}
+	critDiversity = float64(usedLevels) / 5.0 * 100
+
+	// 3. Yüksek Riskli Tespit Oranı: Seviye 3-5 oranı
+	highRiskCount := criticalityStats[3] + criticalityStats[4] + criticalityStats[5]
+	highRiskRate := 0.0
+	if totalResults > 0 {
+		highRiskRate = float64(highRiskCount) / float64(totalResults) * 100
+	}
+
+	// 4. Genel Sağlık Skoru (0-100)
+	// Formül: (%40 sınıflandırma + %30 çeşitlilik + %30 yüksek risk tespiti)
+	riskContribution := highRiskRate * 3
+	if riskContribution > 30.0 {
+		riskContribution = 30.0
+	}
+	healthScore := (classificationRate * 0.4) + (critDiversity * 0.3) + riskContribution
+	if healthScore > 100 {
+		healthScore = 100
+	}
+
+	// Sağlık durumu metni
+	healthStatus := "iyi"
+	healthColor := "green"
+	if healthScore < 40 {
+		healthStatus = "zayıf"
+		healthColor = "red"
+	} else if healthScore < 70 {
+		healthStatus = "orta"
+		healthColor = "yellow"
+	}
+
 	c.HTML(http.StatusOK, "dashboard.html", gin.H{
+		"ActivePage":       "dashboard",
 		"totalResults":     totalResults,
 		"totalSearches":    totalSearches,
 		"totalURLs":        totalResults,
 		"recentResults":    recentResults,
-		"searchHistory":    searchHistory, // Yeni veri
+		"searchHistory":    searchHistory,
 		"categoryStats":    categoryStats,
 		"criticalityStats": criticalityStats,
 		"critDescs":        critDescs,
+		// Algorithm Health Metrics
+		"classificationRate": int(classificationRate),
+		"classifiedCount":    classifiedCount,
+		"genelCount":         genelCount,
+		"genelRate":          100 - int(classificationRate),
+		"critDiversity":      int(critDiversity),
+		"usedLevels":         usedLevels,
+		"highRiskCount":      highRiskCount,
+		"highRiskRate":       int(highRiskRate),
+		"healthScore":        int(healthScore),
+		"healthStatus":       healthStatus,
+		"healthColor":        healthColor,
 	})
 }
 
@@ -142,7 +214,9 @@ func (s *Server) getCriticalityStats() (map[int]int, error) {
 
 // handleSearchPage arama sayfası
 func (s *Server) handleSearchPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "search.html", gin.H{})
+	c.HTML(http.StatusOK, "search.html", gin.H{
+		"ActivePage": "search",
+	})
 }
 
 // SearchStatus arama durumu
@@ -166,24 +240,27 @@ func (s *Server) handleSearch(c *gin.Context) {
 		return
 	}
 
-	logger.Info("🔍 Web'den arama başlatıldı: '%s'", query)
+	logger.Info("Web'den arama baslatildi: '%s'", query)
 
 	// Arama yap
 	startTime := time.Now()
 	results := s.searcher.SearchAll(query)
 	elapsed := time.Since(startTime)
 
-	// Sonuçları kaydet
+	// Sonuçları kaydet (KeywordHits ile birlikte)
 	var storageResults []storage.SearchResult
+	totalHits := 0
 	for _, r := range results {
 		storageResults = append(storageResults, storage.SearchResult{
-			Title:       r.Title,
-			URL:         r.URL,
-			Source:      r.Source,
-			Query:       query,
-			Criticality: r.Criticality,
-			Category:    r.Category,
+			Title:        r.Title,
+			URL:          r.URL,
+			Source:       r.Source,
+			Query:        query,
+			Criticality:  r.Criticality,
+			Category:     r.Category,
+			KeywordCount: r.KeywordHits, // Anlık kelime sıklığı
 		})
+		totalHits += r.KeywordHits
 	}
 
 	savedCount, err := s.db.SaveResults(storageResults)
@@ -195,10 +272,12 @@ func (s *Server) handleSearch(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "search.html", gin.H{
+		"ActivePage": "search",
 		"query":      query,
 		"results":    results[:min(20, len(results))],
 		"totalFound": len(results),
 		"newSaved":   savedCount,
+		"totalHits":  totalHits,
 		"duration":   elapsed.Round(time.Millisecond).String(),
 	})
 }
@@ -226,6 +305,7 @@ func (s *Server) handleResults(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "results.html", gin.H{
+		"ActivePage":   "results",
 		"results":      results,
 		"query":        query,
 		"totalResults": totalResults,
@@ -237,11 +317,14 @@ func (s *Server) handleResults(c *gin.Context) {
 func (s *Server) handleResultsGraph(c *gin.Context) {
 	query := c.Query("q")
 	c.HTML(http.StatusOK, "results_graph.html", gin.H{
-		"query": query,
+		"ActivePage": "graph",
+		"query":      query,
 	})
 }
 
-// handleAnalytics analitik sayfasını sunar
+// handleAnalytics analitik sayfasini sunar
 func (s *Server) handleAnalytics(c *gin.Context) {
-	c.HTML(http.StatusOK, "analytics.html", gin.H{})
+	c.HTML(http.StatusOK, "analytics.html", gin.H{
+		"ActivePage": "analytics",
+	})
 }

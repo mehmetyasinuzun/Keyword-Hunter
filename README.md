@@ -1,141 +1,97 @@
-# KeywordHunter - Dark Web CTI Analyst Tool
+# KeywordHunter - Cyber Threat Intelligence Platform
 
-![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go&logoColor=white)
-![CTI Analyst](https://img.shields.io/badge/Status-Active-green?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
+KeywordHunter, Dark Web (Tor Ağı) ve çeşitli açık kaynaklı istihbarat kanallarında anahtar kelime tabanlı tarama yapan, elde edilen verileri ilişkilendiren ve analistler için görselleştiren gelişmiş bir CTI (Cyber Threat Intelligence) aracıdır.
 
-**KeywordHunter**, Dark Web verilerini (17+ arama motoru ve .onion siteleri) tarayan, analiz eden ve görselleştiren gelişmiş bir Siber Tehdit İstihbaratı (CTI) aracıdır. Analistlerin veriler arasındaki ilişkileri görmesini, kaynak dağılımlarını incelemesini ve kritiklik seviyelerine göre tehditleri önceliklendirmesini sağlar.
+Bu proje, güvenlik analistlerinin tehditleri erken tespit etmesi, veri sızıntılarını izlemesi ve aktörler arasındaki ilişkileri haritalandırması için geliştirilmiştir. Yüksek performanslı Go mimarisi üzerine inşa edilmiştir.
 
----
+## Kurulum ve Çalıştırma
 
-## Docker ile Hızlı Başlangıç (Önerilen)
+Projeyi çalıştırmak için iki yöntem bulunmaktadır. Üretim ortamları ve hızlı testler için Docker önerilir.
 
-Sistemi tek komutla, bağımlılıklarla uğraşmadan ayağa kaldırmak için Docker kullanın:
+### Yöntem 1: Docker ile Kurulum (Önerilen)
 
-1.  **Projeyi İndirin:**
-    ```bash
-    git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
-    cd Keyword-Hunter
-    ```
+Sistemi bağımlılıklarla uğraşmadan tek komutla ayağa kaldırmak için Docker kullanabilirsiniz.
 
-2.  **Başlatın:**
-    ```bash
-    docker-compose up -d
-    ```
+1. Depoyu klonlayın:
+   ```bash
+   git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
+   cd Keyword-Hunter
+   ```
 
-Bu komut:
-1.  **Tor Proxy** servisini başlatır.
-2.  **KeywordHunter** uygulamasını derler ve çalıştırır.
-3.  Uygulama `http://localhost:8080` adresinden erişilebilir olur.
+2. Konteynerleri başlatın:
+   ```bash
+   docker-compose up -d --build
+   ```
 
-**Giriş Bilgileri:**
-*   **Kullanıcı:** `admin`
-*   **Şifre:** `admin123`
+3. Tarayıcıdan erişin:
+   - URL: `http://localhost:8080`
+   - Kullanıcı Adı: `admin`
+   - Şifre: `admin123`
 
----
+   ![Giriş Ekranı](docs/screenshots/login_view.jpg)
 
-## Manuel Kurulum (Alternatif)
+### Yöntem 2: Manuel Kurulum (Windows/Linux)
 
-Docker kullanmak istemezseniz manuel olarak da kurabilirsiniz:
+Geliştirme yapmak veya Docker kullanmadan çalıştırmak isterseniz:
 
-1.  **Gereksinimler:**
-    *   **Tor Browser** (Proxy port: `9150` açık olmalı).
-    *   **Go** (1.24+).
+1. Gereksinimler:
+   - Go 1.24 veya üzeri
+   - Tor Browser (Arka planda çalışmalı ve 9150 portunu dinlemeli)
+   - GCC (SQLite derlemesi için gerekli)
 
-2.  **Projeyi İndirin:**
-    ```bash
-    git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
-    cd Keyword-Hunter
-    ```
+2. Derleme ve Başlatma:
+   Windows kullanıcıları için hazır script bulunmaktadır. Bu script eski derlemeleri temizler ve projeyi yeniden başlatır:
+   ```bash
+   build_and_run.bat
+   ```
 
-3.  **Başlatma:**
-    Otomatik port yönetimi için `baslat.bat` kullanabilirsiniz:
-    ```bash
-    baslat.bat
-    ```
+## Modüller ve Özellikler
 
----
+Uygulama, istihbarat döngüsünü yönetmek için 5 ana modülden oluşur.
 
-## Arayüz ve Özellikler
+### 1. Dashboard (Genel Bakış)
+Sistemin komuta merkezidir. Anlık olarak yürütülen operasyonların özetini sunar. Sol taraftaki istatistik paneli veritabanındaki toplam veri hacmini gösterirken, sağ taraftaki grafikler tehditlerin kritiklik seviyelerine (Level 1-5) göre dağılımını analiz eder.
 
-Uygulama, siber istihbarat analistlerinin iş akışını kolaylaştırmak için modüler sayfalardan oluşur.
+![Dashboard Görünümü](docs/screenshots/dashboard_view.jpg)
 
-### 1. Dashboard (Kontrol Paneli)
-Merkezi yönetim ekranıdır. Sistemdeki toplam veri özetini, en son yapılan aramaları ve tespit edilen bulguların kritiklik dağılımını gösterir.
-*   "Toplam Analiz" kartının üzerine gelerek son 5 arama geçmişini anlık görebilirsiniz.
-*   Kritiklik seviyelerinin (Level 1-5) üzerine gelerek detaylı açıklamalarını okuyabilirsiniz.
+### 2. Arama Motoru (Hunter Search)
+Hedef odaklı istihbarat toplama modülüdür. Analist, Regex (Düzenli İfade) desteği sayesinde karmaşık sorgular oluşturabilir.
+- **Çoklu Kaynak:** Aynı anda 17'den fazla arama motorunu ve .onion dizinini tarar.
+- **Filtreleme:** Sadece belirli tarih aralığındaki veya belirli formatlardaki (örn: kredi kartı bin numaraları) verileri getirebilir.
 
-![Dashboard Ekran Görüntüsü](docs/screenshots/dashboard_view.jpg)
+![Arama Modülü](docs/screenshots/search_view.jpg)
 
-### 2. Analiz Hub (Analytics)
-Verilerin derinlemesine istatistiksel analizini sunar.
-*   **Zaman Çizelgesi (Timeline):** Tehditlerin zaman içindeki değişimini (Saatlik/Günlük/Haftalık) izleyin.
-*   **Kaynak Dağılımı:** Hangi arama motorundan ne kadar veri geldiğini pasta grafikte görün.
-*   **Sorgu Performansı:** En çok sonuç getiren anahtar kelimeleri inceleyin.
+### 3. Bulgular (Results)
+Toplanan ham verilerin işlendiği ve listelendiği alandır. Her sonuç, bulunduğu kaynağa, tespit edilme zamanına ve içeriğin özetine göre listelenir. Analistler buradan ilgisiz verileri eleyebilir veya kritik verileri "Vaka" (Case) olarak işaretleyebilir.
 
-![Analytics Ekran Görüntüsü](docs/screenshots/analytics_view.jpg)
+![Bulgular Listesi](docs/screenshots/results_view.jpg)
 
-### 3. Arama (Search)
-Dark Web üzerinde anahtar kelime veya domain bazlı arama yapmanızı sağlar.
-*   **.Onion Desteği:** Tor ağı üzerinden güvenli tarama.
-*   **Gelişmiş Regex:** Gereksiz sonuçları filtreleyen akıllı regex motoru.
+### 4. İlişki Analizi (Graph Intelligence)
+Metin tabanlı verilerin görselleştirilmiş halidir. Özellikle organize suç gruplarını veya birbiriyle bağlantılı veri sızıntılarını tespit etmek için kullanılır.
+- **Node (Düğüm) Yapısı:** Anahtar kelimeler, domainler ve kaynaklar birer düğüm olarak temsil edilir.
+- **Force-Directed Layout:** İlişkisi güçlü olan veriler birbirine çekilirken, ilgisiz veriler dışa itilir. Bu sayede kümeler (cluster) otomatik olarak ortaya çıkar.
 
-![Search Ekran Görüntüsü](docs/screenshots/search_view.jpg)
+![İlişki Grafiği](docs/screenshots/graph_view.jpg)
 
-### 4. Bulgular (Results)
-Arama sonuçlarının listelendiği, detaylarının görüntülendiği sayfadır.
-*   Her sonucun başlığı, URL'i ve özeti listelenir.
-*   Analistler buradan manuel olarak kritiklik seviyesi atayabilir veya düzenleyebilir.
+### 5. Analitik Merkezi (Analytics)
+Operasyonel verilerin stratejik bilgiye dönüştüğü yerdir.
+- **Zaman Analizi:** Saldırıların veya sızıntıların hangi saatlerde/günlerde yoğunlaştığını gösteren zaman çizelgesi.
+- **Kaynak Dağılımı:** Hangi marketlerin veya forumların daha aktif olduğunu gösteren pasta grafikler.
 
-![Results Ekran Görüntüsü](docs/screenshots/results_view.jpg)
+![Analitik Ekranı](docs/screenshots/analytics_view.jpg)
 
-### 5. İlişki Ağı (Graph)
-Veriler arasındaki bağlantıları görselleştiren interaktif ağ haritasıdır. Düğümler arası ilişkileri 3 farklı modda (Radial, Tree, Force) inceleyebilirsiniz.
+## Teknik Mimari
 
-#### Radial View (Dairesel Görünüm)
-Merkezi odaklı analiz için idealdir.
-![Graph Radial View](docs/screenshots/graph_radial.jpg)
-
-#### Tree View (Ağaç Görünümü)
-Hiyerarşik yapıları ve alt kırılımları görmek için kullanılır.
-![Graph Tree View](docs/screenshots/graph_tree.jpg)
-
-#### Network/Force View (Ağ Görünümü)
-Dağınık ilişkileri ve kümeleri serbest düzende gösterir.
-![Graph Network View](docs/screenshots/graph_network.jpg)
-
-#### Context Menu & Details
-Düğümlere sağ tıklayarak detaylı aksiyon menüsüne (Derinleştir, Linki Kopyala vb.) erişebilirsiniz.
-![Graph Context Menu](docs/screenshots/graph_context.jpg)
-
----
-
-## Kritiklik Seviyeleri (Criticality Levels)
-
-Sistem, tespit edilen içerikleri otomatik veya manuel olarak derecelendirir:
-
-*   **Level 5 (Kritik):** Ransomware duyuruları, Veri sızıntıları, Acil tehditler.
-*   **Level 4 (Yüksek):** Database satışları, Zero-day exploit tartışmaları.
-*   **Level 3 (Orta):** Hack forum tartışmaları, illegal marketplace aktiviteleri.
-*   **Level 2 (Düşük):** Genel dark web sohbetleri, şüpheli aktiviteler.
-*   **Level 1 (Bilgi):** Genel bilgiler, doğrulanmamış içerikler.
-
----
-
-## Teknoloji Yığını
-
-*   **Backend:** Golang (Performans odaklı mimari)
-*   **Veritabanı:** SQLite (Kolay taşınabilirlik)
-*   **Frontend:** HTML5, TailwindCSS, Chart.js (Modern ve responsive tasarım)
-*   **Ağ:** Tor Network (Anonim veri toplama)
-
----
+- **Backend:** Go (Golang) - Gin Framework
+- **Veritabanı:** SQLite (Gorm ORM ile)
+- **Frontend:** HTML5, CSS3, Vanilla JavaScript
+- **Veri Toplama:** Colly (Scraping Framework) ve Tor Proxy
+- **Görselleştirme:** Chart.js ve D3.js
 
 ## Yasal Uyarı
 
-Bu yazılım **Siber Güvenlik Uzmanları** ve **CTI Analistleri** için araştırma ve eğitim amaçlı geliştirilmiştir. Yasadışı faaliyetlerde kullanılması kesinlikle yasaktır ve tüm sorumluluk kullanıcıya aittir.
+Bu yazılım, siber güvenlik uzmanları ve araştırmacılar için geliştirlmiştir. Yetkisiz sistemlere erişim sağlamak veya yasadışı faaliyetlerde bulunmak amacıyla kullanılamaz. Kullanıcı, aracı yasal sınırlar içerisinde kullanmakla yükümlüdür.
 
 ---
-
+**Sürüm:** v0.5
 **Geliştirici:** Mehmet Yasin Uzun
-**Sürüm:** v0.3

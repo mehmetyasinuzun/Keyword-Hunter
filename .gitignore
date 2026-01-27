@@ -57,3 +57,6 @@ go.work
 # Screenshots placeholder (add actual screenshots later)
 docs/screenshots/*.png
 !docs/screenshots/.gitkeep
+ozellik.txt
+SKILL.md
+ultrathink.md

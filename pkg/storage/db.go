@@ -47,6 +47,7 @@ func (db *DB) createTables() error {
 			criticality INTEGER DEFAULT 1,
 			category TEXT DEFAULT 'Genel',
 			keyword_count INTEGER DEFAULT 0,
+			auto_tags TEXT DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(url, source, query)
 		);
@@ -58,6 +59,9 @@ func (db *DB) createTables() error {
 	if err != nil {
 		return fmt.Errorf("tablo oluşturulamadı: %w", err)
 	}
+
+	// Migration: auto_tags sütununu mevcut tablolara ekle (varsa sessizce atla)
+	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN auto_tags TEXT DEFAULT ''`)
 
 	// Arama geçmişi tablosu
 	_, err = db.conn.Exec(`

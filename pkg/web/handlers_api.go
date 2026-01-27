@@ -95,6 +95,54 @@ func (s *Server) handleGraphAPI(c *gin.Context) {
 	c.JSON(http.StatusOK, graphData)
 }
 
+// handleTagStats etiket istatistiklerini döndürür (tag cloud için)
+func (s *Server) handleTagStats(c *gin.Context) {
+	stats, err := s.db.GetTagStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Etiketli sonuç sayısı
+	tagged, total, _ := s.db.GetTaggedResultsCount()
+
+	c.JSON(http.StatusOK, gin.H{
+		"tags":        stats,
+		"taggedCount": tagged,
+		"totalCount":  total,
+		"taggedPercent": func() int {
+			if total == 0 {
+				return 0
+			}
+			return (tagged * 100) / total
+		}(),
+	})
+}
+
+// handleResultsByTag belirli bir etikete sahip sonuçları döndürür
+func (s *Server) handleResultsByTag(c *gin.Context) {
+	tag := c.Query("tag")
+	if tag == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tag parametresi gerekli"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, _ := strconv.Atoi(limitStr)
+
+	results, err := s.db.GetResultsByTag(tag, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tag":     tag,
+		"count":   len(results),
+		"results": results,
+	})
+}
+
 // handleStats istatistikler API
 func (s *Server) handleStats(c *gin.Context) {
 	totalResults, totalSearches, err := s.db.GetStats()
@@ -123,7 +171,8 @@ func (s *Server) handleQueriesAPI(c *gin.Context) {
 // handleAnalyticsAPI grafik verilerini JSON olarak döndürür
 func (s *Server) handleAnalyticsAPI(c *gin.Context) {
 	interval := c.DefaultQuery("interval", "day")
-	data, err := s.db.GetAnalyticsData(interval)
+	query := c.Query("query") // Sorgu bazlı filtreleme için
+	data, err := s.db.GetAnalyticsData(interval, query)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

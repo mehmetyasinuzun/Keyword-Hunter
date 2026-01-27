@@ -21,6 +21,7 @@ type Result struct {
 	Source      string // Hangi arama motorundan geldi
 	Criticality int
 	Category    string
+	KeywordHits int    // Arama kelimesinin bu sonuçta kaç kez geçtiği
 }
 
 // Searcher dark web arama yapan yapı
@@ -142,8 +143,13 @@ func (s *Searcher) SearchAll(query string) []Result {
 			}
 
 			if len(engineResults) > 0 {
+				// Toplam hit sayısını hesapla
+				totalHits := 0
+				for _, r := range engineResults {
+					totalHits += r.KeywordHits
+				}
 				logger.SearchEngineResult(eng.Name, len(engineResults), nil)
-				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("SEARCH ENGINE SUCCESS: %d results found", len(engineResults)), eng.Name)
+				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("✅ %d sonuç, %d hit bulundu", len(engineResults), totalHits), eng.Name)
 				mu.Lock()
 				results = append(results, engineResults...)
 				mu.Unlock()
@@ -200,13 +206,15 @@ func (s *Searcher) searchEngine(engine Engine, query string) ([]Result, error) {
 		return nil, err
 	}
 
-	// HTML'den .onion linklerini çıkar
-	return s.parseResults(string(body), engine.Name), nil
+	// HTML'den .onion linklerini çıkar ve kelime sıklığını say
+	return s.parseResults(string(body), engine.Name, query), nil
 }
 
-// parseResults HTML'den .onion linklerini çıkarır (Robin tarzı)
-func (s *Searcher) parseResults(html, sourceName string) []Result {
+// parseResults HTML'den .onion linklerini çıkarır ve kelime sıklığını sayar
+func (s *Searcher) parseResults(html, sourceName, query string) []Result {
 	var results []Result
+	queryLower := strings.ToLower(query)
+	htmlLower := strings.ToLower(html)
 
 	// <a> taglarını bul - iç HTML dahil (nested taglar için)
 	// Önce tüm <a> bloklarını bul
@@ -229,10 +237,14 @@ func (s *Searcher) parseResults(html, sourceName string) []Result {
 					continue
 				}
 				title := cleanTitle(decodeHTMLEntities(htmlTagRegex.ReplaceAllString(innerHTML, "")), foundURL)
+				// Kelime sıklığını say (title + innerHTML içinde)
+				hits := strings.Count(strings.ToLower(innerHTML), queryLower)
+				hits += strings.Count(strings.ToLower(title), queryLower)
 				res := Result{
-					Title:  title,
-					URL:    foundURL,
-					Source: sourceName,
+					Title:       title,
+					URL:         foundURL,
+					Source:      sourceName,
+					KeywordHits: hits,
 				}
 				res.PredictCTI()
 				results = append(results, res)
@@ -250,10 +262,21 @@ func (s *Searcher) parseResults(html, sourceName string) []Result {
 	for _, onionURL := range allOnions {
 		// ✅ URL filtreleme - düşük değerli URL'leri kaydetme
 		if !seen[onionURL] && !strings.Contains(onionURL, "javascript:") && isValidResultURL(onionURL) {
+			// URL çevresinde kelime geçiyor mu kontrol et (context-aware)
+			hits := 0
+			urlIdx := strings.Index(htmlLower, strings.ToLower(onionURL))
+			if urlIdx > 0 {
+				// URL öncesi ve sonrasını al (max 200 karakter)
+				start := max(0, urlIdx-200)
+				end := min(len(htmlLower), urlIdx+len(onionURL)+200)
+				context := htmlLower[start:end]
+				hits = strings.Count(context, queryLower)
+			}
 			res := Result{
-				Title:  extractTitleFromURL(onionURL),
-				URL:    onionURL,
-				Source: sourceName,
+				Title:       extractTitleFromURL(onionURL),
+				URL:         onionURL,
+				Source:      sourceName,
+				KeywordHits: hits,
 			}
 			res.PredictCTI()
 			results = append(results, res)

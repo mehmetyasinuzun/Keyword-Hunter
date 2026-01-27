@@ -1,42 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="tr">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{template "head" .}}
     <title>KeywordHunter - Sonuç Haritası</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <link rel="stylesheet" href="/static/css/graph.css">
 </head>
 
 <body class="min-h-screen graph-page">
-    <!-- Compact Navbar -->
-    <nav class="bg-gray-900/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
-        <div class="max-w-full mx-auto px-6 py-3">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <span class="text-3xl">🕵️</span>
-                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
-                    <span
-                        class="bg-blue-500/20 text-blue-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded tracking-widest ml-2">Harita</span>
-                </div>
-
-
-
-                <div class="flex items-center space-x-6 text-sm">
-                    <a href="/dashboard" class="text-gray-400 hover:text-white transition">Dashboard</a>
-                    <a href="/results" class="text-gray-400 hover:text-white transition">Bulgular</a>
-                    <a href="/results/graph" class="text-blue-400 font-bold transition">Harita</a>
-                    <a href="/analytics" class="text-gray-400 hover:text-white transition flex items-center gap-1">
-                        <span>📊</span> Analiz
-                    </a>
-                    <a href="/search" class="text-gray-400 hover:text-white transition">Arama</a>
-                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-xs">Çıkış</a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    {{template "navbar" .}}
 
     <!-- Query Panel -->
     <div class="query-panel">
@@ -49,7 +22,7 @@
         <div class="query-search">
             <input type="text" id="quick-search" placeholder="Yeni arama..."
                 onkeypress="if(event.key==='Enter') quickSearch()">
-            <button onclick="quickSearch()" class="search-btn">🔍</button>
+            <button onclick="quickSearch()" class="search-btn"></button>
         </div>
         <div class="query-info">
             <span id="current-query-label"></span>
@@ -60,7 +33,7 @@
     <div id="graph-container">
         <!-- Stats Panel -->
         <div class="panel stats">
-            <h3>📊 İstatistikler</h3>
+            <h3> İstatistikler</h3>
             <div class="stats-item">
                 <span>Sorgu:</span>
                 <span class="stats-value" id="stat-queries">0</span>
@@ -85,10 +58,10 @@
                 🗺️ Full Map
             </button>
             <button class="control-btn" onclick="collapseAll()" title="Tüm node'ları kapat">
-                📁 Kapat
+                Kapat
             </button>
             <button class="control-btn" onclick="resetView()" title="Görünümü sıfırla">
-                🎯 Sıfırla
+                Sıfırla
             </button>
             <button class="control-btn" onclick="fitToScreen()" title="Ekrana sığdır">
                 ⬜ Sığdır
@@ -188,12 +161,12 @@
 
     <!-- Context Menu -->
     <div class="context-menu" id="context-menu">
-        <div class="context-menu-item" onclick="copyLink()">📋 Linki Kopyala</div>
+        <div class="context-menu-item" onclick="copyLink()"> Linki Kopyala</div>
         <div class="context-menu-item" onclick="copyTitle()">📝 Başlığı Kopyala</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()">🔍 Derinleştir</div>
+        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()"> Derinleştir</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="focusNode()">🎯 Odaklan</div>
+        <div class="context-menu-item" onclick="focusNode()"> Odaklan</div>
         <div class="context-menu-item" onclick="showLinkInfo()">ℹ️ Detaylar</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item danger" onclick="closeContextMenu()">✖️ Kapat</div>
@@ -216,7 +189,7 @@
             <div id="link-modal-content"></div>
             <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
                 <button onclick="copyLinkFromModal()"
-                    style="background: linear-gradient(135deg, #4299e1, #3182ce); color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">📋
+                    style="background: linear-gradient(135deg, #4299e1, #3182ce); color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">
                     Kopyala</button>
                 <button onclick="closeLinkModal()"
                     style="background: #4a5568; color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer;">Kapat</button>

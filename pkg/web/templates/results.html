@@ -1,16 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="tr">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{template "head" .}}
     <title>KeywordHunter - Bulgular</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        }
-
+        /* Results page specific styles */
         .loading-spin {
             animation: spin 1s linear infinite;
         }
@@ -24,41 +19,47 @@
                 transform: rotate(360deg);
             }
         }
+
+        .tag-pill {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 600;
+            margin: 2px;
+            text-transform: lowercase;
+        }
+
+        .tag-pill.loading {
+            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
     </style>
 </head>
 
 <body class="min-h-screen text-gray-100">
-    <!-- Navbar -->
-    <nav class="bg-gray-900/90 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-3">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <span class="text-3xl">🕵️</span>
-                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
-                </div>
-
-
-
-                <div class="flex items-center space-x-6">
-                    <a href="/dashboard" class="text-gray-400 hover:text-white transition">Dashboard</a>
-                    <a href="/results" class="text-blue-400 font-bold transition">Bulgular</a>
-                    <a href="/results/graph" class="text-gray-400 hover:text-white transition">Harita</a>
-                    <a href="/analytics" class="text-gray-400 hover:text-white transition flex items-center gap-1">
-                        <span>📊</span> Analiz
-                    </a>
-                    <a href="/search" class="text-gray-400 hover:text-white transition">Arama</a>
-                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-sm">Çıkış</a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    {{template "navbar" .}}
 
     <div class="max-w-7xl mx-auto px-4 py-8">
         <!-- Filter and Search -->
         <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg mb-8">
             <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
                 <div>
-                    <h2 class="text-2xl font-bold">📋 Veri Analiz Paneli</h2>
+                    <h2 class="text-2xl font-bold"> Veri Analiz Paneli</h2>
                     <p class="text-gray-400 text-sm mt-1">Toplam {{.totalResults}} kayıt üzerinden analiz yapılıyor.</p>
                 </div>
                 <div class="flex gap-2">
@@ -83,6 +84,7 @@
                     Filtrele
                 </button>
             </form>
+
         </div>
 
         <!-- Analysis Table -->
@@ -93,30 +95,42 @@
                     <thead
                         class="bg-gray-900/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b border-gray-700">
                         <tr>
-                            <th class="px-6 py-4">BAŞLIK & KAYNAK</th>
-                            <th class="px-6 py-4">URL</th>
-                            <th class="px-6 py-4 text-center">KRİTİKLİK</th>
-                            <th class="px-6 py-4">KATEGORİ</th>
-                            <th class="px-6 py-4 text-center">FREKANS</th>
-                            <th class="px-6 py-4 text-right">EYLEM</th>
+                            <th class="px-4 py-4">BAŞLIK & KAYNAK</th>
+                            <th class="px-4 py-4">URL</th>
+                            <th class="px-4 py-4">OTOMATİK ETİKETLER</th>
+                            <th class="px-4 py-4 text-center">KRİTİKLİK</th>
+                            <th class="px-4 py-4">KATEGORİ</th>
+                            <th class="px-4 py-4 text-center" title="Arama kelimesinin sitede kaç kez geçtiği">SIKLIK
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-700/50">
                         {{range .results}}
-                        <tr class="hover:bg-gray-700/30 transition group">
-                            <td class="px-6 py-4">
-                                <p class="text-white font-bold mb-0.5">{{truncate .Title 60}}</p>
+                        <tr class="hover:bg-gray-700/30 transition group" data-id="{{.ID}}">
+                            <td class="px-4 py-4">
+                                <p class="text-white font-bold mb-0.5">{{truncate .Title 50}}</p>
                                 <div class="flex items-center gap-2">
                                     <span
                                         class="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-mono">{{.Source}}</span>
                                     <span class="text-[10px] text-gray-500 italic">Sorgu: {{.Query}}</span>
                                 </div>
                             </td>
-                            <td class="px-6 py-4">
+                            <td class="px-4 py-4">
                                 <a href="{{.URL}}" target="_blank"
-                                    class="text-blue-500 hover:underline font-mono text-xs">{{truncate .URL 40}}</a>
+                                    class="text-blue-500 hover:underline font-mono text-xs">{{truncate .URL 35}}</a>
                             </td>
-                            <td class="px-6 py-4 text-center">
+                            <td class="px-4 py-4" id="tags-{{.ID}}">
+                                {{if .AutoTags}}
+                                <div class="flex flex-wrap gap-1">
+                                    {{range $i, $tag := (split .AutoTags ", ")}}
+                                    <span class="tag-pill">{{$tag}}</span>
+                                    {{end}}
+                                </div>
+                                {{else}}
+                                <span class="text-gray-500 text-xs italic">Henüz etiketlenmedi</span>
+                                {{end}}
+                            </td>
+                            <td class="px-4 py-4 text-center">
                                 <select onchange="updateRow('{{.ID}}', this.value, '{{.Category}}')" class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none
                                     {{if eq .Criticality 5}}text-red-500 font-bold
                                     {{else if eq .Criticality 4}}text-orange-500
@@ -128,23 +142,16 @@
                                     {{end}}
                                 </select>
                             </td>
-                            <td class="px-6 py-4">
+                            <td class="px-4 py-4">
                                 <input type="text" value="{{.Category}}"
                                     onblur="updateRow('{{.ID}}', '{{.Criticality}}', this.value)"
-                                    class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs w-24 outline-none focus:border-blue-500 transition">
+                                    class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs w-20 outline-none focus:border-blue-500 transition">
                             </td>
-                            <td class="px-6 py-4 text-center">
+                            <td class="px-4 py-4 text-center">
                                 <span id="count-{{.ID}}"
                                     class="font-mono font-bold text-lg {{if gt .KeywordCount 0}}text-green-500{{else}}text-gray-600{{end}}">
                                     {{.KeywordCount}}
                                 </span>
-                            </td>
-                            <td class="px-6 py-4 text-right">
-                                <button onclick="analyzeResult('{{.ID}}', this)"
-                                    class="bg-gray-700 hover:bg-blue-600 p-2 rounded transition flex items-center justify-center min-w-[32px] mx-auto"
-                                    title="Kelime Sayısını Güncelle">
-                                    <span class="icon">🔍</span>
-                                </button>
                             </td>
                         </tr>
                         {{end}}
@@ -164,10 +171,16 @@
 
     <div id="toast"
         class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl transition-all opacity-0 translate-y-10 z-[100]">
-        ✅ Güncellendi
+        Güncellendi
     </div>
 
     <script>
+        // Tüm sonuç ID'lerini topla
+        const allResultIds = [];
+        document.querySelectorAll('tr[data-id]').forEach(row => {
+            allResultIds.push(parseInt(row.dataset.id));
+        });
+
         function updateRow(id, crit, cat) {
             fetch('/api/update-criticality', {
                 method: 'POST',
@@ -185,14 +198,20 @@
             });
         }
 
-        function analyzeResult(id, btn) {
+        // Tek sonuç için otomatik etiketleme
+        function autoTagResult(id, btn) {
             const icon = btn.querySelector('.icon');
             const originalIcon = icon.innerText;
             icon.innerText = '⏳';
             btn.disabled = true;
             btn.classList.add('opacity-50');
 
-            fetch('/api/analyze-result', {
+            // Etiket alanını loading göster
+            const tagsEl = document.getElementById('tags-' + id);
+            const originalTags = tagsEl.innerHTML;
+            tagsEl.innerHTML = '<span class="tag-pill loading">Etiketleniyor...</span>';
+
+            fetch('/api/auto-tag', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: parseInt(id) })
@@ -201,28 +220,122 @@
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
 
-                if (data.success) {
-                    const countEl = document.getElementById('count-' + id);
-                    countEl.innerText = data.count;
-                    if (data.count > 0) {
+                if (data.success && data.tags && data.tags.length > 0) {
+                    // Etiketleri göster
+                    let tagsHtml = '<div class="flex flex-wrap gap-1">';
+                    data.tags.forEach(tag => {
+                        tagsHtml += `<span class="tag-pill">${tag}</span>`;
+                    });
+                    tagsHtml += '</div>';
+                    tagsEl.innerHTML = tagsHtml;
+
+                    // Frekansı da güncelle
+                    if (data.keywordHits > 0) {
+                        const countEl = document.getElementById('count-' + id);
+                        countEl.innerText = data.keywordHits;
                         countEl.classList.remove('text-gray-600');
                         countEl.classList.add('text-green-500');
                     }
-                    showToast('Analiz Tamamlandı: ' + data.count + ' eşleşme');
+
+                    showToast('Etiketlendi: ' + data.tagsStr);
                 } else {
-                    showToast('Hata: ' + data.error);
+                    tagsEl.innerHTML = originalTags;
+                    showToast('Hata: ' + (data.error || 'Etiket bulunamadı'));
                 }
             }).catch(err => {
                 icon.innerText = originalIcon;
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
+                tagsEl.innerHTML = originalTags;
                 showToast('Hata oluştu');
             });
         }
 
+        // Toplu etiketleme
+        function batchAutoTag() {
+            if (allResultIds.length === 0) {
+                showToast('Etiketlenecek sonuç yok');
+                return;
+            }
+
+            const btn = document.getElementById('batchTagBtn');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Başlatılıyor...';
+
+            const progressDiv = document.getElementById('tag-progress');
+            progressDiv.classList.remove('hidden');
+
+            // SSE bağlantısı aç
+            startTagEventStream();
+
+            // API'ye istek gönder
+            fetch('/api/batch-auto-tag', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    resultIds: allResultIds,
+                    query: '{{.query}}'
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    btn.innerHTML = '🏷️ İşleniyor...';
+                } else {
+                    btn.innerHTML = '🏷️ Tümünü Etiketle';
+                    btn.disabled = false;
+                    progressDiv.classList.add('hidden');
+                    showToast('Hata: ' + data.error);
+                }
+            }).catch(err => {
+                btn.innerHTML = '🏷️ Tümünü Etiketle';
+                btn.disabled = false;
+                progressDiv.classList.add('hidden');
+                showToast('Bağlantı hatası');
+            });
+        }
+
+        // SSE ile etiketleme progress takibi
+        function startTagEventStream() {
+            if (window.tagEventSource) {
+                window.tagEventSource.close();
+            }
+
+            let completed = 0;
+            const total = allResultIds.length;
+
+            window.tagEventSource = new EventSource('/events');
+
+            window.tagEventSource.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    const statusEl = document.getElementById('tag-status');
+                    const progressBar = document.getElementById('tag-progress-bar');
+
+                    if (data.type === 'auto_tag' || data.type === 'auto_tag_error') {
+                        completed++;
+                        const percent = Math.round((completed / total) * 100);
+                        progressBar.style.width = percent + '%';
+                        statusEl.innerText = data.message;
+                    }
+
+                    if (data.type === 'success' && data.message.includes('Etiketleme tamamlandı')) {
+                        // Tamamlandı - sayfayı yenile
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    }
+                } catch (e) {
+                    console.error('SSE parse error', e);
+                }
+            };
+
+            window.tagEventSource.onerror = function () {
+                window.tagEventSource.close();
+            };
+        }
+
         function showToast(msg) {
             const t = document.getElementById('toast');
-            t.innerText = '✅ ' + msg;
+            t.innerText = ' ' + msg;
             t.classList.remove('opacity-0', 'translate-y-10');
             setTimeout(() => t.classList.add('opacity-0', 'translate-y-10'), 2000);
         }

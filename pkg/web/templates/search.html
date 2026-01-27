@@ -1,19 +1,19 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="tr">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{template "head" .}}
     <title>KeywordHunter - Arama</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        }
-
+        /* Search page specific styles */
         .loader {
             border-top-color: #3498db;
             animation: spin 1s linear infinite;
+        }
+
+        .loading-spin {
+            display: inline-block;
+            animation: spin 2s linear infinite;
         }
 
         @keyframes spin {
@@ -25,40 +25,17 @@
 </head>
 
 <body class="min-h-screen">
-    <!-- Navbar -->
-    <nav class="bg-gray-900/90 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-3">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <span class="text-3xl">🕵️</span>
-                    <span class="text-white font-bold text-xl tracking-tight">KeywordHunter</span>
-                </div>
-
-
-
-                <div class="flex items-center space-x-6">
-                    <a href="/dashboard" class="text-gray-400 hover:text-white transition">Dashboard</a>
-                    <a href="/results" class="text-gray-400 hover:text-white transition">Bulgular</a>
-                    <a href="/results/graph" class="text-gray-400 hover:text-white transition">Harita</a>
-                    <a href="/analytics" class="text-gray-400 hover:text-white transition flex items-center gap-1">
-                        <span>📊</span> Analiz
-                    </a>
-                    <a href="/search" class="text-blue-400 font-semibold transition">Arama</a>
-                    <a href="/logout" class="text-red-400 hover:text-red-300 transition text-sm">Çıkış</a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    {{template "navbar" .}}
 
     <div class="max-w-7xl mx-auto px-4 py-8">
         <!-- Search Form -->
         <div class="bg-gray-800 rounded-xl p-6 shadow-lg mb-8">
-            <h2 class="text-xl font-bold text-white mb-4">🔍 Dark Web Arama</h2>
+            <h2 class="text-xl font-bold text-white mb-4">Dark Web Arama</h2>
             <p class="text-gray-400 mb-4">17 dark web arama motorunda eşzamanlı arama yapın.</p>
 
             {{if .error}}
             <div class="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4">
-                ❌ {{.error}}
+                {{.error}}
             </div>
             {{end}}
 
@@ -69,7 +46,7 @@
                         class="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
                     <button type="submit" id="searchBtn"
                         class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg transition flex items-center gap-2">
-                        <span>🔍</span> Ara
+                        <span>→</span> Ara
                     </button>
                 </div>
             </form>
@@ -112,11 +89,13 @@
         <div id="results-area">
             {{if .results}}
             <!-- Results Summary -->
-            <div class="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg mb-6">
+            <div class="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg mb-4">
                 <div class="flex items-center justify-between">
                     <div>
-                        ✅ <strong>{{.totalFound}}</strong> sonuç bulundu, <strong>{{.newSaved}}</strong> yeni kayıt
+                        <strong>{{.totalFound}}</strong> sonuç bulundu, <strong>{{.newSaved}}</strong> yeni kayıt
                         eklendi
+                        {{if .totalHits}}<span class="ml-2 text-blue-400">| Toplam <strong>{{.totalHits}}</strong>
+                            hit</span>{{end}}
                     </div>
                     <div class="text-sm">⏱️ {{.duration}}</div>
                 </div>
@@ -124,7 +103,7 @@
 
             <!-- Results List -->
             <div class="bg-gray-800 rounded-xl p-6 shadow-lg">
-                <h2 class="text-xl font-bold text-white mb-4">📋 Sonuçlar (İlk 20)</h2>
+                <h2 class="text-xl font-bold text-white mb-4"> Sonuçlar (İlk 20)</h2>
 
                 <div class="space-y-3">
                     {{range .results}}
@@ -187,21 +166,19 @@
                     content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">Target:</span> <span class="text-white">${data.engine}</span>`;
                     break;
                 case 'engine_end':
-                    if (data.message.includes('SUCCESS')) {
-                        status = '[DONE]';
-                        colorClass = 'text-green-500';
-                    } else if (data.message.includes('ERROR') || data.message.includes('FAILED')) {
+                    if (data.message.includes('ERROR') || data.message.includes('FAILED')) {
                         status = '[FAIL]';
                         colorClass = 'text-red-500';
                     } else {
-                        status = '[INFO]';
+                        status = '[DONE]';
+                        colorClass = 'text-cyan-400'; // DONE için cyan
                     }
                     const cleanMsg = data.message.replace('SEARCH ENGINE SUCCESS:', '').replace('SEARCH ENGINE ERROR:', '');
                     content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">${data.engine}:</span> <span class="text-gray-300">${cleanMsg}</span>`;
                     break;
                 case 'info':
                     status = '[INFO]';
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-blue-300 font-bold w-16">${status}</span> <span class="text-gray-400">${data.message}</span>`;
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-slate-400 font-bold w-16">${status}</span> <span class="text-gray-400">${data.message}</span>`;
                     break;
                 case 'error':
                     status = '[ERR ]';
@@ -210,8 +187,18 @@
                     break;
                 case 'success':
                     status = '[SUCC]';
-                    colorClass = 'text-green-400 font-bold';
+                    colorClass = 'text-emerald-400'; // SUCCESS için emerald (parlak yeşil)
                     content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-200">${data.message}</span>`;
+                    break;
+                case 'auto_tag':
+                    status = '[TAG ]';
+                    colorClass = 'text-purple-400';
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-300">${data.message}</span>`;
+                    break;
+                case 'auto_tag_error':
+                    status = '[TAG!]';
+                    colorClass = 'text-orange-400';
+                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">${data.message}</span>`;
                     break;
                 default:
                     content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-gray-600 w-16">[LOG ]</span> <span class="text-gray-500">${data.message}</span>`;
@@ -298,7 +285,7 @@
 
                     // Re-enable button
                     btn.disabled = false;
-                    btn.innerHTML = '<span>🔍</span> Ara';
+                    btn.innerHTML = '<span></span> Ara';
 
                 } else {
                     throw new Error('Arama isteği başarısız');
@@ -308,12 +295,12 @@
 
                 // Hata durumunda butonu eski haline getir
                 btn.disabled = false;
-                btn.innerHTML = '<span>🔍</span> Ara';
+                btn.innerHTML = '<span></span> Ara';
 
                 // Hata mesajı göster
                 const errDiv = document.createElement('div');
                 errDiv.className = 'bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4 mt-4';
-                errDiv.textContent = '❌ Bir hata oluştu: ' + error.message;
+                errDiv.textContent = ' Bir hata oluştu: ' + error.message;
                 form.insertBefore(errDiv, form.firstChild);
             }
         });

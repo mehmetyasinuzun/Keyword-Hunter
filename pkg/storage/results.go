@@ -18,6 +18,7 @@ type SearchResult struct {
 	Criticality  int    // 1-5 arası kritiklik seviyesi
 	Category     string // Veri kategorisi
 	KeywordCount int    // İçerikteki anahtar kelime sayısı
+	AutoTags     string // Otomatik çıkarılan etiketler (virgülle ayrılmış)
 	CreatedAt    time.Time
 }
 
@@ -36,8 +37,13 @@ func (db *DB) SaveResult(title, url, source, query string) error {
 	return err
 }
 
-// SaveResults birden fazla sonucu kaydeder
+// SaveResults birden fazla sonucu kaydeder ve kaydedilen ID'leri döndürür
 func (db *DB) SaveResults(results []SearchResult) (int, error) {
+	return db.SaveResultsWithIDs(results, nil)
+}
+
+// SaveResultsWithIDs birden fazla sonucu kaydeder ve kaydedilen ID'leri alır
+func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int, error) {
 	tx, err := db.conn.Begin()
 	if err != nil {
 		return 0, err
@@ -45,8 +51,8 @@ func (db *DB) SaveResults(results []SearchResult) (int, error) {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT OR IGNORE INTO search_results (title, url, source, query, criticality, category)
-		VALUES (?, ?, ?, ?, 1, 'Genel')
+		INSERT OR IGNORE INTO search_results (title, url, source, query, criticality, category, keyword_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return 0, err
@@ -55,7 +61,16 @@ func (db *DB) SaveResults(results []SearchResult) (int, error) {
 
 	saved := 0
 	for _, r := range results {
-		result, err := stmt.Exec(r.Title, r.URL, r.Source, r.Query)
+		// Default values
+		crit := r.Criticality
+		if crit == 0 {
+			crit = 1
+		}
+		cat := r.Category
+		if cat == "" {
+			cat = "Genel"
+		}
+		result, err := stmt.Exec(r.Title, r.URL, r.Source, r.Query, crit, cat, r.KeywordCount)
 		if err != nil {
 			logger.Debug("Sonuç kaydedilemedi (URL: %s): %v", r.URL, err)
 			continue
@@ -66,6 +81,13 @@ func (db *DB) SaveResults(results []SearchResult) (int, error) {
 		}
 		if affected > 0 {
 			saved++
+			// Kaydedilen ID'yi al
+			if savedIDs != nil {
+				lastID, err := result.LastInsertId()
+				if err == nil {
+					*savedIDs = append(*savedIDs, lastID)
+				}
+			}
 		}
 
 		// Graph nodes tablosuna da kaydet (derinleştirme için altyapı)
@@ -89,13 +111,19 @@ func (db *DB) UpdateKeywordCount(id int64, count int) error {
 	return err
 }
 
+// UpdateAutoTags otomatik etiketleri günceller
+func (db *DB) UpdateAutoTags(id int64, tags string) error {
+	_, err := db.conn.Exec("UPDATE search_results SET auto_tags = ? WHERE id = ?", tags, id)
+	return err
+}
+
 // GetResultByID ID ile sonuç getirir
 func (db *DB) GetResultByID(id int64) (*SearchResult, error) {
 	var r SearchResult
 	err := db.conn.QueryRow(`
-		SELECT id, title, url, source, query, criticality, category, keyword_count, created_at 
+		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
 		FROM search_results WHERE id = ?
-	`, id).Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.CreatedAt)
+	`, id).Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +137,7 @@ func (db *DB) GetResults(limit int, query string) ([]SearchResult, error) {
 
 	if query != "" {
 		rows, err = db.conn.Query(`
-			SELECT id, title, url, source, query, criticality, category, keyword_count, created_at 
+			SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
 			FROM search_results 
 			WHERE query LIKE ?
 			ORDER BY created_at DESC
@@ -117,7 +145,7 @@ func (db *DB) GetResults(limit int, query string) ([]SearchResult, error) {
 		`, "%"+query+"%", limit)
 	} else {
 		rows, err = db.conn.Query(`
-			SELECT id, title, url, source, query, criticality, category, keyword_count, created_at 
+			SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
 			FROM search_results 
 			ORDER BY created_at DESC
 			LIMIT ?
@@ -132,7 +160,7 @@ func (db *DB) GetResults(limit int, query string) ([]SearchResult, error) {
 	var results []SearchResult
 	for rows.Next() {
 		var r SearchResult
-		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt); err != nil {
 			continue
 		}
 		results = append(results, r)
@@ -213,4 +241,125 @@ func (db *DB) GetQueries() ([]QueryInfo, error) {
 		queries = append(queries, q)
 	}
 	return queries, nil
+}
+
+// TagStat etiket istatistiği
+type TagStat struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+// GetTagStats tüm etiketlerin istatistiklerini döndürür (tag cloud için)
+func (db *DB) GetTagStats() ([]TagStat, error) {
+	// auto_tags sütunundaki virgülle ayrılmış etiketleri sayar
+	rows, err := db.conn.Query(`
+		SELECT auto_tags FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Tag sayaçları
+	tagCounts := make(map[string]int)
+
+	for rows.Next() {
+		var tagsStr string
+		if err := rows.Scan(&tagsStr); err != nil {
+			continue
+		}
+		// Virgülle ayrılmış etiketleri parse et
+		tags := splitTags(tagsStr)
+		for _, tag := range tags {
+			tag = trimSpace(tag)
+			if tag != "" {
+				tagCounts[tag]++
+			}
+		}
+	}
+
+	// Map'i slice'a çevir ve sırala
+	var stats []TagStat
+	for tag, count := range tagCounts {
+		stats = append(stats, TagStat{Tag: tag, Count: count})
+	}
+
+	// Count'a göre sırala (büyükten küçüğe)
+	for i := 0; i < len(stats); i++ {
+		for j := i + 1; j < len(stats); j++ {
+			if stats[j].Count > stats[i].Count {
+				stats[i], stats[j] = stats[j], stats[i]
+			}
+		}
+	}
+
+	return stats, nil
+}
+
+// GetResultsByTag belirli bir etikete sahip sonuçları döndürür
+func (db *DB) GetResultsByTag(tag string, limit int) ([]SearchResult, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := db.conn.Query(`
+		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
+		FROM search_results 
+		WHERE auto_tags LIKE ?
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, "%"+tag+"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt); err != nil {
+			continue
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// GetTaggedResultsCount etiketli sonuç sayısını döndürür
+func (db *DB) GetTaggedResultsCount() (int, int, error) {
+	var tagged, total int
+	db.conn.QueryRow("SELECT COUNT(*) FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL").Scan(&tagged)
+	db.conn.QueryRow("SELECT COUNT(*) FROM search_results").Scan(&total)
+	return tagged, total, nil
+}
+
+// Helper functions
+func splitTags(s string) []string {
+	var result []string
+	current := ""
+	for _, c := range s {
+		if c == ',' {
+			result = append(result, current)
+			current = ""
+		} else {
+			current += string(c)
+		}
+	}
+	if current != "" {
+		result = append(result, current)
+	}
+	return result
+}
+
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
+		end--
+	}
+	return s[start:end]
 }

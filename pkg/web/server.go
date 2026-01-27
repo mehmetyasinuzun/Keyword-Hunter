@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,7 +66,7 @@ func New(cfg Config) *Server {
 
 // setupRoutes rotaları ayarlar
 func (s *Server) setupRoutes() {
-	// Template'leri yükle
+	// Template'leri yükle (ana sayfalar + partials)
 	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
 		"truncate": func(str string, length int) string {
 			if len(str) <= length {
@@ -83,7 +84,16 @@ func (s *Server) setupRoutes() {
 			}
 			return res
 		},
-	}).ParseFS(templateFS, "templates/*.html"))
+		"split": func(s, sep string) []string {
+			if s == "" {
+				return []string{}
+			}
+			return strings.Split(s, sep)
+		},
+		"eq": func(a, b interface{}) bool {
+			return a == b
+		},
+	}).ParseFS(templateFS, "templates/*.html", "templates/partials/*.html"))
 	s.router.SetHTMLTemplate(tmpl)
 
 	// Static files - use sub filesystem to strip "static" prefix
@@ -124,6 +134,10 @@ func (s *Server) setupRoutes() {
 		// Derinleştir (Expand) API
 		protected.POST("/api/expand", s.handleExpandNode)
 		protected.GET("/api/graph/children/:id", s.handleGetChildren)
+
+		// Etiket İstatistikleri API
+		protected.GET("/api/tags", s.handleTagStats)
+		protected.GET("/api/results-by-tag", s.handleResultsByTag)
 	}
 }
 
