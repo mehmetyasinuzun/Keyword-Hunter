@@ -29,8 +29,8 @@ var (
 )
 
 func main() {
-	// Logger'ı başlat
-	if err := logger.Init(LogDir, logger.INFO, true); err != nil {
+	// Logger'ı başlat - Kullanıcı isteği üzerine DEBUG seviyesine çekildi
+	if err := logger.Init(LogDir, logger.DEBUG, true); err != nil {
 		panic("Logger başlatılamadı: " + err.Error())
 	}
 	defer logger.Close()
