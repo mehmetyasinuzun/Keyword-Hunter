@@ -68,10 +68,22 @@ Toplanan ham verilerin işlendiği ve listelendiği alandır. Her sonuç, bulund
 
 ### 4. İlişki Analizi (Graph Intelligence)
 Metin tabanlı verilerin görselleştirilmiş halidir. Özellikle organize suç gruplarını veya birbiriyle bağlantılı veri sızıntılarını tespit etmek için kullanılır.
-- **Node (Düğüm) Yapısı:** Anahtar kelimeler, domainler ve kaynaklar birer düğüm olarak temsil edilir.
-- **Force-Directed Layout:** İlişkisi güçlü olan veriler birbirine çekilirken, ilgisiz veriler dışa itilir. Bu sayede kümeler (cluster) otomatik olarak ortaya çıkar.
 
-![İlişki Grafiği](docs/screenshots/graph_view.jpg)
+#### Görselleştirme Modları
+Analiz türüne göre 3 farklı görünüm modu sunar:
+
+**1. Radial View (Odaklı Analiz):** Seçilen düğümü merkeze alarak ilişkileri dairesel dağıtır.
+![Radial Mod](docs/screenshots/graph_radial.jpg)
+
+**2. Tree View (Hiyerarşik Analiz):** Veriler arasındaki ata-çocuk ilişkisini ağaç yapısında gösterir.
+![Tree Mod](docs/screenshots/graph_tree.jpg)
+
+**3. Network View (Serbest Kümeleme):** İlişkisi güçlü olan veriler birbirine çekilir (Force-Directed).
+![Network Mod](docs/screenshots/graph_network.jpg)
+
+#### Aksiyon Menüsü
+Analist, herhangi bir düğüme sağ tıklayarak detaylı aksiyon menüsüne erişebilir (Derinleştirme, Kopyalama, Gizleme vb.).
+![Context Menu](docs/screenshots/graph_context.jpg)
 
 ### 5. Analitik Merkezi (Analytics)
 Operasyonel verilerin stratejik bilgiye dönüştüğü yerdir.
