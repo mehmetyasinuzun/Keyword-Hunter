@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"keywordhunter-mvp/pkg/cti"
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/shared"
 )
@@ -21,34 +22,13 @@ type Result struct {
 	Source      string // Hangi arama motorundan geldi
 	Criticality int
 	Category    string
-	KeywordHits int    // Arama kelimesinin bu sonuçta kaç kez geçtiği
+	KeywordHits int // Arama kelimesinin bu sonuçta kaç kez geçtiği
 }
 
 // Searcher dark web arama yapan yapı
 type Searcher struct {
 	torProxy string
 	client   *http.Client
-}
-
-// Arama motorlarının kendi domain'leri - bunları sonuçlardan çıkacak
-var searchEngineDomains = []string{
-	"juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion", // Ahmia
-	"3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion", // OnionLand
-	"darkhuntyla64h75a3re5e2l3367lqn7ltmdzpgmr6b4nbz3q2iaxrid.onion", // DarkHunt
-	"iy3544gmoeclh5de6gez2256v6pjh4omhpqdh2wpeeppjtvqmjhkfwad.onion", // Torgle
-	"amnesia7u5odx5xbwtpnqk3edybgud5bmiagu75bnqx2crntw5kry7ad.onion", // Amnesia
-	"kaizerwfvp5gxu6cppibp7jhcqptavq3iqef66wbxenh6a2fklibdvid.onion", // Kaizer
-	"anima4ffe27xmakwnseih3ic2y7y3l6e7fucwk4oerdn4odf7k74tbid.onion", // Anima
-	"tornadoxn3viscgz647shlysdy7ea5zqzwda7hierekeuokh5eh5b3qd.onion", // Tornado
-	"tornetupfu7gcgidt33ftnungxzyfq2pygui5qdoyss34xbgx2qruzid.onion", // TorNet
-	"torlbmqwtudkorme6prgfpmsnile7ug2zm4u3ejpcncxuhpu4k2j4kyd.onion", // Torland
-	"findtorroveq5wdnipkaojfpqulxnkhblymc7aramjzajcvpptd4rjqd.onion", // FindTor
-	"2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion", // Excavator
-	"oniwayzz74cv2puhsgx4dpjwieww4wdphsydqvf5q7eyz4myjvyw26ad.onion", // Onionway
-	"tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion", // Tor66
-	"3fzh7yuupdfyjhwt3ugzqqof6ulbcl27ecev33knxe3u7goi3vfn2qqd.onion", // OSS
-	"torgolnpeouim56dykfob6jh5r2ps2j73enc42s2um4ufob3ny4fcdyd.onion", // Torgol
-	"searchgf7gdtauh7bhnbyed4ivxqmuoat3nm6zfrg3ymkq6mtnpye3ad.onion", // DeepSearches
 }
 
 // cleanURL URL'deki boşlukları ve geçersiz karakterleri temizler
@@ -72,11 +52,9 @@ func isValidResultURL(urlStr string) bool {
 		return false
 	}
 
-	// 1. Arama motoru domain'lerini kontrol et
-	for _, domain := range searchEngineDomains {
-		if strings.Contains(lowerURL, domain) {
-			return false
-		}
+	// 1. Arama motoru domain'lerini filtrele
+	if isSearchEngineDomain(urlStr) {
+		return false
 	}
 
 	// 2. Shared paketten düşük değerli URL kontrolü
@@ -289,62 +267,9 @@ func (s *Searcher) parseResults(html, sourceName, query string) []Result {
 
 // PredictCTI başlık ve URL'ye göre kategori/kritiklik tahmini yapar
 func (r *Result) PredictCTI() {
-	text := strings.ToLower(r.Title + " " + r.URL)
-
-	// Default values
-	r.Criticality = 1
-	r.Category = "Genel"
-
-	// Ransomware (Crit: 5)
-	if matchAny(text, "ransomware", "lockbit", "blackcat", "hive", "conti", "leak", "decrypt") {
-		r.Criticality = 5
-		r.Category = "Ransomware"
-		return
-	}
-
-	// Data Leak (Crit: 5)
-	if matchAny(text, "database", "sql", "dump", "full access", "selling data", "user list", "combolist") {
-		r.Criticality = 5
-		r.Category = "Veri Sızıntısı"
-		return
-	}
-
-	// Fraud / CC (Crit: 5)
-	if matchAny(text, "carding", "cc dump", "cvv", "cashout", "bank account", "cloned") {
-		r.Criticality = 5
-		r.Category = "Finansal Dolandırıcılık"
-		return
-	}
-
-	// Dark Market (Crit: 4)
-	if matchAny(text, "market", "shop", "store", "buy", "sell", "vendor", "escrow") {
-		r.Criticality = 4
-		r.Category = "Illegal Market"
-		return
-	}
-
-	// Hacking Forum (Crit: 3)
-	if matchAny(text, "forum", "board", "community", "hacking", "exploit", "0day") {
-		r.Criticality = 3
-		r.Category = "Siber Forum"
-		return
-	}
-
-	// Social / Network (Crit: 2)
-	if matchAny(text, "chat", "message", "telegram", "channel", "vpn", "proxy", "host") {
-		r.Criticality = 2
-		r.Category = "İletişim / Ağ"
-		return
-	}
-}
-
-func matchAny(text string, keywords ...string) bool {
-	for _, k := range keywords {
-		if strings.Contains(text, k) {
-			return true
-		}
-	}
-	return false
+	analysis := cti.Analyze(r.Title, r.URL, "", nil, r.KeywordHits)
+	r.Criticality = analysis.Criticality
+	r.Category = analysis.Category
 }
 
 // decodeHTMLEntities HTML entity'leri decode eder

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"keywordhunter-mvp/pkg/cti"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/storage"
 )
@@ -17,6 +18,9 @@ type AutoTagResult struct {
 	Tags        []string `json:"tags"`
 	TagsStr     string   `json:"tagsStr"`
 	KeywordHits int      `json:"keywordHits"`
+	Category    string   `json:"category"`
+	Criticality int      `json:"criticality"`
+	Confidence  int      `json:"confidence"`
 }
 
 // Engine ortak etiketleme iş kurallarını içerir.
@@ -74,30 +78,53 @@ func (e *Engine) TagResultByID(ctx context.Context, resultID int64) (*AutoTagRes
 	}
 
 	tagResult := e.scraper.ExtractTopKeywords(result.URL, query, e.maxTags)
-	if !tagResult.Success {
-		if tagResult.Error != "" {
-			return nil, fmt.Errorf("etiketleme başarısız: %s", tagResult.Error)
-		}
-		return nil, fmt.Errorf("etiketleme başarısız")
+	extractedTags := []string{}
+	keywordHits := 0
+	extractionErr := ""
+
+	if tagResult.Success {
+		extractedTags = tagResult.Tags
+		keywordHits = tagResult.KeywordHits
+	} else if tagResult.Error != "" {
+		extractionErr = tagResult.Error
 	}
 
-	if len(tagResult.Tags) == 0 && tagResult.KeywordHits == 0 {
+	analysis := cti.Analyze(result.Title, result.URL, query, extractedTags, keywordHits)
+	finalTags := cti.MergeTags(extractedTags, analysis.MatchedSignals, query, e.maxTags)
+
+	if len(finalTags) == 0 && keywordHits == 0 && analysis.Category == "Genel" {
+		if extractionErr != "" {
+			return nil, fmt.Errorf("etiketleme başarısız: %s", extractionErr)
+		}
 		return nil, ErrNoTaggableSignal
 	}
 
-	tagsStr := strings.Join(tagResult.Tags, ", ")
+	finalCategory := analysis.Category
+	finalCriticality := analysis.Criticality
 
-	if err := e.db.UpdateAutoTags(result.ID, tagsStr); err != nil {
-		return nil, fmt.Errorf("etiketler kaydedilemedi: %w", err)
+	// Mevcut kayıt zaten daha özel bir kategoriye sahipse, zayıf sınıflandırmada geri düşürme.
+	if finalCategory == "Genel" {
+		if strings.TrimSpace(result.Category) != "" && !strings.EqualFold(result.Category, "Genel") {
+			finalCategory = result.Category
+		}
+		if result.Criticality >= 1 && result.Criticality <= 5 {
+			finalCriticality = result.Criticality
+		}
 	}
-	if err := e.db.UpdateKeywordCount(result.ID, tagResult.KeywordHits); err != nil {
-		return nil, fmt.Errorf("keyword_count güncellenemedi: %w", err)
+
+	tagsStr := strings.Join(finalTags, ", ")
+
+	if err := e.db.ApplyTagging(result.ID, tagsStr, keywordHits, finalCriticality, finalCategory); err != nil {
+		return nil, fmt.Errorf("etiketleme sonucu kaydedilemedi: %w", err)
 	}
 
 	return &AutoTagResult{
 		ResultID:    result.ID,
-		Tags:        tagResult.Tags,
+		Tags:        finalTags,
 		TagsStr:     tagsStr,
-		KeywordHits: tagResult.KeywordHits,
+		KeywordHits: keywordHits,
+		Category:    finalCategory,
+		Criticality: finalCriticality,
+		Confidence:  analysis.Confidence,
 	}, nil
 }

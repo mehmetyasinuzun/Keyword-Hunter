@@ -24,12 +24,13 @@ function updateGraphSettings() {
     GraphSettings.truncateLength = parseInt(truncateLength);
     GraphSettings.showAllLabels = showAllLabels;
 
-    renderLayout();
+    if (GraphState.root) {
+        renderLayout();
+    }
 }
 
 function applyGraphSettings() {
     updateGraphSettings();
-    renderLayout();
     showToast('Ayarlar uygulandı', 'success');
 }
 
@@ -45,7 +46,6 @@ function resetGraphSettings() {
     GraphSettings.showAllLabels = true;
 
     updateGraphSettings();
-    renderLayout();
     showToast('Ayarlar sıfırlandı', 'info');
 }
 
@@ -72,19 +72,26 @@ function handleContextMenu(event, d) {
 
 // Zoom Controls
 function zoomIn() {
+    if (!GraphState.svg || !GraphState.zoom) return;
     GraphState.svg.transition().duration(300).call(GraphState.zoom.scaleBy, 1.5);
 }
 
 function zoomOut() {
+    if (!GraphState.svg || !GraphState.zoom) return;
     GraphState.svg.transition().duration(300).call(GraphState.zoom.scaleBy, 0.67);
 }
 
 function resetView() {
+    if (!GraphState.svg || !GraphState.zoom) return;
     GraphState.svg.transition().duration(500).call(GraphState.zoom.transform, d3.zoomIdentity);
 }
 
 function fitToScreen() {
+    if (!GraphState.g || !GraphState.svg || !GraphState.zoom) return;
+
     const bounds = GraphState.g.node().getBBox();
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+
     const scale = 0.85 / Math.max(bounds.width / GraphState.width, bounds.height / GraphState.height);
     const tx = (GraphState.width - bounds.width * scale) / 2 - bounds.x * scale;
     const ty = (GraphState.height - bounds.height * scale) / 2 - bounds.y * scale;
@@ -106,7 +113,7 @@ function updateSemanticZoom(scale) {
 
 function focusNode() {
     closeContextMenu();
-    if (!GraphState.selectedNode) return;
+    if (!GraphState.selectedNode || !GraphState.svg || !GraphState.zoom) return;
 
     GraphState.svg.transition().duration(500).call(
         GraphState.zoom.transform,
@@ -123,8 +130,10 @@ function setLayout(layout) {
     document.querySelectorAll('.layout-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`layout-${layout}`).classList.add('active');
 
-    renderLayout();
-    setTimeout(fitToScreen, 100);
+    if (GraphState.root) {
+        renderLayout();
+        setTimeout(fitToScreen, 100);
+    }
 }
 
 // Tooltip
@@ -203,9 +212,8 @@ function copyLink() {
 function showToast(message, type = 'info') {
     const toast = document.getElementById('toast');
     toast.textContent = message;
-    toast.className = 'toast show';
-    if (type === 'error') toast.style.borderColor = '#fc8181';
-    else if (type === 'success') toast.style.borderColor = '#68d391';
+    toast.style.borderColor = '';
+    toast.className = `toast show ${type}`;
 
     setTimeout(() => {
         toast.className = 'toast';

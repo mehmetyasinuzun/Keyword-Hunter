@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 
 	"keywordhunter-mvp/pkg/scraper"
-	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
 
@@ -22,15 +21,8 @@ func min(a, b int) int {
 	return b
 }
 
-func truncateStr(s string, length int) string {
-	if len(s) <= length {
-		return s
-	}
-	return s[:length] + "..."
-}
-
 // buildChildrenNodes linkleri GraphNode formatına çevirir
-func buildChildrenNodes(links []scraper.ExtractedLink, baseDomain string) []*storage.GraphNode {
+func buildChildrenNodes(links []scraper.ExtractedLink) []*storage.GraphNode {
 	var internalNodes []*storage.GraphNode
 	var externalNodes []*storage.GraphNode
 
@@ -82,9 +74,4 @@ func countByType(links []scraper.ExtractedLink, linkType string) int {
 		}
 	}
 	return count
-}
-
-// extractDomainFromStr URL'den domain çıkarır - shared paketi kullanır
-func extractDomainFromStr(urlStr string) string {
-	return shared.ExtractDomain(urlStr)
 }

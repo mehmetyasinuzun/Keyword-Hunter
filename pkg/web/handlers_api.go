@@ -94,6 +94,9 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 		"tags":        result.Tags,
 		"tagsStr":     result.TagsStr,
 		"keywordHits": result.KeywordHits,
+		"category":    result.Category,
+		"criticality": result.Criticality,
+		"confidence":  result.Confidence,
 	})
 }
 
@@ -228,12 +231,46 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 // handleGraphAPI graf verisi API endpoint
 func (s *Server) handleGraphAPI(c *gin.Context) {
 	query := c.Query("q")
-	graphData, err := s.db.GetGraphData(query)
+	options := storage.GraphDataOptions{}
+
+	if raw := c.Query("maxQueries"); raw != "" {
+		value, err := parseGraphLimit(raw, 500)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		options.MaxQueries = value
+	}
+
+	if raw := c.Query("maxResultsPerEngine"); raw != "" {
+		value, err := parseGraphLimit(raw, 1000)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		options.MaxResultsPerEngine = value
+	}
+
+	graphData, err := s.db.GetGraphData(query, options)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, graphData)
+}
+
+func parseGraphLimit(raw string, maxAllowed int) (int, error) {
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("geçersiz limit değeri: %s", raw)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("limit negatif olamaz")
+	}
+	if value > maxAllowed {
+		value = maxAllowed
+	}
+	return value, nil
 }
 
 // handleTagStats etiket istatistiklerini döndürür (tag cloud için)
@@ -364,8 +401,6 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 
 	// Linkleri graph_nodes tablosuna kaydet
 	var graphNodes []storage.GraphNodeDB
-	baseDomain := extractDomainFromStr(req.URL)
-
 	for _, link := range links {
 		// Kendine link veriyorsa atla
 		if link.URL == req.URL {
@@ -407,7 +442,7 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 	}
 
 	// Children node'ları getir
-	children := buildChildrenNodes(links, baseDomain)
+	children := buildChildrenNodes(links)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":       true,

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"sort"
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
@@ -33,8 +34,20 @@ type GraphNodeDB struct {
 	IsExpanded   bool
 }
 
+type GraphDataOptions struct {
+	MaxQueries          int
+	MaxResultsPerEngine int
+}
+
 // GetGraphData graph görselleştirmesi için veri döndürür
-func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
+func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNode, error) {
+	if opts.MaxQueries < 0 {
+		opts.MaxQueries = 0
+	}
+	if opts.MaxResultsPerEngine < 0 {
+		opts.MaxResultsPerEngine = 0
+	}
+
 	// Ana root node
 	root := &GraphNode{
 		Name:     "🕵️ KeywordHunter",
@@ -50,6 +63,11 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 		queryArgs = []interface{}{"%" + queryFilter + "%"}
 	} else {
 		querySQL = "SELECT DISTINCT query FROM search_results ORDER BY query"
+	}
+
+	if opts.MaxQueries > 0 {
+		querySQL += " LIMIT ?"
+		queryArgs = append(queryArgs, opts.MaxQueries)
 	}
 
 	queryRows, err := db.conn.Query(querySQL, queryArgs...)
@@ -68,12 +86,18 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 
 	// Global URL count hesapla - aynı URL kaç farklı source'ta bulundu
 	globalURLCount := make(map[string]int)
-	countRows, err := db.conn.Query(`
-		SELECT url, COUNT(DISTINCT source) as source_count 
-		FROM search_results 
-		GROUP BY url 
-		HAVING source_count > 1
-	`)
+	countSQL := `
+		SELECT url, COUNT(DISTINCT source) as source_count
+		FROM search_results
+	`
+	var countArgs []interface{}
+	if queryFilter != "" {
+		countSQL += " WHERE query LIKE ?"
+		countArgs = append(countArgs, "%"+queryFilter+"%")
+	}
+	countSQL += " GROUP BY url HAVING source_count > 1"
+
+	countRows, err := db.conn.Query(countSQL, countArgs...)
 	if err == nil {
 		for countRows.Next() {
 			var url string
@@ -85,6 +109,9 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 		countRows.Close()
 	}
 
+	expandedNodeIDs := db.getExpandedNodeIDsByURL()
+	expandedChildrenCache := make(map[int64][]*GraphNode)
+
 	// Her sorgu için sonuçları grupla
 	for _, q := range queries {
 		queryNode := &GraphNode{
@@ -94,12 +121,27 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 		}
 
 		// Bu sorguya ait sonuçları kaynak bazlı grupla
-		rows, err := db.conn.Query(`
-			SELECT id, source, title, url 
-			FROM search_results 
-			WHERE query = ? 
-			ORDER BY source, title
-		`, q)
+		var rows *sql.Rows
+		if opts.MaxResultsPerEngine > 0 {
+			rows, err = db.conn.Query(`
+				SELECT id, source, title, url
+				FROM (
+					SELECT id, source, title, url,
+						ROW_NUMBER() OVER (PARTITION BY source ORDER BY title) AS rn
+					FROM search_results
+					WHERE query = ?
+				) ranked
+				WHERE rn <= ?
+				ORDER BY source, title
+			`, q, opts.MaxResultsPerEngine)
+		} else {
+			rows, err = db.conn.Query(`
+				SELECT id, source, title, url 
+				FROM search_results 
+				WHERE query = ? 
+				ORDER BY source, title
+			`, q)
+		}
 		if err != nil {
 			continue
 		}
@@ -130,10 +172,16 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 			}
 
 			// Bu node daha önce expand edilmiş mi kontrol et (graph_nodes tablosundan)
-			gn, err := db.GetGraphNodeByURL(url)
-			if err == nil && gn != nil && gn.IsExpanded {
+			expandedNodeID, ok := expandedNodeIDs[url]
+			if ok {
 				resultNode.IsExpanded = true
-				resultNode.Children = db.loadGraphChildren(gn.ID)
+				if children, exists := expandedChildrenCache[expandedNodeID]; exists {
+					resultNode.Children = children
+				} else {
+					children = db.loadGraphChildren(expandedNodeID)
+					expandedChildrenCache[expandedNodeID] = children
+					resultNode.Children = children
+				}
 			}
 
 			engineResults[source] = append(engineResults[source], resultNode)
@@ -141,7 +189,14 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 		rows.Close()
 
 		// Engine node'larını oluştur
-		for engine, results := range engineResults {
+		engineNames := make([]string, 0, len(engineResults))
+		for engine := range engineResults {
+			engineNames = append(engineNames, engine)
+		}
+		sort.Strings(engineNames)
+
+		for _, engine := range engineNames {
+			results := engineResults[engine]
 			engineNode := &GraphNode{
 				Name:     "🌐 " + engine,
 				Type:     "engine",
@@ -156,6 +211,29 @@ func (db *DB) GetGraphData(queryFilter string) (*GraphNode, error) {
 	}
 
 	return root, nil
+}
+
+func (db *DB) getExpandedNodeIDsByURL() map[string]int64 {
+	rows, err := db.conn.Query(`
+		SELECT id, url
+		FROM graph_nodes
+		WHERE is_expanded = 1
+	`)
+	if err != nil {
+		return map[string]int64{}
+	}
+	defer rows.Close()
+
+	result := make(map[string]int64)
+	for rows.Next() {
+		var id int64
+		var url string
+		if err := rows.Scan(&id, &url); err == nil {
+			result[url] = id
+		}
+	}
+
+	return result
 }
 
 // loadGraphChildren recursive olarak children yükler

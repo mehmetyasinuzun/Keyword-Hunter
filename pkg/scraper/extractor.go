@@ -210,19 +210,36 @@ func isBinaryExtension(urlStr string) bool {
 
 // extractTitleFromURLPath URL path'inden title çıkarır
 func extractTitleFromURLPath(urlStr string) string {
-	// ... Implement based on scraper.go content
-	// Since I cannot call view_file again inside this block, I will rely on my previous view.
-	// However, to be safe and precise, I will implement a cleaner version or ask to read if needed.
-	// Actually, I can just use shared functions if available, or write the code.
-	// Writing code based on memory of previous turn:
-
-	// (Simulated implementation based on scraper.go I read)
-	parts := strings.Split(urlStr, "/")
-	if len(parts) > 0 {
-		last := parts[len(parts)-1]
-		if last != "" {
-			return last
-		}
+	parsed, err := url.Parse(strings.TrimSpace(urlStr))
+	if err != nil {
+		return "Link"
 	}
-	return "Link"
+
+	path := strings.Trim(parsed.Path, "/")
+	if path == "" {
+		host := strings.TrimSpace(parsed.Host)
+		if host == "" {
+			return "Link"
+		}
+		return host
+	}
+
+	segments := strings.Split(path, "/")
+	candidate := strings.TrimSpace(segments[len(segments)-1])
+	if candidate == "" && len(segments) > 1 {
+		candidate = strings.TrimSpace(segments[len(segments)-2])
+	}
+
+	candidate = strings.ReplaceAll(candidate, "-", " ")
+	candidate = strings.ReplaceAll(candidate, "_", " ")
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return "Link"
+	}
+
+	if len(candidate) > 80 {
+		candidate = candidate[:77] + "..."
+	}
+
+	return candidate
 }

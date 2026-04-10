@@ -119,6 +119,28 @@ func (db *DB) UpdateAutoTags(id int64, tags string) error {
 	return err
 }
 
+// ApplyTagging tek adımda etiketleme alanlarını günceller.
+func (db *DB) ApplyTagging(id int64, tags string, keywordCount int, criticality int, category string) error {
+	if criticality < 1 {
+		criticality = 1
+	}
+	if criticality > 5 {
+		criticality = 5
+	}
+
+	category = strings.TrimSpace(category)
+	if category == "" {
+		category = "Genel"
+	}
+
+	_, err := db.conn.Exec(`
+		UPDATE search_results
+		SET auto_tags = ?, keyword_count = ?, criticality = ?, category = ?
+		WHERE id = ?
+	`, tags, keywordCount, criticality, category, id)
+	return err
+}
+
 // GetResultByID ID ile sonuç getirir
 func (db *DB) GetResultByID(id int64) (*SearchResult, error) {
 	var r SearchResult

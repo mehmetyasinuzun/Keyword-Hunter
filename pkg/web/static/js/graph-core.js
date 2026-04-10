@@ -13,10 +13,23 @@ const GraphState = {
     selectedNode: null,
     nodeId: 0,
     width: window.innerWidth,
-    height: window.innerHeight - 94, // Adjusted for query panel
+    height: window.innerHeight - 106, // Navbar + query panel
     duration: 600,
     queries: []
 };
+
+const GRAPH_API_LIMITS = Object.freeze({
+    overview: {
+        maxQueries: 25,
+        maxResultsPerEngine: 40
+    },
+    focused: {
+        maxQueries: 1,
+        maxResultsPerEngine: 180
+    }
+});
+
+let resizeDebounceHandle = null;
 
 // Graph Settings
 const GraphSettings = {
@@ -117,7 +130,7 @@ async function quickSearch() {
 // =============================================================================
 async function initGraph(queryParam = '') {
     try {
-        const url = '/api/graph' + (queryParam ? `?q=${encodeURIComponent(queryParam)}` : '');
+        const url = buildGraphApiURL(queryParam);
         const response = await fetch(url);
         GraphState.data = await response.json();
 
@@ -149,13 +162,12 @@ async function initGraph(queryParam = '') {
 
 function showEmptyState() {
     const container = document.getElementById('graph-container');
-    // Ensure we don't overwrite UI panels, only the graph area
-    // Best to check if SVG exists and remove it, or use a specific inner container
-    // For now, simpler:
+
+    document.querySelectorAll('#graph-container .graph-empty-state').forEach(node => node.remove());
     d3.select('#graph-container svg').remove();
 
     const emptyDiv = document.createElement('div');
-    emptyDiv.className = 'flex items-center justify-center h-full absolute inset-0 pointer-events-none';
+    emptyDiv.className = 'graph-empty-state flex items-center justify-center h-full absolute inset-0 pointer-events-none';
     emptyDiv.innerHTML = `
         <div class="text-center text-gray-400 pointer-events-auto">
             <p class="text-6xl mb-4">📭</p>
@@ -168,6 +180,40 @@ function showEmptyState() {
     `;
     container.appendChild(emptyDiv);
 }
+
+function buildGraphApiURL(queryParam = '') {
+    const params = new URLSearchParams();
+    const profile = queryParam ? GRAPH_API_LIMITS.focused : GRAPH_API_LIMITS.overview;
+
+    if (queryParam) {
+        params.set('q', queryParam);
+    }
+
+    params.set('maxQueries', String(profile.maxQueries));
+    params.set('maxResultsPerEngine', String(profile.maxResultsPerEngine));
+
+    return '/api/graph?' + params.toString();
+}
+
+function handleGraphResize() {
+    if (resizeDebounceHandle) {
+        clearTimeout(resizeDebounceHandle);
+    }
+
+    resizeDebounceHandle = setTimeout(() => {
+        GraphState.width = window.innerWidth;
+        GraphState.height = window.innerHeight - 106;
+
+        if (!GraphState.root || !GraphState.svg) {
+            return;
+        }
+
+        renderLayout();
+        setTimeout(fitToScreen, 120);
+    }, 140);
+}
+
+window.addEventListener('resize', handleGraphResize);
 
 function updateStats(data) {
     let queries = 0, engines = 0, results = 0, multi = 0;

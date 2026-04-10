@@ -273,6 +273,19 @@
                         countEl.classList.add('text-green-500');
                     }
 
+                    // Sınıflandırma alanlarını güncelle
+                    const row = document.querySelector(`tr[data-id="${id}"]`);
+                    if (row) {
+                        const critSelect = row.querySelector('td:nth-child(4) select');
+                        const catInput = row.querySelector('td:nth-child(5) input');
+                        if (critSelect && typeof data.criticality === 'number') {
+                            critSelect.value = String(data.criticality);
+                        }
+                        if (catInput && data.category) {
+                            catInput.value = data.category;
+                        }
+                    }
+
                     showToast('Etiketlendi: ' + data.tagsStr);
                 } else {
                     tagsEl.innerHTML = originalTags;

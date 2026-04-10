@@ -129,6 +129,9 @@ func TestHandleAutoTag_StatusMapping(t *testing.T) {
 					Tags:        []string{"leak", "dump"},
 					TagsStr:     "leak, dump",
 					KeywordHits: 5,
+					Category:    "Veri Sızıntısı",
+					Criticality: 5,
+					Confidence:  88,
 				},
 			},
 			body:       `{"id":10}`,
@@ -153,6 +156,12 @@ func TestHandleAutoTag_StatusMapping(t *testing.T) {
 				}
 				if ok, _ := resp["success"].(bool); !ok {
 					t.Fatalf("expected success=true, got body=%s", w.Body.String())
+				}
+				if resp["category"] == nil {
+					t.Fatalf("expected category in response, got body=%s", w.Body.String())
+				}
+				if resp["criticality"] == nil {
+					t.Fatalf("expected criticality in response, got body=%s", w.Body.String())
 				}
 			}
 		})
@@ -282,4 +291,68 @@ func TestHandleBatchAutoTagCancel_StatusMapping(t *testing.T) {
 			t.Fatalf("job status = %s, want %s", job.Status, tagging.StatusCancelled)
 		}
 	})
+}
+
+func TestParseGraphLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		raw        string
+		maxAllowed int
+		want       int
+		wantErr    bool
+	}{
+		{
+			name:       "valid value",
+			raw:        "120",
+			maxAllowed: 500,
+			want:       120,
+			wantErr:    false,
+		},
+		{
+			name:       "clamped to max",
+			raw:        "1200",
+			maxAllowed: 500,
+			want:       500,
+			wantErr:    false,
+		},
+		{
+			name:       "zero is allowed",
+			raw:        "0",
+			maxAllowed: 500,
+			want:       0,
+			wantErr:    false,
+		},
+		{
+			name:       "negative rejected",
+			raw:        "-5",
+			maxAllowed: 500,
+			wantErr:    true,
+		},
+		{
+			name:       "non numeric rejected",
+			raw:        "abc",
+			maxAllowed: 500,
+			wantErr:    true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseGraphLimit(tc.raw, tc.maxAllowed)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got != tc.want {
+				t.Fatalf("limit = %d, want %d", got, tc.want)
+			}
+		})
+	}
 }

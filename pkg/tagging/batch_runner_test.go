@@ -27,11 +27,16 @@ func newTestDB(t *testing.T) *storage.DB {
 
 func seedSearchResult(t *testing.T, db *storage.DB) int64 {
 	t.Helper()
+	return seedSearchResultWith(t, db, "seed title", "seed")
+}
+
+func seedSearchResultWith(t *testing.T, db *storage.DB, title, query string) int64 {
+	t.Helper()
 
 	res, err := db.GetDBConn().Exec(`
 		INSERT INTO search_results (title, url, source, query, criticality, category, keyword_count)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, "seed title", "http://seedtestvalidaddress1234567890abcdef.onion/path", "TestEngine", "seed", 1, "Genel", 0)
+	`, title, "http://seedtestvalidaddress1234567890abcdef.onion/path", "TestEngine", query, 1, "Genel", 0)
 	if err != nil {
 		t.Fatalf("seed insert error: %v", err)
 	}

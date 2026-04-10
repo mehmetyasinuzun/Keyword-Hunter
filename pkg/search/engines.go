@@ -1,5 +1,10 @@
 package search
 
+import (
+	"net/url"
+	"strings"
+)
+
 // Robin'den alınan 17 Dark Web arama motoru
 // Her biri .onion adresi ve {query} placeholder'ı içeriyor
 var SearchEngines = []Engine{
@@ -22,8 +27,49 @@ var SearchEngines = []Engine{
 	{Name: "DeepSearches", URL: "http://searchgf7gdtauh7bhnbyed4ivxqmuoat3nm6zfrg3ymkq6mtnpye3ad.onion/search?q={query}"},
 }
 
+var searchEngineDomainSet = buildSearchEngineDomainSet()
+
 // Engine arama motoru yapısı
 type Engine struct {
 	Name string
 	URL  string
+}
+
+func buildSearchEngineDomainSet() map[string]struct{} {
+	set := make(map[string]struct{}, len(SearchEngines))
+
+	for _, engine := range SearchEngines {
+		parsed, err := url.Parse(engine.URL)
+		if err != nil {
+			continue
+		}
+
+		host := strings.ToLower(parsed.Hostname())
+		if host != "" {
+			set[host] = struct{}{}
+		}
+	}
+
+	return set
+}
+
+func isSearchEngineDomain(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err == nil {
+		host := strings.ToLower(parsed.Hostname())
+		if host != "" {
+			if _, ok := searchEngineDomainSet[host]; ok {
+				return true
+			}
+		}
+	}
+
+	lowerURL := strings.ToLower(rawURL)
+	for domain := range searchEngineDomainSet {
+		if strings.Contains(lowerURL, domain) {
+			return true
+		}
+	}
+
+	return false
 }
