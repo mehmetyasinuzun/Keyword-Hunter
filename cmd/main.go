@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
@@ -14,28 +16,23 @@ import (
 	"keywordhunter-mvp/pkg/web"
 )
 
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-var (
-	TorProxy = getEnv("TOR_PROXY", "127.0.0.1:9150")
-	DBPath   = getEnv("DB_PATH", "keywordhunter.db")
-	WebAddr  = getEnv("WEB_ADDR", ":8080")
-	Username = getEnv("ADMIN_USER", "admin")
-	Password = getEnv("ADMIN_PASS", "admin123")
-	LogDir   = getEnv("LOG_DIR", "logs")
-)
-
 func main() {
+	appConfig, err := config.Load(".env")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Konfigürasyon hatası: %v\n", err)
+		fmt.Fprintln(os.Stderr, "İpucu: .env.example dosyasını .env olarak kopyalayıp değerleri düzenleyin")
+		os.Exit(1)
+	}
+
 	// Logger'ı başlat - Kullanıcı isteği üzerine DEBUG seviyesine çekildi
-	if err := logger.Init(LogDir, logger.DEBUG, true); err != nil {
+	if err := logger.Init(appConfig.LogDir, logger.DEBUG, true); err != nil {
 		panic("Logger başlatılamadı: " + err.Error())
 	}
 	defer logger.Close()
+
+	if appConfig.AdminPass == "admin123" {
+		logger.Warn("ADMIN_PASS olarak admin123 kullaniliyor. Yalnizca kapali/development ortaminda onerilir")
+	}
 
 	// Graceful shutdown için signal handler
 	sigChan := make(chan os.Signal, 1)
@@ -45,10 +42,10 @@ func main() {
 	printBanner()
 
 	// Sistem başlangıç logu
-	logger.SystemStartup(TorProxy, DBPath, WebAddr)
+	logger.SystemStartup(appConfig.TorProxy, appConfig.DBPath, appConfig.WebAddr)
 
 	// Veritabanını aç
-	db, err := storage.New(DBPath)
+	db, err := storage.New(appConfig.DBPath)
 	if err != nil {
 		logger.Error("Database could not be opened: %v", err)
 		os.Exit(1)
@@ -60,16 +57,16 @@ func main() {
 	logger.Info("Database connection ready")
 
 	// Searcher oluştur
-	searcher, err := search.New(TorProxy)
+	searcher, err := search.New(appConfig.TorProxy)
 	if err != nil {
 		logger.Error("Tor connection failed: %v", err)
-		logger.Warn("Ensure Tor Browser or Tor Service is running on %s", TorProxy)
+		logger.Warn("Ensure Tor Browser or Tor Service is running on %s", appConfig.TorProxy)
 		os.Exit(1)
 	}
 	logger.Info("Tor connection ready")
 
 	// Scraper oluştur
-	scraperClient, err := scraper.New(TorProxy)
+	scraperClient, err := scraper.New(appConfig.TorProxy)
 	if err != nil {
 		logger.Error("Scraper could not be initialized: %v", err)
 		os.Exit(1)
@@ -77,20 +74,26 @@ func main() {
 	logger.Info("Scraper ready")
 
 	// Web server başlat
-	logger.SystemReady(WebAddr, Username)
+	logger.SystemReady(appConfig.WebAddr, appConfig.AdminUser)
 	logger.Info("Durdurmak için Ctrl+C")
+	envStore := config.NewEnvStore(appConfig.EnvFilePath)
 
 	server := web.New(web.Config{
-		DB:       db,
-		Searcher: searcher,
-		Scraper:  scraperClient,
-		Username: Username,
-		Password: Password,
+		DB:             db,
+		Searcher:       searcher,
+		Scraper:        scraperClient,
+		Username:       appConfig.AdminUser,
+		Password:       appConfig.AdminPass,
+		CookieSecure:   appConfig.SecureCookies,
+		SessionTTL:     appConfig.SessionTTL,
+		RateLimitRPS:   appConfig.RateLimitRPS,
+		RateLimitBurst: appConfig.RateLimitBurst,
+		EnvStore:       envStore,
 	})
 
 	// Sunucuyu goroutine'de başlat
 	go func() {
-		if err := server.Run(WebAddr); err != nil {
+		if err := server.Run(appConfig.WebAddr); err != nil {
 			logger.Error("Web Server Error: %v", err)
 			sigChan <- syscall.SIGTERM
 		}

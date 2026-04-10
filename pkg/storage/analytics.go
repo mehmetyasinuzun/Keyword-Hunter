@@ -2,8 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"net/url"
-	"strings"
 )
 
 // AnalyticsData grafikler için veri yapısı
@@ -157,28 +155,38 @@ func (db *DB) GetAnalyticsData(interval string, query string) (*AnalyticsData, e
 		}
 	}
 
-	// 4. Domain Analizi
-	domainSQL := `SELECT url FROM search_results` + whereClause
+	// 4. Domain Analizi (SQL aggregate)
+	domainSQL := `
+		SELECT domain, COUNT(*) as count
+		FROM (
+			SELECT
+				CASE
+					WHEN instr(substr(url, instr(url, '://') + 3), '/') > 0 THEN
+						substr(
+							substr(url, instr(url, '://') + 3),
+							1,
+							instr(substr(url, instr(url, '://') + 3), '/') - 1
+						)
+					ELSE substr(url, instr(url, '://') + 3)
+				END as domain
+			FROM search_results` + whereClause + `
+		)
+		WHERE domain LIKE '%.onion'
+		GROUP BY domain
+		ORDER BY count DESC
+		LIMIT 100
+	`
 	domainRows, err := db.conn.Query(domainSQL, args...)
 	if err == nil {
 		defer domainRows.Close()
-		domainCounts := make(map[string]int)
 		for domainRows.Next() {
-			var rawURL string
-			if err := domainRows.Scan(&rawURL); err == nil {
-				if parsed, err := url.Parse(rawURL); err == nil {
-					host := parsed.Host
-					if strings.HasSuffix(host, ".onion") {
-						domainCounts[host]++
-					}
-				}
-			}
-		}
-		for domain, count := range domainCounts {
-			data.Domains = append(data.Domains, struct {
+			var d struct {
 				Domain string `json:"domain"`
 				Count  int    `json:"count"`
-			}{Domain: domain, Count: count})
+			}
+			if err := domainRows.Scan(&d.Domain, &d.Count); err == nil {
+				data.Domains = append(data.Domains, d)
+			}
 		}
 	}
 

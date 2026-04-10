@@ -7,11 +7,11 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
@@ -37,46 +37,72 @@ type BatchRunner interface {
 
 // Server web sunucusu
 type Server struct {
-	db          *storage.DB
-	searcher    *search.Searcher
-	scraper     *scraper.Scraper
-	tagEngine   TagEngine
-	batchRunner BatchRunner
-	router      *gin.Engine
-	httpServer  *http.Server
-	sessions    map[string]time.Time
-	cleanupStop chan struct{}
-	cleanupOnce sync.Once
-	mu          sync.RWMutex
+	db           *storage.DB
+	searcher     *search.Searcher
+	scraper      *scraper.Scraper
+	username     string
+	password     string
+	cookieSecure bool
+	sessionTTL   time.Duration
+	envStore     *config.EnvStore
+	rateLimiter  *IPRateLimiter
+	tagEngine    TagEngine
+	batchRunner  BatchRunner
+	router       *gin.Engine
+	httpServer   *http.Server
+	cleanupStop  chan struct{}
 }
 
 // Config sunucu yapılandırması
 type Config struct {
-	DB       *storage.DB
-	Searcher *search.Searcher
-	Scraper  *scraper.Scraper
-	Username string
-	Password string
+	DB             *storage.DB
+	Searcher       *search.Searcher
+	Scraper        *scraper.Scraper
+	Username       string
+	Password       string
+	CookieSecure   bool
+	SessionTTL     time.Duration
+	RateLimitRPS   float64
+	RateLimitBurst int
+	EnvStore       *config.EnvStore
 }
-
-var serverConfig Config
 
 // New yeni web sunucusu oluşturur
 func New(cfg Config) *Server {
-	serverConfig = cfg
+	sessionTTL := cfg.SessionTTL
+	if sessionTTL <= 0 {
+		sessionTTL = 24 * time.Hour
+	}
+
+	rateLimitRPS := cfg.RateLimitRPS
+	if rateLimitRPS <= 0 {
+		rateLimitRPS = 12
+	}
+
+	rateLimitBurst := cfg.RateLimitBurst
+	if rateLimitBurst <= 0 {
+		rateLimitBurst = 30
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
 
 	s := &Server{
-		db:          cfg.DB,
-		searcher:    cfg.Searcher,
-		scraper:     cfg.Scraper,
-		router:      router,
-		sessions:    make(map[string]time.Time),
-		cleanupStop: make(chan struct{}),
+		db:           cfg.DB,
+		searcher:     cfg.Searcher,
+		scraper:      cfg.Scraper,
+		username:     cfg.Username,
+		password:     cfg.Password,
+		cookieSecure: cfg.CookieSecure,
+		sessionTTL:   sessionTTL,
+		envStore:     cfg.EnvStore,
+		rateLimiter:  NewIPRateLimiter(rateLimitRPS, rateLimitBurst),
+		router:       router,
+		cleanupStop:  make(chan struct{}),
 	}
+
+	s.router.Use(s.rateLimiter.Middleware())
 
 	engine := tagging.NewEngine(cfg.DB, cfg.Scraper)
 	runner := tagging.NewBatchRunner(cfg.DB, engine, 1)
@@ -99,14 +125,11 @@ func (s *Server) startSessionCleanup() {
 		for {
 			select {
 			case <-ticker.C:
-				now := time.Now()
-				s.mu.Lock()
-				for id, expiry := range s.sessions {
-					if now.After(expiry) {
-						delete(s.sessions, id)
-					}
+				_, err := s.db.CleanupExpiredSessions(time.Now())
+				if err != nil {
+					logger.Warn("Session cleanup başarısız: %v", err)
 				}
-				s.mu.Unlock()
+				s.rateLimiter.Cleanup(30 * time.Minute)
 			case <-s.cleanupStop:
 				return
 			}
@@ -168,30 +191,36 @@ func (s *Server) setupRoutes() {
 		protected.POST("/search", s.handleSearch)
 		protected.GET("/results", s.handleResults)
 		protected.GET("/results/graph", s.handleResultsGraph)
-		protected.POST("/api/update-criticality", s.handleUpdateCriticality)
-		protected.POST("/api/analyze-result", s.handleAnalyzeResult)
-		protected.POST("/api/auto-tag", s.handleAutoTag)
-		protected.POST("/api/batch-auto-tag", s.handleBatchAutoTag)
-		protected.GET("/api/batch-auto-tag/:id", s.handleBatchAutoTagStatus)
-		protected.POST("/api/batch-auto-tag/:id/cancel", s.handleBatchAutoTagCancel)
-		protected.GET("/api/stats", s.handleStats)
-		protected.GET("/api/graph", s.handleGraphAPI)
-		protected.GET("/api/queries", s.handleQueriesAPI)
-
-		protected.GET("/api/analytics", s.handleAnalyticsAPI)
+		protected.GET("/settings", s.handleSettingsPage)
 
 		// SSE Events - Gerçek zamanlı loglar için
 		protected.GET("/events", s.handleEvents)
 
 		protected.GET("/analytics", s.handleAnalytics)
 
-		// Derinleştir (Expand) API
-		protected.POST("/api/expand", s.handleExpandNode)
-		protected.GET("/api/graph/children/:id", s.handleGetChildren)
-
-		// Etiket İstatistikleri API
-		protected.GET("/api/tags", s.handleTagStats)
-		protected.GET("/api/results-by-tag", s.handleResultsByTag)
+		api := protected.Group("/api")
+		api.Use(s.csrfMiddleware())
+		{
+			api.POST("/update-criticality", s.handleUpdateCriticality)
+			api.POST("/analyze-result", s.handleAnalyzeResult)
+			api.POST("/auto-tag", s.handleAutoTag)
+			api.POST("/batch-auto-tag", s.handleBatchAutoTag)
+			api.GET("/batch-auto-tag/:id", s.handleBatchAutoTagStatus)
+			api.POST("/batch-auto-tag/:id/cancel", s.handleBatchAutoTagCancel)
+			api.GET("/stats", s.handleStats)
+			api.GET("/graph", s.handleGraphAPI)
+			api.GET("/graph/queries", s.handleGraphQueriesAPI)
+			api.GET("/graph/engines", s.handleGraphEnginesAPI)
+			api.GET("/graph/results", s.handleGraphResultsAPI)
+			api.GET("/queries", s.handleQueriesAPI)
+			api.GET("/analytics", s.handleAnalyticsAPI)
+			api.POST("/expand", s.handleExpandNode)
+			api.GET("/graph/children/:id", s.handleGetChildren)
+			api.GET("/tags", s.handleTagStats)
+			api.GET("/results-by-tag", s.handleResultsByTag)
+			api.GET("/settings/env", s.handleEnvSettingsGet)
+			api.POST("/settings/env", s.handleEnvSettingsUpdate)
+		}
 	}
 }
 
@@ -215,9 +244,12 @@ func (s *Server) Run(addr string) error {
 
 // Shutdown sunucuyu graceful şekilde kapatır.
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.cleanupOnce.Do(func() {
+	select {
+	case <-s.cleanupStop:
+		// already closed
+	default:
 		close(s.cleanupStop)
-	})
+	}
 
 	if s.httpServer == nil {
 		return nil

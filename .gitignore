@@ -52,11 +52,6 @@ build/
 # Go workspace
 go.work
 
-# Environment
-.env
-.env.local
-*.env
-
 # Screenshots placeholder (add actual screenshots later)
 docs/screenshots/*.png
 !docs/screenshots/.gitkeep

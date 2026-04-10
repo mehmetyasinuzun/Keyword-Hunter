@@ -264,4 +264,44 @@
         animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     }
 </style>
+
+<script>
+    (function () {
+        function readCookie(name) {
+            const prefix = name + '=';
+            const items = document.cookie ? document.cookie.split(';') : [];
+            for (let i = 0; i < items.length; i++) {
+                const c = items[i].trim();
+                if (c.indexOf(prefix) === 0) {
+                    return decodeURIComponent(c.substring(prefix.length));
+                }
+            }
+            return '';
+        }
+
+        window.getCSRFToken = function () {
+            return readCookie('csrf_token');
+        };
+
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            const options = init ? { ...init } : {};
+            const reqMethod = (options.method || (input && input.method) || 'GET').toUpperCase();
+            const reqUrl = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+
+            if (reqUrl.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(reqMethod)) {
+                const headers = new Headers(options.headers || {});
+                if (!headers.has('X-CSRF-Token')) {
+                    const token = window.getCSRFToken();
+                    if (token) {
+                        headers.set('X-CSRF-Token', token);
+                    }
+                }
+                options.headers = headers;
+            }
+
+            return originalFetch(input, options);
+        };
+    })();
+</script>
 {{end}}

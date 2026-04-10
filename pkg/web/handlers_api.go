@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,6 +31,36 @@ type AutoTagRequest struct {
 type BatchAutoTagRequest struct {
 	ResultIDs []int64 `json:"resultIds" binding:"required"`
 	Query     string  `json:"query"`
+}
+
+type envSettingsPayload struct {
+	AdminUser      string  `json:"adminUser"`
+	AdminPass      string  `json:"adminPass"`
+	TorProxy       string  `json:"torProxy"`
+	DBPath         string  `json:"dbPath"`
+	WebAddr        string  `json:"webAddr"`
+	LogDir         string  `json:"logDir"`
+	SecureCookies  bool    `json:"secureCookies"`
+	SessionTTL     int     `json:"sessionTtlHours"`
+	RateLimitRPS   float64 `json:"rateLimitRps"`
+	RateLimitBurst int     `json:"rateLimitBurst"`
+}
+
+type GraphQuerySummary struct {
+	Query string `json:"query"`
+	Count int    `json:"count"`
+}
+
+type GraphEngineSummary struct {
+	Engine string `json:"engine"`
+	Count  int    `json:"count"`
+}
+
+type GraphResultSummary struct {
+	ID          int64  `json:"id"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	SourceCount int    `json:"sourceCount"`
 }
 
 // handleUpdateCriticality kritiklik ve kategori güncelleme
@@ -259,6 +290,161 @@ func (s *Server) handleGraphAPI(c *gin.Context) {
 	c.JSON(http.StatusOK, graphData)
 }
 
+func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
+	limit := 50
+	if raw := c.Query("limit"); raw != "" {
+		value, err := parseGraphLimit(raw, 500)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if value > 0 {
+			limit = value
+		}
+	}
+
+	rows, err := s.db.GetDBConn().Query(`
+		SELECT query, COUNT(*) as count
+		FROM search_results
+		GROUP BY query
+		ORDER BY count DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sorgu ozeti alinamadi"})
+		return
+	}
+	defer rows.Close()
+
+	items := make([]GraphQuerySummary, 0, limit)
+	for rows.Next() {
+		var q GraphQuerySummary
+		if err := rows.Scan(&q.Query, &q.Count); err == nil {
+			items = append(items, q)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"queries": items})
+}
+
+func (s *Server) handleGraphEnginesAPI(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("q"))
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "q parametresi zorunludur"})
+		return
+	}
+
+	limit := 100
+	if raw := c.Query("limit"); raw != "" {
+		value, err := parseGraphLimit(raw, 500)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if value > 0 {
+			limit = value
+		}
+	}
+
+	rows, err := s.db.GetDBConn().Query(`
+		SELECT source, COUNT(*) as count
+		FROM search_results
+		WHERE query = ?
+		GROUP BY source
+		ORDER BY count DESC
+		LIMIT ?
+	`, query, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Engine ozeti alinamadi"})
+		return
+	}
+	defer rows.Close()
+
+	items := make([]GraphEngineSummary, 0, limit)
+	for rows.Next() {
+		var e GraphEngineSummary
+		if err := rows.Scan(&e.Engine, &e.Count); err == nil {
+			items = append(items, e)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"query": query, "engines": items})
+}
+
+func (s *Server) handleGraphResultsAPI(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("q"))
+	engine := strings.TrimSpace(c.Query("engine"))
+	if query == "" || engine == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "q ve engine parametreleri zorunludur"})
+		return
+	}
+
+	limit := 200
+	if raw := c.Query("limit"); raw != "" {
+		value, err := parseGraphLimit(raw, 1000)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if value > 0 {
+			limit = value
+		}
+	}
+
+	offset := 0
+	if raw := c.Query("offset"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "gecersiz offset"})
+			return
+		}
+		offset = value
+	}
+
+	rows, err := s.db.GetDBConn().Query(`
+		SELECT
+			sr.id,
+			sr.title,
+			sr.url,
+			(
+				SELECT COUNT(DISTINCT sr2.source)
+				FROM search_results sr2
+				WHERE sr2.url = sr.url
+			) as source_count
+		FROM search_results sr
+		WHERE sr.query = ? AND sr.source = ?
+		ORDER BY sr.title
+		LIMIT ? OFFSET ?
+	`, query, engine, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Result ozeti alinamadi"})
+		return
+	}
+	defer rows.Close()
+
+	items := make([]GraphResultSummary, 0, limit)
+	for rows.Next() {
+		var r GraphResultSummary
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.SourceCount); err == nil {
+			items = append(items, r)
+		}
+	}
+
+	nextOffset := 0
+	if len(items) == limit {
+		nextOffset = offset + limit
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"query":      query,
+		"engine":     engine,
+		"offset":     offset,
+		"limit":      limit,
+		"nextOffset": nextOffset,
+		"results":    items,
+	})
+}
+
 func parseGraphLimit(raw string, maxAllowed int) (int, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil {
@@ -271,6 +457,131 @@ func parseGraphLimit(raw string, maxAllowed int) (int, error) {
 		value = maxAllowed
 	}
 	return value, nil
+}
+
+func (s *Server) handleEnvSettingsGet(c *gin.Context) {
+	if s.envStore == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env store tanimli degil"})
+		return
+	}
+
+	values, err := s.envStore.Read()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env dosyasi okunamadi"})
+		return
+	}
+
+	toInt := func(raw string, fallback int) int {
+		v, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil {
+			return fallback
+		}
+		return v
+	}
+
+	toFloat := func(raw string, fallback float64) float64 {
+		v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+		if err != nil {
+			return fallback
+		}
+		return v
+	}
+
+	payload := gin.H{
+		"adminUser":       firstNonEmpty(values["ADMIN_USER"], s.username),
+		"adminPassMasked": "********",
+		"torProxy":        firstNonEmpty(values["TOR_PROXY"], "127.0.0.1:9150"),
+		"dbPath":          firstNonEmpty(values["DB_PATH"], "keywordhunter.db"),
+		"webAddr":         firstNonEmpty(values["WEB_ADDR"], ":8080"),
+		"logDir":          firstNonEmpty(values["LOG_DIR"], "logs"),
+		"secureCookies":   strings.EqualFold(values["WEB_SECURE_COOKIES"], "true") || values["WEB_SECURE_COOKIES"] == "1",
+		"sessionTtlHours": toInt(values["SESSION_TTL_HOURS"], int(s.sessionTTL.Hours())),
+		"rateLimitRps":    toFloat(values["RATE_LIMIT_RPS"], 12),
+		"rateLimitBurst":  toInt(values["RATE_LIMIT_BURST"], 30),
+		"envFilePath":     s.envStore.Path(),
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "settings": payload})
+}
+
+func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
+	if s.envStore == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env store tanimli degil"})
+		return
+	}
+
+	var req envSettingsPayload
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Gecersiz ayar payload"})
+		return
+	}
+
+	req.AdminUser = strings.TrimSpace(req.AdminUser)
+	req.TorProxy = strings.TrimSpace(req.TorProxy)
+	req.DBPath = strings.TrimSpace(req.DBPath)
+	req.WebAddr = strings.TrimSpace(req.WebAddr)
+	req.LogDir = strings.TrimSpace(req.LogDir)
+
+	if req.AdminUser == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin kullanici adi bos olamaz"})
+		return
+	}
+	if req.TorProxy == "" || req.DBPath == "" || req.WebAddr == "" || req.LogDir == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "TOR/DB/WEB/LOG alanlari bos olamaz"})
+		return
+	}
+	if req.SessionTTL < 1 || req.SessionTTL > 720 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Session TTL 1-720 saat araliginda olmalidir"})
+		return
+	}
+	if req.RateLimitRPS < 1 || req.RateLimitRPS > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Rate limit RPS 1-200 araliginda olmalidir"})
+		return
+	}
+	if req.RateLimitBurst < 1 || req.RateLimitBurst > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Rate limit burst 1-500 araliginda olmalidir"})
+		return
+	}
+
+	updates := map[string]string{
+		"ADMIN_USER":         req.AdminUser,
+		"TOR_PROXY":          req.TorProxy,
+		"DB_PATH":            req.DBPath,
+		"WEB_ADDR":           req.WebAddr,
+		"LOG_DIR":            req.LogDir,
+		"WEB_SECURE_COOKIES": strconv.FormatBool(req.SecureCookies),
+		"SESSION_TTL_HOURS":  strconv.Itoa(req.SessionTTL),
+		"RATE_LIMIT_RPS":     fmt.Sprintf("%.2f", req.RateLimitRPS),
+		"RATE_LIMIT_BURST":   strconv.Itoa(req.RateLimitBurst),
+	}
+
+	if strings.TrimSpace(req.AdminPass) != "" {
+		updates["ADMIN_PASS"] = strings.TrimSpace(req.AdminPass)
+	}
+
+	if err := s.envStore.Update(updates); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env dosyasi guncellenemedi"})
+		return
+	}
+
+	if s.rateLimiter != nil {
+		s.rateLimiter.UpdatePolicy(req.RateLimitRPS, req.RateLimitBurst)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":         true,
+		"message":         "Ayarlar kaydedildi",
+		"appliedRuntime":  []string{"RATE_LIMIT_RPS", "RATE_LIMIT_BURST"},
+		"requiresRestart": true,
+	})
+}
+
+func firstNonEmpty(primary string, fallback string) string {
+	primary = strings.TrimSpace(primary)
+	if primary != "" {
+		return primary
+	}
+	return fallback
 }
 
 // handleTagStats etiket istatistiklerini döndürür (tag cloud için)

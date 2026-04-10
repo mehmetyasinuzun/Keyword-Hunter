@@ -20,7 +20,8 @@ func (s *Server) handleIndex(c *gin.Context) {
 // handleLoginPage login sayfası
 func (s *Server) handleLoginPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "login.html", gin.H{
-		"error": c.Query("error"),
+		"error":   c.Query("error"),
+		"message": c.Query("message"),
 	})
 }
 
@@ -30,17 +31,23 @@ func (s *Server) handleLogin(c *gin.Context) {
 	password := c.PostForm("password")
 	clientIP := c.ClientIP()
 
-	if username == serverConfig.Username && password == serverConfig.Password {
+	if username == s.username && password == s.password {
 		// Session oluştur
 		sessionID := generateSessionID()
-		s.mu.Lock()
-		s.sessions[sessionID] = time.Now().Add(24 * time.Hour)
-		s.mu.Unlock()
+		csrfToken := generateSessionID()
+		expiresAt := time.Now().Add(s.sessionTTL)
+		if err := s.db.CreateSession(sessionID, username, csrfToken, expiresAt); err != nil {
+			logger.Error("Session kaydı oluşturulamadı: %v", err)
+			c.Redirect(http.StatusFound, "/login?error=1&message=session")
+			return
+		}
 
 		logger.UserLogin(username, true, clientIP)
 
+		maxAge := int(s.sessionTTL.Seconds())
 		c.SetSameSite(http.SameSiteLaxMode)
-		c.SetCookie("session", sessionID, 86400, "/", "", false, true)
+		c.SetCookie("session", sessionID, maxAge, "/", "", s.cookieSecure, true)
+		c.SetCookie("csrf_token", csrfToken, maxAge, "/", "", s.cookieSecure, false)
 		c.Redirect(http.StatusFound, "/dashboard")
 		return
 	}
@@ -54,13 +61,13 @@ func (s *Server) handleLogout(c *gin.Context) {
 	sessionID, err := c.Cookie("session")
 	if err != nil {
 		logger.Debug("Logout: session cookie bulunamadı: %v", err)
+	} else {
+		if err := s.db.DeleteSession(sessionID); err != nil {
+			logger.Warn("Logout: session silinemedi: %v", err)
+		}
 	}
-	s.mu.Lock()
-	delete(s.sessions, sessionID)
-	s.mu.Unlock()
 
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("session", "", -1, "/", "", false, true)
+	clearAuthCookies(c, s.cookieSecure)
 	c.Redirect(http.StatusFound, "/login")
 }
 
@@ -328,5 +335,11 @@ func (s *Server) handleResultsGraph(c *gin.Context) {
 func (s *Server) handleAnalytics(c *gin.Context) {
 	c.HTML(http.StatusOK, "analytics.html", gin.H{
 		"ActivePage": "analytics",
+	})
+}
+
+func (s *Server) handleSettingsPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "settings.html", gin.H{
+		"ActivePage": "settings",
 	})
 }

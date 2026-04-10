@@ -76,6 +76,23 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("tablo oluşturulamadı: %w", err)
 	}
 
+	// Sonuç-etiket normalize tablosu
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS result_tags (
+			result_id INTEGER NOT NULL,
+			tag TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (result_id, tag),
+			FOREIGN KEY (result_id) REFERENCES search_results(id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_result_tags_tag ON result_tags(tag);
+		CREATE INDEX IF NOT EXISTS idx_result_tags_result ON result_tags(result_id);
+	`)
+	if err != nil {
+		return fmt.Errorf("result_tags tablosu oluşturulamadı: %w", err)
+	}
+
 	// Migration: auto_tags sütununu mevcut tablolara ekle (varsa sessizce atla)
 	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN auto_tags TEXT DEFAULT ''`)
 
@@ -140,6 +157,24 @@ func (db *DB) createTables() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("tagging_jobs tablosu oluşturulamadı: %w", err)
+	}
+
+	// Kalıcı oturumlar tablosu
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			username TEXT NOT NULL,
+			csrf_token TEXT NOT NULL,
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+		CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
+	`)
+	if err != nil {
+		return fmt.Errorf("sessions tablosu oluşturulamadı: %w", err)
 	}
 
 	return nil

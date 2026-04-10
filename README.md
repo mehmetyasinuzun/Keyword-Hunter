@@ -20,13 +20,14 @@ Sistemi bağımlılıklarla uğraşmadan tek komutla ayağa kaldırmak için Doc
 
 2. Konteynerleri başlatın:
    ```bash
+   cp .env.example .env
+   # Gerekirse .env içindeki değerleri düzenleyin
    docker-compose up -d --build
    ```
 
 3. Tarayıcıdan erişin:
    - URL: `http://localhost:8080`
-   - Kullanıcı Adı: `admin`
-   - Şifre: `admin123`
+   - Kullanıcı Adı / Şifre: `.env` dosyasındaki `ADMIN_USER` ve `ADMIN_PASS`
 
    ![Giriş Ekranı](docs/screenshots/login_view.jpg)
 
@@ -42,6 +43,8 @@ Geliştirme yapmak veya Docker kullanmadan çalıştırmak isterseniz:
 2. Derleme ve Başlatma:
    Windows kullanıcıları için hazır script bulunmaktadır. Bu script eski derlemeleri temizler ve projeyi yeniden başlatır:
    ```bash
+   copy .env.example .env
+   # .env dosyasında gerekli düzenlemeleri yapın
    build_and_run.bat
    ```
 
@@ -91,6 +94,12 @@ Operasyonel verilerin stratejik bilgiye dönüştüğü yerdir.
 - **Kaynak Dağılımı:** Hangi marketlerin veya forumların daha aktif olduğunu gösteren pasta grafikler.
 
 ![Analitik Ekranı](docs/screenshots/analytics_view.jpg)
+
+### 6. Ayarlar Merkezi (Runtime Config)
+Platform ayarlarının `.env` üzerinden yönetildiği kontrol ekranıdır (`/settings`).
+- **Yönetilebilir Konfigürasyon:** Admin bilgileri, rate-limit, session TTL, Tor/DB/Web adresleri.
+- **Canlı Etki:** Rate-limit ayarları kaydedildiği anda uygulanır.
+- **Güvenlik:** API POST işlemlerinde CSRF koruması ve IP bazlı rate-limit aktif çalışır.
 
 ## Teknik Mimari
 

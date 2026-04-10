@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -133,12 +134,26 @@ func (db *DB) ApplyTagging(id int64, tags string, keywordCount int, criticality 
 		category = "Genel"
 	}
 
-	_, err := db.conn.Exec(`
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
 		UPDATE search_results
 		SET auto_tags = ?, keyword_count = ?, criticality = ?, category = ?
 		WHERE id = ?
 	`, tags, keywordCount, criticality, category, id)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if err := syncResultTags(tx, id, tags); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // GetResultByID ID ile sonuç getirir
@@ -321,26 +336,46 @@ type TagStat struct {
 
 // GetTagStats tüm etiketlerin istatistiklerini döndürür (tag cloud için)
 func (db *DB) GetTagStats() ([]TagStat, error) {
-	// auto_tags sütunundaki virgülle ayrılmış etiketleri sayar
 	rows, err := db.conn.Query(`
-		SELECT auto_tags FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL
+		SELECT tag, COUNT(*) as count
+		FROM result_tags
+		GROUP BY tag
+		ORDER BY count DESC
+		LIMIT 300
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	// Tag sayaçları
-	tagCounts := make(map[string]int)
-
+	stats := make([]TagStat, 0, 128)
 	for rows.Next() {
+		var s TagStat
+		if err := rows.Scan(&s.Tag, &s.Count); err == nil {
+			stats = append(stats, s)
+		}
+	}
+
+	if len(stats) > 0 {
+		return stats, nil
+	}
+
+	// Backward compatibility: eski kayitlar için auto_tags parse fallback.
+	legacyRows, err := db.conn.Query(`
+		SELECT auto_tags FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL
+	`)
+	if err != nil {
+		return []TagStat{}, nil
+	}
+	defer legacyRows.Close()
+
+	tagCounts := make(map[string]int)
+	for legacyRows.Next() {
 		var tagsStr string
-		if err := rows.Scan(&tagsStr); err != nil {
+		if err := legacyRows.Scan(&tagsStr); err != nil {
 			continue
 		}
-		// Virgülle ayrılmış etiketleri parse et
-		tags := splitTags(tagsStr)
-		for _, tag := range tags {
+		for _, tag := range splitTags(tagsStr) {
 			tag = trimSpace(tag)
 			if tag != "" {
 				tagCounts[tag]++
@@ -348,20 +383,16 @@ func (db *DB) GetTagStats() ([]TagStat, error) {
 		}
 	}
 
-	// Map'i slice'a çevir ve sırala
-	var stats []TagStat
 	for tag, count := range tagCounts {
 		stats = append(stats, TagStat{Tag: tag, Count: count})
 	}
 
-	// Count'a göre sırala (büyükten küçüğe)
-	for i := 0; i < len(stats); i++ {
-		for j := i + 1; j < len(stats); j++ {
-			if stats[j].Count > stats[i].Count {
-				stats[i], stats[j] = stats[j], stats[i]
-			}
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Count == stats[j].Count {
+			return stats[i].Tag < stats[j].Tag
 		}
-	}
+		return stats[i].Count > stats[j].Count
+	})
 
 	return stats, nil
 }
@@ -374,13 +405,24 @@ func (db *DB) GetResultsByTag(tag string, limit int) ([]SearchResult, error) {
 
 	rows, err := db.conn.Query(`
 		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
-		FROM search_results 
-		WHERE auto_tags LIKE ?
+		FROM search_results
+		WHERE id IN (
+			SELECT result_id FROM result_tags WHERE tag = ?
+		)
 		ORDER BY created_at DESC
 		LIMIT ?
-	`, "%"+tag+"%", limit)
+	`, strings.TrimSpace(tag), limit)
 	if err != nil {
-		return nil, err
+		rows, err = db.conn.Query(`
+			SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
+			FROM search_results 
+			WHERE auto_tags LIKE ?
+			ORDER BY created_at DESC
+			LIMIT ?
+		`, "%"+tag+"%", limit)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer rows.Close()
 
@@ -402,6 +444,48 @@ func (db *DB) GetTaggedResultsCount() (int, int, error) {
 	db.conn.QueryRow("SELECT COUNT(*) FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL").Scan(&tagged)
 	db.conn.QueryRow("SELECT COUNT(*) FROM search_results").Scan(&total)
 	return tagged, total, nil
+}
+
+func syncResultTags(tx *sql.Tx, resultID int64, tags string) error {
+	if _, err := tx.Exec(`DELETE FROM result_tags WHERE result_id = ?`, resultID); err != nil {
+		return err
+	}
+
+	normalized := normalizeTags(tags)
+	if len(normalized) == 0 {
+		return nil
+	}
+
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO result_tags (result_id, tag) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, tag := range normalized {
+		if _, err := stmt.Exec(resultID, tag); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func normalizeTags(tags string) []string {
+	parts := splitTags(tags)
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		n := strings.ToLower(trimSpace(part))
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		result = append(result, n)
+	}
+
+	return result
 }
 
 // Helper functions

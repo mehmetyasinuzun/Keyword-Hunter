@@ -26,6 +26,12 @@
         </div>
         {{end}}
 
+        {{if .message}}
+        <div class="bg-blue-500/20 border border-blue-500 text-blue-300 px-4 py-3 rounded mb-4 text-sm">
+            {{if eq .message "session"}}Oturum başlatılamadı. Lütfen tekrar deneyin.{{else}}{{.message}}{{end}}
+        </div>
+        {{end}}
+
         <form method="POST" action="/login" class="space-y-6">
             <div>
                 <label class="block text-gray-300 text-sm font-medium mb-2">Kullanıcı Adı</label>

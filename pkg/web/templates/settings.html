@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    {{template "head" .}}
+    <title>KeywordHunter - Ayarlar</title>
+</head>
+
+<body class="min-h-screen text-gray-100">
+    {{template "navbar" .}}
+
+    <main class="max-w-5xl mx-auto px-4 py-8">
+        <section class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
+            <div class="flex items-start justify-between gap-4 mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold">Ayarlar Merkezi</h1>
+                    <p class="text-gray-400 mt-1 text-sm">.env tabanli runtime ayarlari burada yonetilir.</p>
+                </div>
+                <span id="env-path" class="text-xs text-blue-300 bg-blue-900/30 px-3 py-1 rounded-full"></span>
+            </div>
+
+            <div id="settings-alert" class="hidden mb-4 rounded-lg px-4 py-3 text-sm"></div>
+
+            <form id="settings-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="block">
+                    <span class="text-sm text-gray-300">Admin Kullanici</span>
+                    <input id="admin-user" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Admin Sifre (degistirmek icin doldur)</span>
+                    <input id="admin-pass" type="password" placeholder="Mevcut sifreyi korumak icin bos birak" class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Tor Proxy</span>
+                    <input id="tor-proxy" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Veritabani Yolu</span>
+                    <input id="db-path" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Web Adresi</span>
+                    <input id="web-addr" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Log Dizini</span>
+                    <input id="log-dir" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Session TTL (saat)</span>
+                    <input id="session-ttl" type="number" min="1" max="720" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Rate Limit RPS</span>
+                    <input id="rate-rps" type="number" min="1" max="200" step="0.1" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="block">
+                    <span class="text-sm text-gray-300">Rate Limit Burst</span>
+                    <input id="rate-burst" type="number" min="1" max="500" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
+                </label>
+
+                <label class="flex items-center gap-3 mt-7">
+                    <input id="secure-cookies" type="checkbox" class="w-4 h-4">
+                    <span class="text-sm text-gray-300">Secure Cookie (HTTPS ortaminda ac)</span>
+                </label>
+
+                <div class="md:col-span-2 flex flex-wrap gap-3 mt-2">
+                    <button type="submit" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition">Kaydet</button>
+                    <button type="button" id="reload-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-6 py-2 rounded-lg transition">Yeniden Yukle</button>
+                </div>
+            </form>
+
+            <div class="mt-6 text-xs text-gray-400 leading-relaxed">
+                Not: Rate-limit ayarlari anlik uygulanir. Kimlik dogrulama, cookie ve altyapi ayarlari icin uygulamayi yeniden baslatman onerilir.
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const form = document.getElementById('settings-form');
+        const alertBox = document.getElementById('settings-alert');
+        const saveBtn = document.getElementById('save-btn');
+
+        function showAlert(message, type) {
+            alertBox.classList.remove('hidden', 'bg-red-500/20', 'border', 'border-red-500', 'text-red-200', 'bg-green-500/20', 'border-green-500', 'text-green-100');
+            if (type === 'error') {
+                alertBox.classList.add('bg-red-500/20', 'border', 'border-red-500', 'text-red-200');
+            } else {
+                alertBox.classList.add('bg-green-500/20', 'border', 'border-green-500', 'text-green-100');
+            }
+            alertBox.textContent = message;
+        }
+
+        function fillForm(s) {
+            document.getElementById('admin-user').value = s.adminUser || '';
+            document.getElementById('admin-pass').value = '';
+            document.getElementById('tor-proxy').value = s.torProxy || '';
+            document.getElementById('db-path').value = s.dbPath || '';
+            document.getElementById('web-addr').value = s.webAddr || '';
+            document.getElementById('log-dir').value = s.logDir || '';
+            document.getElementById('session-ttl').value = s.sessionTtlHours || 24;
+            document.getElementById('rate-rps').value = s.rateLimitRps || 12;
+            document.getElementById('rate-burst').value = s.rateLimitBurst || 30;
+            document.getElementById('secure-cookies').checked = !!s.secureCookies;
+            document.getElementById('env-path').textContent = s.envFilePath || '.env';
+        }
+
+        async function loadSettings() {
+            const res = await fetch('/api/settings/env');
+            const data = await res.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Ayarlar yuklenemedi');
+            }
+            fillForm(data.settings);
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Kaydediliyor...';
+
+            try {
+                const payload = {
+                    adminUser: document.getElementById('admin-user').value,
+                    adminPass: document.getElementById('admin-pass').value,
+                    torProxy: document.getElementById('tor-proxy').value,
+                    dbPath: document.getElementById('db-path').value,
+                    webAddr: document.getElementById('web-addr').value,
+                    logDir: document.getElementById('log-dir').value,
+                    sessionTtlHours: Number(document.getElementById('session-ttl').value),
+                    rateLimitRps: Number(document.getElementById('rate-rps').value),
+                    rateLimitBurst: Number(document.getElementById('rate-burst').value),
+                    secureCookies: document.getElementById('secure-cookies').checked
+                };
+
+                const res = await fetch('/api/settings/env', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Ayarlar kaydedilemedi');
+                }
+
+                showAlert('Ayarlar kaydedildi. Bazi ayarlarin etkisi icin restart onerilir.', 'success');
+                document.getElementById('admin-pass').value = '';
+            } catch (error) {
+                showAlert(error.message, 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Kaydet';
+            }
+        });
+
+        document.getElementById('reload-btn').addEventListener('click', async () => {
+            try {
+                await loadSettings();
+                showAlert('Ayarlar yeniden yuklendi.', 'success');
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        });
+
+        loadSettings().catch((error) => showAlert(error.message, 'error'));
+    </script>
+</body>
+
+</html>
