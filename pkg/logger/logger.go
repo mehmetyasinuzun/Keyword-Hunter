@@ -307,11 +307,11 @@ func SystemStartup(torProxy, dbPath, webAddr string) {
 }
 
 // SystemReady sistem hazır
-func SystemReady(webAddr, username, password string) {
+func SystemReady(webAddr, username string) {
 	Info("-----------------------------------------------------------")
 	Info("SYSTEM READY: Listening for requests")
 	Info("URL: http://localhost%s", webAddr)
-	Info("AUTH: Default Credentials: %s / %s", username, password)
+	Info("AUTH: Login user: %s", username)
 	Info("-----------------------------------------------------------")
 }
 

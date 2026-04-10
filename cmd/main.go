@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/scraper"
@@ -75,7 +77,7 @@ func main() {
 	logger.Info("Scraper ready")
 
 	// Web server başlat
-	logger.SystemReady(WebAddr, Username, Password)
+	logger.SystemReady(WebAddr, Username)
 	logger.Info("Durdurmak için Ctrl+C")
 
 	server := web.New(web.Config{
@@ -96,6 +98,13 @@ func main() {
 
 	// Shutdown sinyali bekle
 	<-sigChan
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Warn("Web server graceful shutdown başarısız: %v", err)
+	}
+
 	logger.SystemShutdown()
 }
 

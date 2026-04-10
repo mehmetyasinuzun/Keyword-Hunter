@@ -19,6 +19,22 @@ func New(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("veritabanı açılamadı: %w", err)
 	}
 
+	// SQLite'da tek writer modeli ve dosya kilitlenmelerini azaltmak için
+	// bağlantı havuzunu tek bağlantı ile sınırla.
+	conn.SetMaxOpenConns(1)
+	conn.SetMaxIdleConns(1)
+	conn.SetConnMaxLifetime(0)
+
+	if _, err := conn.Exec("PRAGMA journal_mode = WAL;"); err != nil {
+		return nil, fmt.Errorf("sqlite WAL modu ayarlanamadı: %w", err)
+	}
+	if _, err := conn.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
+		return nil, fmt.Errorf("sqlite busy_timeout ayarlanamadı: %w", err)
+	}
+	if _, err := conn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		return nil, fmt.Errorf("sqlite foreign_keys ayarlanamadı: %w", err)
+	}
+
 	// Bağlantıyı test et
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("veritabanı bağlantısı başarısız: %w", err)
@@ -100,6 +116,30 @@ func (db *DB) createTables() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("graph_nodes tablosu oluşturulamadı: %w", err)
+	}
+
+	// Tagging jobs tablosu - toplu etiketleme iş kuyruğu
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS tagging_jobs (
+			id TEXT PRIMARY KEY,
+			query TEXT,
+			total_count INTEGER NOT NULL,
+			processed_count INTEGER DEFAULT 0,
+			success_count INTEGER DEFAULT 0,
+			failure_count INTEGER DEFAULT 0,
+			status TEXT NOT NULL,
+			error_message TEXT DEFAULT '',
+			result_ids_json TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			started_at DATETIME,
+			finished_at DATETIME
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_tagging_jobs_status ON tagging_jobs(status);
+		CREATE INDEX IF NOT EXISTS idx_tagging_jobs_created ON tagging_jobs(created_at);
+	`)
+	if err != nil {
+		return fmt.Errorf("tagging_jobs tablosu oluşturulamadı: %w", err)
 	}
 
 	return nil

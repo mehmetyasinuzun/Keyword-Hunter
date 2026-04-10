@@ -2,6 +2,8 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
@@ -92,7 +94,7 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 
 		// Graph nodes tablosuna da kaydet (derinleştirme için altyapı)
 		domain := shared.ExtractDomain(r.URL)
-		db.conn.Exec(`
+		_, _ = tx.Exec(`
 			INSERT OR IGNORE INTO graph_nodes (url, title, domain, depth, link_type, source_query)
 			VALUES (?, ?, ?, 1, 'search', ?)
 		`, r.URL, r.Title, domain, r.Query)
@@ -128,6 +130,52 @@ func (db *DB) GetResultByID(id int64) (*SearchResult, error) {
 		return nil, err
 	}
 	return &r, nil
+}
+
+// ExistingResultIDSet verilen ID'lerden veritabanında olanları set olarak döndürür.
+func (db *DB) ExistingResultIDSet(ids []int64) (map[int64]bool, error) {
+	result := make(map[int64]bool)
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	uniqueIDs := make([]int64, 0, len(ids))
+	seen := make(map[int64]bool)
+	for _, id := range ids {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	if len(uniqueIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(uniqueIDs)), ",")
+	query := fmt.Sprintf("SELECT id FROM search_results WHERE id IN (%s)", placeholders)
+
+	args := make([]interface{}, 0, len(uniqueIDs))
+	for _, id := range uniqueIDs {
+		args = append(args, id)
+	}
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		result[id] = true
+	}
+
+	return result, rows.Err()
 }
 
 // GetResults sonuçları getirir (opsiyonel filtrelerle)

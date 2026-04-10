@@ -2,8 +2,8 @@ package web
 
 import (
 	"fmt"
-	"strconv"
-	"time"
+
+	"github.com/google/uuid"
 
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/shared"
@@ -12,7 +12,7 @@ import (
 
 // generateSessionID rastgele session ID üretir
 func generateSessionID() string {
-	return time.Now().Format("20060102150405") + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	return uuid.NewString()
 }
 
 func min(a, b int) int {

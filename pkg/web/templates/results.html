@@ -85,6 +85,33 @@
                 </button>
             </form>
 
+            {{if .results}}
+            <div class="mt-4 flex flex-col gap-3">
+                <div class="flex items-center gap-3">
+                    <button id="batchTagBtn" onclick="batchAutoTag()"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm">
+                        🏷️ Tümünü Etiketle
+                    </button>
+                    <button id="cancelBatchBtn" onclick="cancelBatchJob()"
+                        class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm">
+                        ✖ İptal Et
+                    </button>
+                    <span class="text-xs text-gray-400">Auto-tag: tek kayıt | Batch: listedeki tüm kayıtlar</span>
+                </div>
+
+                <div id="tag-progress" class="hidden bg-gray-900 border border-gray-700 rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span id="tag-status" class="text-sm text-gray-300">İş hazırlanıyor...</span>
+                        <span class="text-xs text-gray-500" id="tag-progress-text">%0</span>
+                    </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div id="tag-progress-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300"
+                            style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+
         </div>
 
         <!-- Analysis Table -->
@@ -120,15 +147,22 @@
                                     class="text-blue-500 hover:underline font-mono text-xs">{{truncate .URL 35}}</a>
                             </td>
                             <td class="px-4 py-4" id="tags-{{.ID}}">
-                                {{if .AutoTags}}
-                                <div class="flex flex-wrap gap-1">
-                                    {{range $i, $tag := (split .AutoTags ", ")}}
-                                    <span class="tag-pill">{{$tag}}</span>
-                                    {{end}}
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex flex-wrap gap-1" id="tag-list-{{.ID}}">
+                                        {{if .AutoTags}}
+                                        {{range $i, $tag := (split .AutoTags ", ")}}
+                                        <span class="tag-pill">{{$tag}}</span>
+                                        {{end}}
+                                        {{else}}
+                                        <span class="text-gray-500 text-xs italic">Henüz etiketlenmedi</span>
+                                        {{end}}
+                                    </div>
+                                    <button onclick="autoTagResult('{{.ID}}', this)"
+                                        class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-2 py-1 text-xs font-bold transition"
+                                        title="Bu kaydı otomatik etiketle">
+                                        <span class="icon">🏷️</span>
+                                    </button>
                                 </div>
-                                {{else}}
-                                <span class="text-gray-500 text-xs italic">Henüz etiketlenmedi</span>
-                                {{end}}
                             </td>
                             <td class="px-4 py-4 text-center">
                                 <select onchange="updateRow('{{.ID}}', this.value, '{{.Category}}')" class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none
@@ -180,6 +214,8 @@
         document.querySelectorAll('tr[data-id]').forEach(row => {
             allResultIds.push(parseInt(row.dataset.id));
         });
+        let activeBatchJobId = '';
+        let statusPollTimer = null;
 
         function updateRow(id, crit, cat) {
             fetch('/api/update-criticality', {
@@ -201,13 +237,13 @@
         // Tek sonuç için otomatik etiketleme
         function autoTagResult(id, btn) {
             const icon = btn.querySelector('.icon');
-            const originalIcon = icon.innerText;
-            icon.innerText = '⏳';
+            const originalIcon = icon ? icon.innerText : '🏷️';
+            if (icon) icon.innerText = '⏳';
             btn.disabled = true;
             btn.classList.add('opacity-50');
 
             // Etiket alanını loading göster
-            const tagsEl = document.getElementById('tags-' + id);
+            const tagsEl = document.getElementById('tag-list-' + id);
             const originalTags = tagsEl.innerHTML;
             tagsEl.innerHTML = '<span class="tag-pill loading">Etiketleniyor...</span>';
 
@@ -216,7 +252,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: parseInt(id) })
             }).then(r => r.json()).then(data => {
-                icon.innerText = originalIcon;
+                if (icon) icon.innerText = originalIcon;
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
 
@@ -243,7 +279,7 @@
                     showToast('Hata: ' + (data.error || 'Etiket bulunamadı'));
                 }
             }).catch(err => {
-                icon.innerText = originalIcon;
+                if (icon) icon.innerText = originalIcon;
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
                 tagsEl.innerHTML = originalTags;
@@ -259,11 +295,16 @@
             }
 
             const btn = document.getElementById('batchTagBtn');
+            const cancelBtn = document.getElementById('cancelBatchBtn');
             btn.disabled = true;
             btn.innerHTML = '⏳ Başlatılıyor...';
+            cancelBtn.classList.remove('hidden');
 
             const progressDiv = document.getElementById('tag-progress');
             progressDiv.classList.remove('hidden');
+            document.getElementById('tag-status').innerText = 'İş kuyruğa alınıyor...';
+            document.getElementById('tag-progress-bar').style.width = '0%';
+            document.getElementById('tag-progress-text').innerText = '%0';
 
             // SSE bağlantısı aç
             startTagEventStream();
@@ -278,17 +319,15 @@
                 })
             }).then(r => r.json()).then(data => {
                 if (data.success) {
+                    activeBatchJobId = data.jobId || '';
                     btn.innerHTML = '🏷️ İşleniyor...';
+                    startBatchStatusPolling(activeBatchJobId, data.total || allResultIds.length);
                 } else {
-                    btn.innerHTML = '🏷️ Tümünü Etiketle';
-                    btn.disabled = false;
-                    progressDiv.classList.add('hidden');
+                    cleanupBatchUI();
                     showToast('Hata: ' + data.error);
                 }
             }).catch(err => {
-                btn.innerHTML = '🏷️ Tümünü Etiketle';
-                btn.disabled = false;
-                progressDiv.classList.add('hidden');
+                cleanupBatchUI();
                 showToast('Bağlantı hatası');
             });
         }
@@ -309,15 +348,18 @@
                     const data = JSON.parse(event.data);
                     const statusEl = document.getElementById('tag-status');
                     const progressBar = document.getElementById('tag-progress-bar');
+                    const progressText = document.getElementById('tag-progress-text');
 
                     if (data.type === 'auto_tag' || data.type === 'auto_tag_error') {
                         completed++;
                         const percent = Math.round((completed / total) * 100);
                         progressBar.style.width = percent + '%';
+                        progressText.innerText = '%' + percent;
                         statusEl.innerText = data.message;
                     }
 
                     if (data.type === 'success' && data.message.includes('Etiketleme tamamlandı')) {
+                        stopBatchStatusPolling();
                         // Tamamlandı - sayfayı yenile
                         setTimeout(() => {
                             window.location.reload();
@@ -331,6 +373,97 @@
             window.tagEventSource.onerror = function () {
                 window.tagEventSource.close();
             };
+        }
+
+        function startBatchStatusPolling(jobId, total) {
+            if (!jobId) return;
+            stopBatchStatusPolling();
+
+            statusPollTimer = setInterval(() => {
+                fetch('/api/batch-auto-tag/' + encodeURIComponent(jobId))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success) return;
+
+                        const processed = data.processed || 0;
+                        const max = data.total || total || 1;
+                        const percent = Math.min(100, Math.round((processed / Math.max(max, 1)) * 100));
+
+                        const progressBar = document.getElementById('tag-progress-bar');
+                        const progressText = document.getElementById('tag-progress-text');
+                        const statusEl = document.getElementById('tag-status');
+
+                        progressBar.style.width = percent + '%';
+                        progressText.innerText = '%' + percent;
+                        statusEl.innerText = `Durum: ${data.status} | ${processed}/${max}`;
+
+                        if (data.status === 'completed') {
+                            stopBatchStatusPolling();
+                            setTimeout(() => window.location.reload(), 1000);
+                        }
+                        if (data.status === 'failed' || data.status === 'cancelled') {
+                            stopBatchStatusPolling();
+                            cleanupBatchUI();
+                            showToast(data.error || 'İş tamamlanamadı');
+                        }
+                    })
+                    .catch(() => {
+                        // Polling hatasında sessiz devam et
+                    });
+            }, 2000);
+        }
+
+        function stopBatchStatusPolling() {
+            if (statusPollTimer) {
+                clearInterval(statusPollTimer);
+                statusPollTimer = null;
+            }
+        }
+
+        function cancelBatchJob() {
+            if (!activeBatchJobId) {
+                showToast('Aktif bir iş bulunamadı');
+                return;
+            }
+
+            fetch('/api/batch-auto-tag/' + encodeURIComponent(activeBatchJobId) + '/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    stopBatchStatusPolling();
+                    cleanupBatchUI();
+                    showToast('Toplu etiketleme iptal edildi');
+                } else {
+                    showToast('İptal edilemedi: ' + (data.error || 'Bilinmeyen hata'));
+                }
+            }).catch(() => {
+                showToast('İptal isteği gönderilemedi');
+            });
+        }
+
+        function cleanupBatchUI() {
+            const btn = document.getElementById('batchTagBtn');
+            const cancelBtn = document.getElementById('cancelBatchBtn');
+            const progressDiv = document.getElementById('tag-progress');
+
+            activeBatchJobId = '';
+            stopBatchStatusPolling();
+
+            if (window.tagEventSource) {
+                window.tagEventSource.close();
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '🏷️ Tümünü Etiketle';
+            }
+            if (cancelBtn) {
+                cancelBtn.classList.add('hidden');
+            }
+            if (progressDiv) {
+                progressDiv.classList.add('hidden');
+            }
         }
 
         function showToast(msg) {

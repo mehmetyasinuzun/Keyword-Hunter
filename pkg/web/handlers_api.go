@@ -1,6 +1,8 @@
 package web
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,6 +11,7 @@ import (
 
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/storage"
+	"keywordhunter-mvp/pkg/tagging"
 )
 
 // ExpandRequest expand isteği
@@ -16,6 +19,17 @@ type ExpandRequest struct {
 	URL      string `json:"url" binding:"required"`
 	ParentID int64  `json:"parentId"`
 	Query    string `json:"query"`
+}
+
+// AutoTagRequest tekil etiketleme isteği
+type AutoTagRequest struct {
+	ID int64 `json:"id" binding:"required"`
+}
+
+// BatchAutoTagRequest toplu etiketleme isteği
+type BatchAutoTagRequest struct {
+	ResultIDs []int64 `json:"resultIds" binding:"required"`
+	Query     string  `json:"query"`
 }
 
 // handleUpdateCriticality kritiklik ve kategori güncelleme
@@ -32,8 +46,12 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 	}
 
 	table := "search_results"
-	if req.Type == "content" {
-		table = "contents"
+	if req.Type == "" {
+		req.Type = "result"
+	}
+	if req.Type != "result" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz type değeri"})
+		return
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET criticality = ?, category = ? WHERE id = ?", table)
@@ -45,6 +63,129 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 
 	logger.Info("CRITICALITY UPDATE: ID=%d, Type=%s, Crit=%d, Cat=%s", req.ID, req.Type, req.Criticality, req.Category)
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// handleAutoTag tek bir sonucu etiketler
+func (s *Server) handleAutoTag(c *gin.Context) {
+	var req AutoTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		return
+	}
+
+	result, err := s.tagEngine.TagResultByID(c.Request.Context(), req.ID)
+	if err != nil {
+		logger.Warn("AUTO TAG FAILED: ID=%d, Error=%v", req.ID, err)
+		switch {
+		case errors.Is(err, tagging.ErrResultNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Sonuç bulunamadı"})
+		case errors.Is(err, tagging.ErrNoTaggableSignal):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"success": false, "error": "Etiket çıkarılamadı"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		}
+		return
+	}
+
+	logger.Info("AUTO TAG SUCCESS: ID=%d, Tags=%s, Hits=%d", req.ID, result.TagsStr, result.KeywordHits)
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"id":          result.ResultID,
+		"tags":        result.Tags,
+		"tagsStr":     result.TagsStr,
+		"keywordHits": result.KeywordHits,
+	})
+}
+
+// handleBatchAutoTag toplu etiketleme işini kuyruğa alır
+func (s *Server) handleBatchAutoTag(c *gin.Context) {
+	var req BatchAutoTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		return
+	}
+
+	if len(req.ResultIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Etiketlenecek kayıt bulunamadı"})
+		return
+	}
+
+	job, err := s.batchRunner.Submit(c.Request.Context(), req.ResultIDs, req.Query)
+	if err != nil {
+		logger.Warn("BATCH AUTO TAG SUBMIT FAILED: %v", err)
+		if errors.Is(err, tagging.ErrNoValidResultIDs) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli result ID bulunamadı"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"jobId":   job.ID,
+		"status":  job.Status,
+		"total":   job.TotalCount,
+	})
+}
+
+// handleBatchAutoTagStatus toplu etiketleme iş durumunu döndürür
+func (s *Server) handleBatchAutoTagStatus(c *gin.Context) {
+	jobID := c.Param("id")
+	if jobID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Job ID gerekli"})
+		return
+	}
+
+	job, err := s.db.GetTaggingJob(jobID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Job bulunamadı"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Job durumu alınamadı"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"jobId":      job.ID,
+		"status":     job.Status,
+		"total":      job.TotalCount,
+		"processed":  job.ProcessedCount,
+		"successes":  job.SuccessCount,
+		"failures":   job.FailureCount,
+		"error":      job.ErrorMessage,
+		"createdAt":  job.CreatedAt,
+		"startedAt":  job.StartedAt,
+		"finishedAt": job.FinishedAt,
+	})
+}
+
+// handleBatchAutoTagCancel çalışan/queued işi iptal eder
+func (s *Server) handleBatchAutoTagCancel(c *gin.Context) {
+	jobID := c.Param("id")
+	if jobID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Job ID gerekli"})
+		return
+	}
+
+	if err := s.batchRunner.Cancel(jobID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Job bulunamadı"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	_ = s.db.MarkTaggingJobFinished(jobID, tagging.StatusCancelled, "Kullanıcı tarafından iptal edildi")
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"jobId":   jobID,
+		"status":  tagging.StatusCancelled,
+	})
 }
 
 // handleAnalyzeResult belirli bir bulguyu tarayıp anahtar kelime sayısını günceller

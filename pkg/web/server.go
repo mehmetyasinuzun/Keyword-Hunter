@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"html/template"
 	"io/fs"
@@ -15,6 +16,7 @@ import (
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
 	"keywordhunter-mvp/pkg/storage"
+	"keywordhunter-mvp/pkg/tagging"
 )
 
 //go:embed templates/*
@@ -23,14 +25,29 @@ var templateFS embed.FS
 //go:embed static/*
 var staticFS embed.FS
 
+type TagEngine interface {
+	TagResultByID(ctx context.Context, resultID int64) (*tagging.AutoTagResult, error)
+}
+
+type BatchRunner interface {
+	Submit(ctx context.Context, resultIDs []int64, query string) (*storage.TaggingJob, error)
+	Cancel(jobID string) error
+	RecoverPendingJobs() error
+}
+
 // Server web sunucusu
 type Server struct {
-	db       *storage.DB
-	searcher *search.Searcher
-	scraper  *scraper.Scraper
-	router   *gin.Engine
-	sessions map[string]time.Time
-	mu       sync.RWMutex
+	db          *storage.DB
+	searcher    *search.Searcher
+	scraper     *scraper.Scraper
+	tagEngine   TagEngine
+	batchRunner BatchRunner
+	router      *gin.Engine
+	httpServer  *http.Server
+	sessions    map[string]time.Time
+	cleanupStop chan struct{}
+	cleanupOnce sync.Once
+	mu          sync.RWMutex
 }
 
 // Config sunucu yapılandırması
@@ -53,15 +70,48 @@ func New(cfg Config) *Server {
 	router.Use(gin.Recovery())
 
 	s := &Server{
-		db:       cfg.DB,
-		searcher: cfg.Searcher,
-		scraper:  cfg.Scraper,
-		router:   router,
-		sessions: make(map[string]time.Time),
+		db:          cfg.DB,
+		searcher:    cfg.Searcher,
+		scraper:     cfg.Scraper,
+		router:      router,
+		sessions:    make(map[string]time.Time),
+		cleanupStop: make(chan struct{}),
+	}
+
+	engine := tagging.NewEngine(cfg.DB, cfg.Scraper)
+	runner := tagging.NewBatchRunner(cfg.DB, engine, 1)
+
+	s.tagEngine = engine
+	s.batchRunner = runner
+	if err := s.batchRunner.RecoverPendingJobs(); err != nil {
+		logger.Warn("Tagging job recovery başarısız: %v", err)
 	}
 
 	s.setupRoutes()
+	s.startSessionCleanup()
 	return s
+}
+
+func (s *Server) startSessionCleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				s.mu.Lock()
+				for id, expiry := range s.sessions {
+					if now.After(expiry) {
+						delete(s.sessions, id)
+					}
+				}
+				s.mu.Unlock()
+			case <-s.cleanupStop:
+				return
+			}
+		}
+	}()
 }
 
 // setupRoutes rotaları ayarlar
@@ -120,6 +170,10 @@ func (s *Server) setupRoutes() {
 		protected.GET("/results/graph", s.handleResultsGraph)
 		protected.POST("/api/update-criticality", s.handleUpdateCriticality)
 		protected.POST("/api/analyze-result", s.handleAnalyzeResult)
+		protected.POST("/api/auto-tag", s.handleAutoTag)
+		protected.POST("/api/batch-auto-tag", s.handleBatchAutoTag)
+		protected.GET("/api/batch-auto-tag/:id", s.handleBatchAutoTagStatus)
+		protected.POST("/api/batch-auto-tag/:id/cancel", s.handleBatchAutoTagCancel)
 		protected.GET("/api/stats", s.handleStats)
 		protected.GET("/api/graph", s.handleGraphAPI)
 		protected.GET("/api/queries", s.handleQueriesAPI)
@@ -143,5 +197,31 @@ func (s *Server) setupRoutes() {
 
 // Run sunucuyu başlatır
 func (s *Server) Run(addr string) error {
-	return s.router.Run(addr)
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      s.router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	err := s.httpServer.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
+
+	return nil
+}
+
+// Shutdown sunucuyu graceful şekilde kapatır.
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.cleanupOnce.Do(func() {
+		close(s.cleanupStop)
+	})
+
+	if s.httpServer == nil {
+		return nil
+	}
+
+	return s.httpServer.Shutdown(ctx)
 }

@@ -39,6 +39,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 
 		logger.UserLogin(username, true, clientIP)
 
+		c.SetSameSite(http.SameSiteLaxMode)
 		c.SetCookie("session", sessionID, 86400, "/", "", false, true)
 		c.Redirect(http.StatusFound, "/dashboard")
 		return
@@ -58,6 +59,7 @@ func (s *Server) handleLogout(c *gin.Context) {
 	delete(s.sessions, sessionID)
 	s.mu.Unlock()
 
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("session", "", -1, "/", "", false, true)
 	c.Redirect(http.StatusFound, "/login")
 }

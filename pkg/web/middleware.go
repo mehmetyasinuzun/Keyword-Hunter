@@ -22,6 +22,11 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		s.mu.RUnlock()
 
 		if !exists || time.Now().After(expiry) {
+			if exists {
+				s.mu.Lock()
+				delete(s.sessions, sessionID)
+				s.mu.Unlock()
+			}
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
