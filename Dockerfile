@@ -27,7 +27,8 @@ COPY --from=builder /out/keywordhunter /app/keywordhunter
 COPY .env.example /app/.env.example
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
-RUN chmod +x /app/docker-entrypoint.sh \
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
+	&& chmod +x /app/docker-entrypoint.sh \
 	&& mkdir -p /data/logs
 
 EXPOSE 8080

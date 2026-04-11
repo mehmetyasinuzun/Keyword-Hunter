@@ -4,6 +4,7 @@ services:
     container_name: keywordhunter-tor
     ports:
       - "9051:9050"
+    init: true
     restart: unless-stopped
 
   app:
@@ -11,6 +12,7 @@ services:
     container_name: keywordhunter-app
     ports:
       - "8080:8080"
+    init: true
     environment:
       - ENV_FILE=/data/.env
     volumes:

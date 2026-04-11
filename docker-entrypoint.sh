@@ -25,7 +25,7 @@ set_key() {
 read_key() {
   key="$1"
   file="$2"
-  grep "^${key}=" "$file" | head -n 1 | cut -d'=' -f2- || true
+  grep "^${key}=" "$file" | head -n 1 | cut -d'=' -f2- | tr -d '\r' || true
 }
 
 # Docker icinde /data/.env kullaniliyorsa, local default degerleri docker degerlerine migrate et.
