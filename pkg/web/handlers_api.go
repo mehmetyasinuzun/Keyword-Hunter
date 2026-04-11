@@ -61,6 +61,8 @@ type GraphResultSummary struct {
 	Title       string `json:"title"`
 	URL         string `json:"url"`
 	SourceCount int    `json:"sourceCount"`
+	IsExpanded  bool   `json:"isExpanded"`
+	Domain      string `json:"domain"`
 }
 
 // handleUpdateCriticality kritiklik ve kategori güncelleme
@@ -291,6 +293,8 @@ func (s *Server) handleGraphAPI(c *gin.Context) {
 }
 
 func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
+	queryFilter := strings.TrimSpace(c.Query("q"))
+
 	limit := 50
 	if raw := c.Query("limit"); raw != "" {
 		value, err := parseGraphLimit(raw, 500)
@@ -303,13 +307,23 @@ func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
 		}
 	}
 
-	rows, err := s.db.GetDBConn().Query(`
+	querySQL := `
 		SELECT query, COUNT(*) as count
 		FROM search_results
+	`
+	args := []interface{}{}
+	if queryFilter != "" {
+		querySQL += " WHERE query = ?\n"
+		args = append(args, queryFilter)
+	}
+	querySQL += `
 		GROUP BY query
 		ORDER BY count DESC
 		LIMIT ?
-	`, limit)
+	`
+	args = append(args, limit)
+
+	rows, err := s.db.GetDBConn().Query(querySQL, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sorgu ozeti alinamadi"})
 		return
@@ -401,21 +415,43 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 		offset = value
 	}
 
+	queryLimit := limit + 1
+
 	rows, err := s.db.GetDBConn().Query(`
+		WITH dedup AS (
+			SELECT
+				MIN(sr.id) as id,
+				MAX(COALESCE(NULLIF(sr.title, ''), sr.url)) as title,
+				sr.url as url
+			FROM search_results sr
+			WHERE sr.query = ? AND sr.source = ?
+			GROUP BY sr.url
+		)
 		SELECT
-			sr.id,
-			sr.title,
-			sr.url,
+			d.id,
+			d.title,
+			d.url,
 			(
 				SELECT COUNT(DISTINCT sr2.source)
 				FROM search_results sr2
-				WHERE sr2.url = sr.url
-			) as source_count
-		FROM search_results sr
-		WHERE sr.query = ? AND sr.source = ?
-		ORDER BY sr.title
+				WHERE sr2.url = d.url
+			) as source_count,
+			COALESCE((
+				SELECT MAX(gn.is_expanded)
+				FROM graph_nodes gn
+				WHERE gn.url = d.url
+			), 0) as is_expanded,
+			COALESCE((
+				SELECT gn.domain
+				FROM graph_nodes gn
+				WHERE gn.url = d.url
+				ORDER BY gn.id DESC
+				LIMIT 1
+			), '') as domain
+		FROM dedup d
+		ORDER BY d.title, d.url
 		LIMIT ? OFFSET ?
-	`, query, engine, limit, offset)
+	`, query, engine, queryLimit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Result ozeti alinamadi"})
 		return
@@ -425,13 +461,20 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 	items := make([]GraphResultSummary, 0, limit)
 	for rows.Next() {
 		var r GraphResultSummary
-		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.SourceCount); err == nil {
+		var expandedRaw int
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.SourceCount, &expandedRaw, &r.Domain); err == nil {
+			r.IsExpanded = expandedRaw > 0
 			items = append(items, r)
 		}
 	}
 
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+
 	nextOffset := 0
-	if len(items) == limit {
+	if hasMore {
 		nextOffset = offset + limit
 	}
 

@@ -130,6 +130,93 @@ body.graph-page .nav {
     font-weight: 500;
 }
 
+.graph-load-status {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 15, 26, 0.92);
+    border: 1px solid #2d3748;
+    border-radius: 10px;
+    padding: 6px 10px;
+    min-width: 360px;
+    max-width: 560px;
+}
+
+.graph-load-steps {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.graph-load-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #718096;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.graph-load-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4a5568;
+    box-shadow: 0 0 0 0 rgba(99, 179, 237, 0);
+}
+
+.graph-load-step.is-active {
+    color: #63b3ed;
+}
+
+.graph-load-step.is-active .graph-load-dot {
+    background: #63b3ed;
+    animation: pulse-dot 1.25s infinite;
+}
+
+.graph-load-step.is-done {
+    color: #68d391;
+}
+
+.graph-load-step.is-done .graph-load-dot {
+    background: #48bb78;
+    animation: none;
+}
+
+.graph-load-step.is-error {
+    color: #fc8181;
+}
+
+.graph-load-step.is-error .graph-load-dot {
+    background: #f56565;
+    animation: none;
+}
+
+.graph-load-meta {
+    min-width: 0;
+    color: #a0aec0;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@keyframes pulse-dot {
+    0% {
+        box-shadow: 0 0 0 0 rgba(99, 179, 237, 0.45);
+    }
+
+    70% {
+        box-shadow: 0 0 0 8px rgba(99, 179, 237, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 179, 237, 0);
+    }
+}
+
 /* ==========================================================================
    Graph Container
    ========================================================================== */
@@ -811,4 +898,15 @@ body.graph-page .nav {
     width: 90%;
     max-height: 70vh;
     overflow-y: auto;
+}
+
+@media (max-width: 1220px) {
+    .graph-load-status {
+        min-width: 0;
+        max-width: 320px;
+    }
+
+    .graph-load-steps {
+        display: none;
+    }
 }

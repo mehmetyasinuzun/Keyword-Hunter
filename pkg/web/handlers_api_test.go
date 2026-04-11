@@ -57,6 +57,8 @@ func setupAPIRouter(s *Server) *gin.Engine {
 	r.POST("/api/batch-auto-tag", s.handleBatchAutoTag)
 	r.GET("/api/batch-auto-tag/:id", s.handleBatchAutoTagStatus)
 	r.POST("/api/batch-auto-tag/:id/cancel", s.handleBatchAutoTagCancel)
+	r.GET("/api/graph/queries", s.handleGraphQueriesAPI)
+	r.GET("/api/graph/results", s.handleGraphResultsAPI)
 	return r
 }
 
@@ -354,5 +356,142 @@ func TestParseGraphLimit(t *testing.T) {
 				t.Fatalf("limit = %d, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestHandleGraphQueriesAPI_Filter(t *testing.T) {
+	db := newWebTestDB(t)
+	_, err := db.SaveResults([]storage.SearchResult{
+		{Title: "Alpha", URL: "http://alpha.onion", Source: "Torch", Query: "leak"},
+		{Title: "Beta", URL: "http://beta.onion", Source: "Ahmia", Query: "leak"},
+		{Title: "Gamma", URL: "http://gamma.onion", Source: "Torch", Query: "market"},
+	})
+	if err != nil {
+		t.Fatalf("seed results error: %v", err)
+	}
+
+	s := &Server{db: db}
+	r := setupAPIRouter(s)
+
+	w := performJSONRequest(r, http.MethodGet, "/api/graph/queries?limit=10&q=leak", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Queries []struct {
+			Query string `json:"query"`
+			Count int    `json:"count"`
+		} `json:"queries"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response parse error: %v", err)
+	}
+
+	if len(resp.Queries) != 1 {
+		t.Fatalf("queries len = %d, want 1", len(resp.Queries))
+	}
+	if resp.Queries[0].Query != "leak" {
+		t.Fatalf("query = %q, want %q", resp.Queries[0].Query, "leak")
+	}
+	if resp.Queries[0].Count != 2 {
+		t.Fatalf("count = %d, want 2", resp.Queries[0].Count)
+	}
+}
+
+func TestHandleGraphResultsAPI_PaginationAndFields(t *testing.T) {
+	db := newWebTestDB(t)
+	_, err := db.SaveResults([]storage.SearchResult{
+		{Title: "Alpha", URL: "http://same.onion/page", Source: "Torch", Query: "hunt"},
+		{Title: "Beta", URL: "http://other.onion", Source: "Torch", Query: "hunt"},
+		{Title: "Alpha Mirror", URL: "http://same.onion/page", Source: "Ahmia", Query: "hunt"},
+	})
+	if err != nil {
+		t.Fatalf("seed results error: %v", err)
+	}
+
+	if _, err := db.GetDBConn().Exec("UPDATE graph_nodes SET is_expanded = 1 WHERE url = ?", "http://same.onion/page"); err != nil {
+		t.Fatalf("update graph_nodes error: %v", err)
+	}
+
+	s := &Server{db: db}
+	r := setupAPIRouter(s)
+
+	w := performJSONRequest(r, http.MethodGet, "/api/graph/results?q=hunt&engine=Torch&limit=1&offset=0", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var page1 struct {
+		Query      string `json:"query"`
+		Engine     string `json:"engine"`
+		Offset     int    `json:"offset"`
+		Limit      int    `json:"limit"`
+		NextOffset int    `json:"nextOffset"`
+		Results    []struct {
+			ID          int64  `json:"id"`
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+			SourceCount int    `json:"sourceCount"`
+			IsExpanded  bool   `json:"isExpanded"`
+			Domain      string `json:"domain"`
+		} `json:"results"`
+	}
+
+	if err := json.Unmarshal(w.Body.Bytes(), &page1); err != nil {
+		t.Fatalf("response parse error: %v", err)
+	}
+
+	if page1.Query != "hunt" || page1.Engine != "Torch" {
+		t.Fatalf("unexpected query/engine: %s/%s", page1.Query, page1.Engine)
+	}
+	if page1.Offset != 0 || page1.Limit != 1 {
+		t.Fatalf("unexpected page info: offset=%d limit=%d", page1.Offset, page1.Limit)
+	}
+	if len(page1.Results) != 1 {
+		t.Fatalf("results len = %d, want 1", len(page1.Results))
+	}
+	if page1.NextOffset != 1 {
+		t.Fatalf("nextOffset = %d, want 1", page1.NextOffset)
+	}
+
+	first := page1.Results[0]
+	if first.SourceCount < 1 {
+		t.Fatalf("sourceCount = %d, want >= 1", first.SourceCount)
+	}
+	if first.URL == "http://same.onion/page" {
+		if !first.IsExpanded {
+			t.Fatalf("expected expanded result for same.onion")
+		}
+		if first.SourceCount != 2 {
+			t.Fatalf("sourceCount = %d, want 2", first.SourceCount)
+		}
+	}
+	if first.Domain == "" {
+		t.Fatalf("domain should not be empty")
+	}
+
+	w2 := performJSONRequest(r, http.MethodGet, "/api/graph/results?q=hunt&engine=Torch&limit=1&offset=1", "")
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w2.Code, http.StatusOK, w2.Body.String())
+	}
+
+	var page2 struct {
+		NextOffset int `json:"nextOffset"`
+		Results    []struct {
+			URL string `json:"url"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &page2); err != nil {
+		t.Fatalf("response parse error: %v", err)
+	}
+	if len(page2.Results) != 1 {
+		t.Fatalf("results len = %d, want 1", len(page2.Results))
+	}
+	if page2.NextOffset != 0 {
+		t.Fatalf("nextOffset = %d, want 0", page2.NextOffset)
+	}
+	if page2.Results[0].URL == first.URL {
+		t.Fatalf("pagination should return a different row in page2")
 	}
 }
