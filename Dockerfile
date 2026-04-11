@@ -1,32 +1,34 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
-WORKDIR /app
+WORKDIR /src
 
-# Install build dependencies
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+# Build dependencies
+RUN apk add --no-cache ca-certificates tzdata
 
-# Copy go mod files
+# Cache dependencies first
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy only required source folders
+COPY cmd ./cmd
+COPY pkg ./pkg
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o keywordhunter ./cmd/main.go
+# Build a small, static binary
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/keywordhunter ./cmd/main.go
 
-# Final stage
-FROM alpine:latest
+FROM alpine:3.22
 
 WORKDIR /app
 
-# Copy the binary from the builder stage
-COPY --from=builder /app/keywordhunter .
-# Copy templates and static files (they are embedded in the binary in server.go, but just in case)
-# Wait, looking at server.go, they are embedded: //go:embed templates/*
-# So we don't need to copy them if they are in the binary.
-# But logs and db should be in volumes.
+# wget is used by compose healthcheck
+RUN apk add --no-cache ca-certificates tzdata wget
+
+COPY --from=builder /out/keywordhunter /app/keywordhunter
+COPY .env.example /app/.env.example
+
+RUN mkdir -p /data/logs \
+	&& ln -sf /data/.env /app/.env
 
 EXPOSE 8080
 
-CMD ["./keywordhunter"]
+CMD ["/app/keywordhunter"]

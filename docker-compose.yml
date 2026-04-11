@@ -1,20 +1,35 @@
 services:
   tor:
     image: osminogin/tor-simple
+    container_name: keywordhunter-tor
     ports:
       - "9051:9050"
-    restart: always
+    restart: unless-stopped
 
   app:
     build: .
+    container_name: keywordhunter-app
     ports:
       - "8080:8080"
     environment:
-      - TOR_PROXY=tor:9050
-      - DB_PATH=/data/keywordhunter.db
-      - LOG_DIR=/data/logs
+      - ADMIN_USER=${ADMIN_USER:-cti_admin}
+      - ADMIN_PASS=${ADMIN_PASS:-admin123}
+      - WEB_SECURE_COOKIES=${WEB_SECURE_COOKIES:-false}
+      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-24}
+      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS:-12}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-30}
+      - TOR_PROXY=${TOR_PROXY:-tor:9050}
+      - DB_PATH=${DB_PATH:-/data/keywordhunter.db}
+      - WEB_ADDR=${WEB_ADDR:-:8080}
+      - LOG_DIR=${LOG_DIR:-/data/logs}
     volumes:
       - ./data:/data
     depends_on:
       - tor
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/login || exit 1"]
+      interval: 25s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped

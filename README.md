@@ -20,14 +20,30 @@ Sistemi bağımlılıklarla uğraşmadan tek komutla ayağa kaldırmak için Doc
 
 2. Konteynerleri başlatın:
    ```bash
+   mkdir -p data
+   # Opsiyonel: baslangic degerlerini ozellestirmek icin .env olusturun
    cp .env.example .env
-   # Gerekirse .env içindeki değerleri düzenleyin
-   docker-compose up -d --build
+   docker compose up -d --build
    ```
+
+   Not: Eski Docker sürümlerinde komut `docker-compose up -d --build` olabilir.
 
 3. Tarayıcıdan erişin:
    - URL: `http://localhost:8080`
-   - Kullanıcı Adı / Şifre: `.env` dosyasındaki `ADMIN_USER` ve `ADMIN_PASS`
+   - Kullanıcı Adı / Şifre:
+     - `.env` kullandıysanız: `ADMIN_USER` ve `ADMIN_PASS` değerleri
+     - `.env` yoksa varsayılan: `cti_admin / admin123`
+
+4. Faydalı komutlar:
+   ```bash
+   docker compose logs -f
+   docker compose ps
+   docker compose down
+   ```
+
+Docker kurulumu şu şekilde çalışır:
+- Veritabanı ve loglar `./data` klasöründe kalıcıdır.
+- `/settings` ekranından yapılan runtime ayar değişiklikleri `./data/.env` dosyasına yazılır ve kalıcıdır.
 
    ![Giriş Ekranı](docs/screenshots/login_view.jpg)
 

@@ -1,22 +1,10 @@
 @echo off
-setlocal
+setlocal EnableExtensions
+
 echo ===================================================
-echo [1] 8080 Portunu Temizle
+echo [1] Docker Kontrolu
 echo ===================================================
 
-:: 8080 portunu kullanan PID'yi bul
-for /f "tokens=5" %%a in ('netstat -aon ^| find ":8080" ^| find "LISTENING"') do (
-    echo Port 8080 PID: %%a
-    taskkill /F /PID %%a
-    echo Port 8080 serbest birakildi.
-)
-
-echo.
-echo ===================================================
-echo [2] Eski Docker Konteynerlarini Temizle
-echo ===================================================
-
-:: Docker çalışıyor mu kontrol et
 docker info >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
@@ -28,16 +16,36 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: Çalışan tüm konteynerleri durdur
-echo Durduruluyor...
-for /f "tokens=*" %%i in ('docker ps -q') do (
-    docker stop %%i
+set "COMPOSE_CMD=docker compose"
+docker compose version >nul 2>&1
+if %errorlevel% neq 0 (
+    set "COMPOSE_CMD=docker-compose"
+    docker-compose version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo.
+        echo [HATA] Ne "docker compose" ne de "docker-compose" bulundu.
+        echo Lutfen Docker Compose kurulumunu kontrol edin.
+        echo.
+        pause
+        exit /b
+    )
 )
 
-:: Durmuş tüm konteynerleri sil
-echo Siliniyor...
-for /f "tokens=*" %%i in ('docker ps -a -q') do (
-    docker rm %%i
+echo [+] Compose komutu: %COMPOSE_CMD%
+
+echo.
+echo ===================================================
+echo [2] Ortam Hazirlama
+echo ===================================================
+
+if not exist ".env" (
+    echo [*] .env bulunamadi, .env.example kopyalaniyor...
+    copy /Y ".env.example" ".env" >nul
+)
+
+if not exist "data" (
+    echo [*] data klasoru olusturuluyor...
+    mkdir "data"
 )
 
 echo.
@@ -45,14 +53,16 @@ echo ===================================================
 echo [3] Keyword Hunter Baslatiliyor (Docker)
 echo ===================================================
 
-docker-compose up -d --build
+%COMPOSE_CMD% down --remove-orphans
+%COMPOSE_CMD% up -d --build
 
 if %errorlevel% neq 0 (
     echo Baslatma sirasinda hata olustu.
+    echo Hata kayitlarini gormek icin: %COMPOSE_CMD% logs -f
     pause
 ) else (
     echo.
     echo [BASARILI] Uygulama baslatildi: http://localhost:8080
-    echo Loglari gormek icin: docker-compose logs -f
+    echo Loglari gormek icin: %COMPOSE_CMD% logs -f
     pause
 )

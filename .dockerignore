@@ -1,0 +1,27 @@
+.git
+.gitignore
+.claude
+.vscode
+.idea
+
+# Local binaries and temp output
+*.exe
+keywordhunter
+keywordhunter.exe
+dist
+build
+tmp
+temp
+
+# Runtime data
+logs
+data
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Docs and generated artifacts
+/docs/screenshots
