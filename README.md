@@ -15,16 +15,20 @@ Projeyi çalıştırmak için iki yöntem bulunmaktadır. Üretim ortamları ve 
 #### Hızlı Başlangıç (3 adım)
 
 ```bash
-# 1. Depoyu klonlayın
 git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
 cd Keyword-Hunter
-
-# 2. Yapılandırma dosyasını oluşturun ve düzenleyin
-cp .env.example .env
-# .env içinde ADMIN_USER ve ADMIN_PASS değerlerini mutlaka değiştirin!
-
-# 3. Tek komutla başlatın
 mkdir -p data
+cp .env.example data/.env
+docker compose up -d --build
+```
+
+Windows PowerShell için:
+
+```powershell
+git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
+cd Keyword-Hunter
+New-Item -ItemType Directory -Path data -Force | Out-Null
+Copy-Item .env.example data/.env -Force
 docker compose up -d --build
 ```
 
@@ -35,7 +39,7 @@ docker compose up -d --build
 | Bileşen | Adres | Notlar |
 |---------|-------|--------|
 | Web Arayüzü | `http://localhost:8080` | |
-| Giriş bilgileri | `.env` deki `ADMIN_USER` / `ADMIN_PASS` | Varsayılan: `cti_admin` / `admin123` |
+| Giriş bilgileri | `data/.env` içindeki `ADMIN_USER` / `ADMIN_PASS` | Örnek varsayılan: `admin` / `admin123` |
 
 #### Çalışan Servisler
 
@@ -95,6 +99,8 @@ docker compose up -d --build --force-recreate
 ```
 
 > `/settings` ekranından yapılan tüm runtime ayar değişiklikleri `./data/.env` dosyasına yazılır ve konteyner yeniden başlatılsa bile korunur.
+
+Docker çalışırken kaynak env dosyası `./data/.env` dosyasıdır; root `.env` dosyası Docker için kullanılmaz.
 
 #### Sorun Giderme
 

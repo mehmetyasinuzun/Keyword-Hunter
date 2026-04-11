@@ -195,14 +195,16 @@
                                     class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs w-20 outline-none focus:border-blue-500 transition">
                             </td>
                             <td class="px-4 py-4 text-center">
-                                <div class="flex flex-col items-center gap-0.5">
+                                <div class="inline-flex items-center gap-2">
                                     <span id="count-{{.ID}}"
                                         class="font-mono font-bold text-lg {{if gt .KeywordCount 0}}text-green-500{{else}}text-gray-600{{end}}">
                                         {{.KeywordCount}}
                                     </span>
-                                    <button onclick="analyzeResult({{.ID}}, this)"
-                                        title="Keyword frekansını yenile (Tor üzerinden tarar)"
-                                        class="text-[9px] text-gray-600 hover:text-blue-400 transition leading-none">🔄</button>
+                                    <button onclick="analyzeResult('{{.ID}}', this)"
+                                        class="bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded px-2 py-1 text-xs font-bold transition"
+                                        title="Keyword frekansını Tor üzerinden yeniden tara">
+                                        🔄
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -624,6 +626,7 @@
 
         // Keyword frekansını yenile — /api/analyze-result
         function analyzeResult(id, btn) {
+            const original = btn.textContent;
             btn.textContent = '⏳';
             btn.disabled = true;
 
@@ -632,19 +635,22 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: parseInt(id) })
             }).then(r => r.json()).then(data => {
-                btn.textContent = '🔄';
+                btn.textContent = original;
                 btn.disabled = false;
+
                 if (data.success) {
                     const el = document.getElementById('count-' + id);
                     el.textContent = data.count;
                     el.classList.remove('text-gray-600');
-                    el.classList.add('text-green-500');
+                    if (parseInt(data.count) > 0) {
+                        el.classList.add('text-green-500');
+                    }
                     showToast('Frekans güncellendi: ' + data.count);
                 } else {
-                    showToast('Hata: ' + (data.error || 'tarama başarısız'));
+                    showToast('Hata: ' + (data.error || 'Tarama başarısız'));
                 }
             }).catch(() => {
-                btn.textContent = '🔄';
+                btn.textContent = original;
                 btn.disabled = false;
                 showToast('Bağlantı hatası');
             });

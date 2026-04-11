@@ -13,6 +13,7 @@ const (
 	defaultDBPath         = "keywordhunter.db"
 	defaultWebAddr        = ":8080"
 	defaultLogDir         = "logs"
+	defaultLogLevel       = "info"
 	defaultSessionTTL     = 24
 	defaultRateLimitRPS   = 12
 	defaultRateLimitBurst = 30
@@ -80,6 +81,11 @@ func Load(envFilePath string) (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
+	logLevel, err := parseLogLevel(get("LOG_LEVEL", defaultLogLevel))
+	if err != nil {
+		return AppConfig{}, err
+	}
+
 	secureCookies := parseBool(get("WEB_SECURE_COOKIES", "false"))
 
 	cfg := AppConfig{
@@ -88,7 +94,7 @@ func Load(envFilePath string) (AppConfig, error) {
 		DBPath:          get("DB_PATH", defaultDBPath),
 		WebAddr:         get("WEB_ADDR", defaultWebAddr),
 		LogDir:          get("LOG_DIR", defaultLogDir),
-		LogLevel:        strings.ToUpper(get("LOG_LEVEL", "info")),
+		LogLevel:        logLevel,
 		AdminUser:       adminUser,
 		AdminPass:       adminPass,
 		SecureCookies:   secureCookies,
@@ -131,4 +137,14 @@ func parseFloat(raw string, minVal float64, maxVal float64, key string) (float64
 		return 0, fmt.Errorf("%s %.1f ile %.1f arasinda olmalidir", key, minVal, maxVal)
 	}
 	return value, nil
+}
+
+func parseLogLevel(raw string) (string, error) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case "debug", "info", "warn", "error":
+		return value, nil
+	default:
+		return "", fmt.Errorf("LOG_LEVEL gecersiz deger: %s (debug/info/warn/error)", raw)
+	}
 }

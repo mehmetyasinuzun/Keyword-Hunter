@@ -12,16 +12,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - ADMIN_USER=${ADMIN_USER:-cti_admin}
-      - ADMIN_PASS=${ADMIN_PASS:-admin123}
-      - WEB_SECURE_COOKIES=${WEB_SECURE_COOKIES:-false}
-      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-24}
-      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS:-12}
-      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-30}
-      - TOR_PROXY=${TOR_PROXY:-tor:9050}
-      - DB_PATH=${DB_PATH:-/data/keywordhunter.db}
-      - WEB_ADDR=${WEB_ADDR:-:8080}
-      - LOG_DIR=${LOG_DIR:-/data/logs}
+      - ENV_FILE=/data/.env
     volumes:
       - ./data:/data
     depends_on:

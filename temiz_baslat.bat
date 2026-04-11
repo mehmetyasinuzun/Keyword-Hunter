@@ -38,14 +38,18 @@ echo ===================================================
 echo [2] Ortam Hazirlama
 echo ===================================================
 
-if not exist ".env" (
-    echo [*] .env bulunamadi, .env.example kopyalaniyor...
-    copy /Y ".env.example" ".env" >nul
-)
-
 if not exist "data" (
     echo [*] data klasoru olusturuluyor...
     mkdir "data"
+)
+
+if not exist "data\.env" (
+    echo [*] data\.env bulunamadi, .env.example kopyalaniyor...
+    copy /Y ".env.example" "data\.env" >nul
+)
+
+if exist ".env" (
+    echo [BILGI] Root .env Docker tarafinda artik kullanilmiyor. Kaynak dosya: data\.env
 )
 
 echo.

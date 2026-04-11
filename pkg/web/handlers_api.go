@@ -832,7 +832,7 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 		"internalCount": countByType(links, "internal"),
 		"externalCount": countByType(links, "external"),
 		"children":      children,
-		"graphNodeId":   parentID, // Frontend lazy-load için
+		"graphNodeId":   parentID,
 	})
 }
 
@@ -851,16 +851,15 @@ func (s *Server) handleGetChildren(c *gin.Context) {
 		return
 	}
 
-	// DB rows → D3 GraphNode formatı
 	nodes := make([]storage.GraphNode, 0, len(children))
-	for _, ch := range children {
+	for _, child := range children {
 		nodes = append(nodes, storage.GraphNode{
-			Name:       ch.Title,
-			URL:        ch.URL,
-			Type:       ch.LinkType,
-			NodeID:     ch.ID,
-			IsExpanded: ch.IsExpanded,
-			Domain:     ch.Domain,
+			Name:       child.Title,
+			URL:        child.URL,
+			Type:       child.LinkType,
+			NodeID:     child.ID,
+			IsExpanded: child.IsExpanded,
+			Domain:     child.Domain,
 			Children:   []*storage.GraphNode{},
 		})
 	}

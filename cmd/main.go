@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,25 +18,16 @@ import (
 )
 
 func main() {
-	appConfig, err := config.Load(".env")
+	envFilePath := resolveEnvFilePath()
+	appConfig, err := config.Load(envFilePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Konfigürasyon hatası: %v\n", err)
-		fmt.Fprintln(os.Stderr, "İpucu: .env.example dosyasını .env olarak kopyalayıp değerleri düzenleyin")
+		fmt.Fprintf(os.Stderr, "Konfigürasyon hatası (%s): %v\n", envFilePath, err)
+		fmt.Fprintln(os.Stderr, "Ipucu: local icin .env.example dosyasini .env olarak kopyalayin; Docker icin ENV_FILE=/data/.env kullanilir")
 		os.Exit(1)
 	}
 
-	// Logger'ı başlat — LOG_LEVEL env ile seviye belirlenir (debug/info/warn/error)
-	logLevel := map[string]logger.LogLevel{
-		"DEBUG": logger.DEBUG,
-		"INFO":  logger.INFO,
-		"WARN":  logger.WARN,
-		"ERROR": logger.ERROR,
-	}
-	level, ok := logLevel[appConfig.LogLevel]
-	if !ok {
-		level = logger.INFO
-	}
-	if err := logger.Init(appConfig.LogDir, level, true); err != nil {
+	// Logger seviyesi LOG_LEVEL ile kontrol edilir (debug/info/warn/error)
+	if err := logger.Init(appConfig.LogDir, resolveLogLevel(appConfig.LogLevel), true); err != nil {
 		panic("Logger başlatılamadı: " + err.Error())
 	}
 	defer logger.Close()
@@ -129,4 +121,25 @@ func printBanner() {
 -------------------------------------------------------------
 `
 	println(banner)
+}
+
+func resolveEnvFilePath() string {
+	path := strings.TrimSpace(os.Getenv("ENV_FILE"))
+	if path != "" {
+		return path
+	}
+	return ".env"
+}
+
+func resolveLogLevel(raw string) logger.LogLevel {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "DEBUG":
+		return logger.DEBUG
+	case "WARN":
+		return logger.WARN
+	case "ERROR":
+		return logger.ERROR
+	default:
+		return logger.INFO
+	}
 }

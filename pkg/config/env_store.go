@@ -19,6 +19,7 @@ var envWriteOrder = []string{
 	"SESSION_TTL_HOURS",
 	"RATE_LIMIT_RPS",
 	"RATE_LIMIT_BURST",
+	"LOG_LEVEL",
 	"TOR_PROXY",
 	"DB_PATH",
 	"WEB_ADDR",

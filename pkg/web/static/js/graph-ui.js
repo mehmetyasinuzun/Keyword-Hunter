@@ -297,20 +297,19 @@ function expandNode() {
             showToast(`✅ Derinleştirildi: ${data.savedLinks || 0} kayıt`, 'success');
             node.data.isExpanded = true;
 
-            // Eğer graphNodeId varsa ve D3 hierarchy hazırsa, sadece bu node'u güncelle
-            const graphNodeId = data.graphNodeId;
-            if (graphNodeId && GraphState.root) {
-                fetch(`/api/graph/children/${graphNodeId}`)
+            const graphNodeId = Number(data.graphNodeId) || 0;
+            if (graphNodeId > 0 && GraphState.root) {
+                fetch('/api/graph/children/' + graphNodeId)
                     .then(r => r.json())
                     .then(childData => {
-                        if (childData.success && childData.children && childData.children.length > 0) {
-                            // Mevcut node'a children graftle ve render et
+                        if (childData.success && Array.isArray(childData.children) && childData.children.length > 0) {
                             node.data.children = childData.children;
-                            node._children = null;
-                            node.children = node.children
-                                ? node.children
-                                : childData.children.map(ch => ({ data: ch, depth: node.depth + 1, parent: node }));
-                            renderLayout();
+                            if (GraphState.root && GraphState.root.data) {
+                                createGraph(GraphState.root.data);
+                            } else {
+                                initGraph(window.currentQuery || '');
+                                return;
+                            }
                             setTimeout(fitToScreen, 150);
                         } else {
                             initGraph(window.currentQuery || '');
