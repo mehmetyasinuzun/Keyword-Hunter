@@ -687,6 +687,33 @@ func (s *Server) handleStats(c *gin.Context) {
 	})
 }
 
+// handleNewResults son N saatte scheduler tarafından bulunan yeni sonuçları döndürür
+func (s *Server) handleNewResults(c *gin.Context) {
+	hoursStr := c.DefaultQuery("hours", "24")
+	limitStr := c.DefaultQuery("limit", "20")
+
+	hours, err := strconv.Atoi(hoursStr)
+	if err != nil || hours <= 0 || hours > 168 {
+		hours = 24
+	}
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	results, err := s.db.GetNewResults(hours, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"hours":   hours,
+		"count":   len(results),
+		"results": results,
+	})
+}
+
 // handleQueriesAPI mevcut sorguları döndürür
 func (s *Server) handleQueriesAPI(c *gin.Context) {
 	queries, err := s.db.GetQueries()
@@ -805,10 +832,11 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 		"internalCount": countByType(links, "internal"),
 		"externalCount": countByType(links, "external"),
 		"children":      children,
+		"graphNodeId":   parentID, // Frontend lazy-load için
 	})
 }
 
-// handleGetChildren bir node'un children'larını getirir
+// handleGetChildren bir node'un children'larını D3-uyumlu GraphNode formatında döndürür
 func (s *Server) handleGetChildren(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -823,8 +851,59 @@ func (s *Server) handleGetChildren(c *gin.Context) {
 		return
 	}
 
+	// DB rows → D3 GraphNode formatı
+	nodes := make([]storage.GraphNode, 0, len(children))
+	for _, ch := range children {
+		nodes = append(nodes, storage.GraphNode{
+			Name:       ch.Title,
+			URL:        ch.URL,
+			Type:       ch.LinkType,
+			NodeID:     ch.ID,
+			IsExpanded: ch.IsExpanded,
+			Domain:     ch.Domain,
+			Children:   []*storage.GraphNode{},
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":  true,
-		"children": children,
+		"children": nodes,
 	})
+}
+
+// handleAlertConfigGet mevcut bildirim ayarlarını döndürür
+func (s *Server) handleAlertConfigGet(c *gin.Context) {
+	cfg, err := s.db.GetAlertConfig()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, cfg)
+}
+
+// handleAlertConfigSave bildirim ayarlarını kaydeder
+func (s *Server) handleAlertConfigSave(c *gin.Context) {
+	var req struct {
+		WebhookURL     string `json:"webhookUrl"`
+		MinCriticality int    `json:"minCriticality"`
+		Enabled        bool   `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		return
+	}
+	if req.MinCriticality < 1 || req.MinCriticality > 5 {
+		req.MinCriticality = 3
+	}
+
+	cfg := storage.AlertConfig{
+		WebhookURL:     strings.TrimSpace(req.WebhookURL),
+		MinCriticality: req.MinCriticality,
+		Enabled:        req.Enabled,
+	}
+	if err := s.db.SaveAlertConfig(cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }

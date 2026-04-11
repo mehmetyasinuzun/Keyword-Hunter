@@ -24,8 +24,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Logger'ı başlat - Kullanıcı isteği üzerine DEBUG seviyesine çekildi
-	if err := logger.Init(appConfig.LogDir, logger.DEBUG, true); err != nil {
+	// Logger'ı başlat — LOG_LEVEL env ile seviye belirlenir (debug/info/warn/error)
+	logLevel := map[string]logger.LogLevel{
+		"DEBUG": logger.DEBUG,
+		"INFO":  logger.INFO,
+		"WARN":  logger.WARN,
+		"ERROR": logger.ERROR,
+	}
+	level, ok := logLevel[appConfig.LogLevel]
+	if !ok {
+		level = logger.INFO
+	}
+	if err := logger.Init(appConfig.LogDir, level, true); err != nil {
 		panic("Logger başlatılamadı: " + err.Error())
 	}
 	defer logger.Close()

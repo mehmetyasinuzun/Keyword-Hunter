@@ -159,6 +159,21 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("tagging_jobs tablosu oluşturulamadı: %w", err)
 	}
 
+	// Alert config tablosu - tek satır (id=1 zorunlu)
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS alert_config (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			webhook_url TEXT DEFAULT '',
+			min_criticality INTEGER DEFAULT 3,
+			enabled INTEGER DEFAULT 0,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		INSERT OR IGNORE INTO alert_config (id) VALUES (1);
+	`)
+	if err != nil {
+		return fmt.Errorf("alert_config tablosu oluşturulamadı: %w", err)
+	}
+
 	// Kalıcı oturumlar tablosu
 	_, err = db.conn.Exec(`
 		CREATE TABLE IF NOT EXISTS sessions (

@@ -236,8 +236,19 @@ func (db *DB) getExpandedNodeIDsByURL() map[string]int64 {
 	return result
 }
 
-// loadGraphChildren recursive olarak children yükler
+// maxGraphDepth recursive expand yüklemesinde izin verilen maksimum derinlik
+const maxGraphDepth = 3
+
+// loadGraphChildren recursive olarak children yükler (max 3 seviye)
 func (db *DB) loadGraphChildren(parentID int64) []*GraphNode {
+	return db.loadGraphChildrenDepth(parentID, 0)
+}
+
+func (db *DB) loadGraphChildrenDepth(parentID int64, depth int) []*GraphNode {
+	if depth >= maxGraphDepth {
+		return []*GraphNode{}
+	}
+
 	children, err := db.GetGraphChildren(parentID)
 	if err != nil {
 		return nil
@@ -255,9 +266,8 @@ func (db *DB) loadGraphChildren(parentID int64) []*GraphNode {
 			Children:   []*GraphNode{},
 		}
 
-		// Recursive yükleme
 		if child.IsExpanded {
-			node.Children = db.loadGraphChildren(child.ID)
+			node.Children = db.loadGraphChildrenDepth(child.ID, depth+1)
 		}
 
 		result = append(result, node)
@@ -360,12 +370,12 @@ func (db *DB) GetGraphNodeByID(id int64) (*GraphNodeDB, error) {
 	return &node, nil
 }
 
-// GetGraphChildren bir node'un child'larını getirir
+// GetGraphChildren bir node'un child'larını getirir (max 500 kayıt)
 func (db *DB) GetGraphChildren(parentID int64) ([]GraphNodeDB, error) {
 	rows, err := db.conn.Query(`
 		SELECT id, url, title, domain, parent_id, depth, link_type, source_query, discovered_at, is_expanded
 		FROM graph_nodes WHERE parent_id = ?
-		ORDER BY link_type, title
+		ORDER BY link_type, title LIMIT 500
 	`, parentID)
 	if err != nil {
 		return nil, err

@@ -85,6 +85,19 @@
                 </button>
             </form>
 
+            <!-- Tag Cloud Filter -->
+            <div class="mt-4 border-t border-gray-700 pt-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Etikete Göre Filtrele</span>
+                    <span id="tag-cloud-loading" class="text-xs text-gray-500">yükleniyor...</span>
+                    <button onclick="clearTagFilter()" id="tag-clear-btn"
+                        class="hidden text-xs text-gray-500 hover:text-white border border-gray-600 rounded px-2 py-0.5 transition">
+                        ✕ Temizle
+                    </button>
+                </div>
+                <div id="tag-cloud" class="flex flex-wrap gap-2"></div>
+            </div>
+
             {{if .results}}
             <div class="mt-4 flex flex-col gap-3">
                 <div class="flex items-center gap-3">
@@ -182,10 +195,15 @@
                                     class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs w-20 outline-none focus:border-blue-500 transition">
                             </td>
                             <td class="px-4 py-4 text-center">
-                                <span id="count-{{.ID}}"
-                                    class="font-mono font-bold text-lg {{if gt .KeywordCount 0}}text-green-500{{else}}text-gray-600{{end}}">
-                                    {{.KeywordCount}}
-                                </span>
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <span id="count-{{.ID}}"
+                                        class="font-mono font-bold text-lg {{if gt .KeywordCount 0}}text-green-500{{else}}text-gray-600{{end}}">
+                                        {{.KeywordCount}}
+                                    </span>
+                                    <button onclick="analyzeResult({{.ID}}, this)"
+                                        title="Keyword frekansını yenile (Tor üzerinden tarar)"
+                                        class="text-[9px] text-gray-600 hover:text-blue-400 transition leading-none">🔄</button>
+                                </div>
                             </td>
                         </tr>
                         {{end}}
@@ -209,6 +227,131 @@
     </div>
 
     <script>
+        // ─── Tag Cloud ────────────────────────────────────────────────────────
+        let activeTag = null;
+        let originalTableHTML = null;
+
+        function loadTagCloud() {
+            fetch('/api/tags')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('tag-cloud-loading').textContent = '';
+                    const cloud = document.getElementById('tag-cloud');
+                    const tags = data.tags || [];
+                    if (tags.length === 0) {
+                        cloud.innerHTML = '<span class="text-xs text-gray-500 italic">Henüz etiket yok.</span>';
+                        return;
+                    }
+                    const maxCount = Math.max(...tags.map(t => t.count));
+                    cloud.innerHTML = tags.map(t => {
+                        const size = t.count >= maxCount * 0.6 ? 'text-sm' : t.count >= maxCount * 0.3 ? 'text-xs' : 'text-[10px]';
+                        return `<button onclick="filterByTag('${escapeAttr(t.tag)}')"
+                            data-tag="${escapeAttr(t.tag)}"
+                            class="tag-cloud-btn ${size} bg-gray-700 hover:bg-blue-600 text-gray-300 hover:text-white border border-gray-600 hover:border-blue-500 rounded-full px-3 py-1 transition font-medium">
+                            ${escapeHtml(t.tag)} <span class="opacity-50">${t.count}</span>
+                        </button>`;
+                    }).join('');
+                })
+                .catch(() => {
+                    document.getElementById('tag-cloud-loading').textContent = 'yüklenemedi';
+                });
+        }
+
+        function filterByTag(tag) {
+            if (activeTag === tag) return;
+            activeTag = tag;
+
+            // Highlight active tag
+            document.querySelectorAll('.tag-cloud-btn').forEach(btn => {
+                btn.classList.toggle('bg-blue-600', btn.dataset.tag === tag);
+                btn.classList.toggle('text-white', btn.dataset.tag === tag);
+                btn.classList.toggle('border-blue-500', btn.dataset.tag === tag);
+                btn.classList.toggle('bg-gray-700', btn.dataset.tag !== tag);
+            });
+            document.getElementById('tag-clear-btn').classList.remove('hidden');
+
+            const tbody = document.querySelector('table tbody');
+            if (tbody && !originalTableHTML) {
+                originalTableHTML = tbody.innerHTML;
+            }
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Yükleniyor...</td></tr>';
+
+            fetch(`/api/results-by-tag?tag=${encodeURIComponent(tag)}&limit=100`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.results || data.results.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500 italic">Bu etiketle eşleşen sonuç yok.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.results.map(r => `
+                        <tr class="hover:bg-gray-700/30 transition group" data-id="${r.ID}">
+                            <td class="px-4 py-4">
+                                <p class="text-white font-bold mb-0.5">${escapeHtml((r.Title || '').substring(0, 50))}</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-mono">${escapeHtml(r.Source || '')}</span>
+                                    <span class="text-[10px] text-gray-500 italic">Sorgu: ${escapeHtml(r.Query || '')}</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <a href="${escapeHtml(r.URL || '')}" target="_blank" class="text-blue-500 hover:underline font-mono text-xs">${escapeHtml((r.URL || '').substring(0, 35))}</a>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex flex-wrap gap-1">${renderTags(r.AutoTags)}</div>
+                            </td>
+                            <td class="px-4 py-4 text-center">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-black ${critClass(r.Criticality)}">${r.Criticality} / 5</span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="bg-gray-700 px-2 py-1 rounded text-[10px] uppercase font-bold">${escapeHtml(r.Category || '')}</span>
+                            </td>
+                            <td class="px-4 py-4 text-center">
+                                <span class="font-mono font-bold text-lg ${r.KeywordCount > 0 ? 'text-green-500' : 'text-gray-600'}">${r.KeywordCount || 0}</span>
+                            </td>
+                        </tr>`).join('');
+                })
+                .catch(() => {
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-red-400">Filtre uygulanamadı.</td></tr>';
+                });
+        }
+
+        function clearTagFilter() {
+            activeTag = null;
+            document.getElementById('tag-clear-btn').classList.add('hidden');
+            document.querySelectorAll('.tag-cloud-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-500');
+                btn.classList.add('bg-gray-700');
+            });
+            const tbody = document.querySelector('table tbody');
+            if (tbody && originalTableHTML) {
+                tbody.innerHTML = originalTableHTML;
+                originalTableHTML = null;
+            }
+        }
+
+        function renderTags(autoTags) {
+            if (!autoTags) return '<span class="text-gray-500 text-xs italic">—</span>';
+            return autoTags.split(', ').filter(Boolean).map(t =>
+                `<span class="tag-pill">${escapeHtml(t)}</span>`).join('');
+        }
+
+        function critClass(c) {
+            if (c >= 5) return 'bg-red-500/20 text-red-500';
+            if (c >= 4) return 'bg-orange-500/20 text-orange-500';
+            if (c >= 3) return 'bg-yellow-500/20 text-yellow-500';
+            return 'bg-blue-500/20 text-blue-500';
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function escapeAttr(str) {
+            return String(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+        }
+
+        document.addEventListener('DOMContentLoaded', loadTagCloud);
+
+        // ─── Results Table ────────────────────────────────────────────────────
         // Tüm sonuç ID'lerini topla
         const allResultIds = [];
         document.querySelectorAll('tr[data-id]').forEach(row => {
@@ -477,6 +620,34 @@
             if (progressDiv) {
                 progressDiv.classList.add('hidden');
             }
+        }
+
+        // Keyword frekansını yenile — /api/analyze-result
+        function analyzeResult(id, btn) {
+            btn.textContent = '⏳';
+            btn.disabled = true;
+
+            fetch('/api/analyze-result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: parseInt(id) })
+            }).then(r => r.json()).then(data => {
+                btn.textContent = '🔄';
+                btn.disabled = false;
+                if (data.success) {
+                    const el = document.getElementById('count-' + id);
+                    el.textContent = data.count;
+                    el.classList.remove('text-gray-600');
+                    el.classList.add('text-green-500');
+                    showToast('Frekans güncellendi: ' + data.count);
+                } else {
+                    showToast('Hata: ' + (data.error || 'tarama başarısız'));
+                }
+            }).catch(() => {
+                btn.textContent = '🔄';
+                btn.disabled = false;
+                showToast('Bağlantı hatası');
+            });
         }
 
         function showToast(msg) {

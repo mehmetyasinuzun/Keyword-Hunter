@@ -216,9 +216,3 @@ func (s *Scraper) ScrapeMultiple(urls []struct{ URL, Title string }, maxWorkers 
 	wg.Wait()
 	return results
 }
-
-func (s *Scraper) ResetSeenHashes() {
-	s.mu.Lock()
-	s.seenHashes = make(map[string]bool)
-	s.mu.Unlock()
-}

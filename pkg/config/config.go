@@ -25,6 +25,7 @@ type AppConfig struct {
 	DBPath          string
 	WebAddr         string
 	LogDir          string
+	LogLevel        string
 	AdminUser       string
 	AdminPass       string
 	SecureCookies   bool
@@ -87,6 +88,7 @@ func Load(envFilePath string) (AppConfig, error) {
 		DBPath:          get("DB_PATH", defaultDBPath),
 		WebAddr:         get("WEB_ADDR", defaultWebAddr),
 		LogDir:          get("LOG_DIR", defaultLogDir),
+		LogLevel:        strings.ToUpper(get("LOG_LEVEL", "info")),
 		AdminUser:       adminUser,
 		AdminPass:       adminPass,
 		SecureCookies:   secureCookies,
