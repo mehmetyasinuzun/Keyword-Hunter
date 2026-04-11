@@ -251,8 +251,15 @@ function copyTitle() {
         .catch(() => fallbackCopy(title));
 }
 
+let _expandInProgress = false;
+
 function expandNode() {
     closeContextMenu();
+    if (_expandInProgress) {
+        showToast('⏳ Derinleştirme devam ediyor...', 'info');
+        return;
+    }
+
     const node = GraphState.selectedNode;
     if (!node || !node.data || !node.data.url) {
         showToast('⚠️ Derinleştirilecek node seçilmedi', 'warning');
@@ -269,6 +276,7 @@ function expandNode() {
         return;
     }
 
+    _expandInProgress = true;
     const loading = document.getElementById('expand-loading');
     if (loading) loading.style.display = 'flex';
 
@@ -288,12 +296,36 @@ function expandNode() {
             }
             showToast(`✅ Derinleştirildi: ${data.savedLinks || 0} kayıt`, 'success');
             node.data.isExpanded = true;
-            initGraph(window.currentQuery || '');
+
+            // Eğer graphNodeId varsa ve D3 hierarchy hazırsa, sadece bu node'u güncelle
+            const graphNodeId = data.graphNodeId;
+            if (graphNodeId && GraphState.root) {
+                fetch(`/api/graph/children/${graphNodeId}`)
+                    .then(r => r.json())
+                    .then(childData => {
+                        if (childData.success && childData.children && childData.children.length > 0) {
+                            // Mevcut node'a children graftle ve render et
+                            node.data.children = childData.children;
+                            node._children = null;
+                            node.children = node.children
+                                ? node.children
+                                : childData.children.map(ch => ({ data: ch, depth: node.depth + 1, parent: node }));
+                            renderLayout();
+                            setTimeout(fitToScreen, 150);
+                        } else {
+                            initGraph(window.currentQuery || '');
+                        }
+                    })
+                    .catch(() => initGraph(window.currentQuery || ''));
+            } else {
+                initGraph(window.currentQuery || '');
+            }
         })
         .catch(err => {
             showToast('❌ ' + err.message, 'error');
         })
         .finally(() => {
+            _expandInProgress = false;
             if (loading) loading.style.display = 'none';
         });
 }

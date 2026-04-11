@@ -192,6 +192,7 @@ func (s *Server) setupRoutes() {
 		protected.GET("/results", s.handleResults)
 		protected.GET("/results/graph", s.handleResultsGraph)
 		protected.GET("/settings", s.handleSettingsPage)
+		protected.GET("/scheduled", s.handleScheduledPage)
 
 		// SSE Events - Gerçek zamanlı loglar için
 		protected.GET("/events", s.handleEvents)
@@ -218,6 +219,9 @@ func (s *Server) setupRoutes() {
 			api.GET("/graph/children/:id", s.handleGetChildren)
 			api.GET("/tags", s.handleTagStats)
 			api.GET("/results-by-tag", s.handleResultsByTag)
+			api.GET("/new-results", s.handleNewResults)
+			api.GET("/alert-config", s.handleAlertConfigGet)
+			api.POST("/alert-config", s.handleAlertConfigSave)
 			api.GET("/settings/env", s.handleEnvSettingsGet)
 			api.POST("/settings/env", s.handleEnvSettingsUpdate)
 		}

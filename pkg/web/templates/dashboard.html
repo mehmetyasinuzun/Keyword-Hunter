@@ -235,7 +235,7 @@
                             <span class="font-bold">{{$count}}</span>
                         </div>
                         <div class="w-full bg-gray-700 rounded-full h-2">
-                            <div class="bg-blue-500 h-2 rounded-full" style="width: 20%"></div> <!-- Mock width -->
+                            <div class="bg-blue-500 h-2 rounded-full category-bar" data-count="{{$count}}"></div>
                         </div>
                     </div>
                     {{else}}
@@ -282,6 +282,33 @@
                     </div>
                     {{end}}
                 </div>
+            </div>
+        </div>
+
+        <!-- Yeni Bulgular Feed -->
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold flex items-center gap-2">
+                    <span class="relative flex h-2.5 w-2.5">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                    </span>
+                    Yeni Bulgular
+                    <span id="new-results-badge" class="text-xs font-normal text-gray-400 ml-1"></span>
+                </h2>
+                <div class="flex items-center gap-3">
+                    <select id="new-results-hours" onchange="loadNewResults()"
+                        class="text-xs bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-blue-500">
+                        <option value="1">Son 1 saat</option>
+                        <option value="6">Son 6 saat</option>
+                        <option value="24" selected>Son 24 saat</option>
+                        <option value="72">Son 3 gün</option>
+                    </select>
+                    <a href="/results" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Tümünü Gör →</a>
+                </div>
+            </div>
+            <div id="new-results-feed" class="space-y-2">
+                <p class="text-gray-500 text-sm text-center py-4">Yükleniyor...</p>
             </div>
         </div>
 
@@ -338,12 +365,73 @@
     </div>
 
     <script>
-        // Process progress bars with data-width attribute (fixes IDE CSS warnings)
         document.addEventListener('DOMContentLoaded', function () {
+            // Algorithm health progress bars (server-computed percentages)
             document.querySelectorAll('.progress-bar[data-width]').forEach(function (bar) {
                 bar.style.width = bar.dataset.width + '%';
             });
+
+            // Category distribution bars (computed from real counts)
+            var totalResults = parseInt('{{.totalResults}}') || 1;
+            document.querySelectorAll('.category-bar[data-count]').forEach(function (bar) {
+                var count = parseInt(bar.dataset.count) || 0;
+                var pct = totalResults > 0 ? Math.max(2, Math.round(count / totalResults * 100)) : 2;
+                bar.style.width = pct + '%';
+            });
+
+            // Initial load of new results feed
+            loadNewResults();
         });
+
+        function loadNewResults() {
+            var hours = document.getElementById('new-results-hours').value;
+            var feed = document.getElementById('new-results-feed');
+            var badge = document.getElementById('new-results-badge');
+
+            fetch('/api/new-results?hours=' + hours + '&limit=20')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var results = data.results || [];
+                    badge.textContent = results.length > 0
+                        ? '(' + results.length + ' yeni)'
+                        : '';
+
+                    if (results.length === 0) {
+                        feed.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">Bu zaman aralığında yeni bulgu yok.</p>';
+                        return;
+                    }
+
+                    var critColors = {
+                        5: 'text-red-500 bg-red-500/10',
+                        4: 'text-orange-500 bg-orange-500/10',
+                        3: 'text-yellow-500 bg-yellow-500/10',
+                        2: 'text-cyan-400 bg-cyan-500/10',
+                        1: 'text-blue-400 bg-blue-500/10'
+                    };
+
+                    feed.innerHTML = results.map(function(r) {
+                        var color = critColors[r.Criticality] || critColors[1];
+                        var title = (r.Title || '').substring(0, 70);
+                        var url = (r.URL || '').substring(0, 55);
+                        var src = r.Source || '';
+                        return '<div class="flex items-center gap-3 py-2 border-b border-gray-700/50 last:border-0 hover:bg-gray-700/20 rounded px-2 transition">' +
+                            '<span class="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded ' + color + '">' + r.Criticality + '</span>' +
+                            '<div class="min-w-0 flex-1">' +
+                                '<p class="text-sm text-white font-medium truncate">' + escDash(title) + '</p>' +
+                                '<p class="text-xs text-blue-400 truncate font-mono">' + escDash(url) + '</p>' +
+                            '</div>' +
+                            '<span class="shrink-0 text-[10px] bg-gray-700 text-gray-400 px-2 py-0.5 rounded font-mono">' + escDash(src) + '</span>' +
+                        '</div>';
+                    }).join('');
+                })
+                .catch(function() {
+                    feed.innerHTML = '<p class="text-red-400 text-sm text-center py-4">Feed yüklenemedi.</p>';
+                });
+        }
+
+        function escDash(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
     </script>
 </body>
 

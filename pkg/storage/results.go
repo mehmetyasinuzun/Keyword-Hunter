@@ -254,6 +254,31 @@ func (db *DB) GetResults(limit int, query string) ([]SearchResult, error) {
 	return results, nil
 }
 
+// GetNewResults son N saat içinde eklenen sonuçları döndürür
+func (db *DB) GetNewResults(hours int, limit int) ([]SearchResult, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at
+		FROM search_results
+		WHERE created_at >= datetime('now', ? || ' hours')
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, -hours, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt); err != nil {
+			continue
+		}
+		results = append(results, r)
+	}
+	return results, nil
+}
+
 // GetStats istatistikleri getirir
 func (db *DB) GetStats() (totalResults int, totalSearches int, err error) {
 	err = db.conn.QueryRow("SELECT COUNT(*) FROM search_results").Scan(&totalResults)

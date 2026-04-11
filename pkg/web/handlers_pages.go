@@ -343,3 +343,12 @@ func (s *Server) handleSettingsPage(c *gin.Context) {
 		"ActivePage": "settings",
 	})
 }
+
+// handleScheduledPage scheduler ve bildirim ayarları sayfası
+func (s *Server) handleScheduledPage(c *gin.Context) {
+	cfg, _ := s.db.GetAlertConfig()
+	c.HTML(http.StatusOK, "scheduled.html", gin.H{
+		"ActivePage":  "scheduled",
+		"alertConfig": cfg,
+	})
+}

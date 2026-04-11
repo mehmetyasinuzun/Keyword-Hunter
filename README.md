@@ -10,42 +10,119 @@ Projeyi çalıştırmak için iki yöntem bulunmaktadır. Üretim ortamları ve 
 
 ### Yöntem 1: Docker ile Kurulum (Önerilen)
 
-Sistemi bağımlılıklarla uğraşmadan tek komutla ayağa kaldırmak için Docker kullanabilirsiniz.
+**Gereksinimler:** Docker 20.10+ ve Docker Compose v2+ (veya `docker-compose` v1.29+)
 
-1. Depoyu klonlayın:
-   ```bash
-   git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
-   cd Keyword-Hunter
-   ```
+#### Hızlı Başlangıç (3 adım)
 
-2. Konteynerleri başlatın:
-   ```bash
-   mkdir -p data
-   # Opsiyonel: baslangic degerlerini ozellestirmek icin .env olusturun
-   cp .env.example .env
-   docker compose up -d --build
-   ```
+```bash
+# 1. Depoyu klonlayın
+git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
+cd Keyword-Hunter
 
-   Not: Eski Docker sürümlerinde komut `docker-compose up -d --build` olabilir.
+# 2. Yapılandırma dosyasını oluşturun ve düzenleyin
+cp .env.example .env
+# .env içinde ADMIN_USER ve ADMIN_PASS değerlerini mutlaka değiştirin!
 
-3. Tarayıcıdan erişin:
-   - URL: `http://localhost:8080`
-   - Kullanıcı Adı / Şifre:
-     - `.env` kullandıysanız: `ADMIN_USER` ve `ADMIN_PASS` değerleri
-     - `.env` yoksa varsayılan: `cti_admin / admin123`
+# 3. Tek komutla başlatın
+mkdir -p data
+docker compose up -d --build
+```
 
-4. Faydalı komutlar:
-   ```bash
-   docker compose logs -f
-   docker compose ps
-   docker compose down
-   ```
+> Eski Docker sürümlerinde: `docker-compose up -d --build`
 
-Docker kurulumu şu şekilde çalışır:
-- Veritabanı ve loglar `./data` klasöründe kalıcıdır.
-- `/settings` ekranından yapılan runtime ayar değişiklikleri `./data/.env` dosyasına yazılır ve kalıcıdır.
+#### Erişim
 
-   ![Giriş Ekranı](docs/screenshots/login_view.jpg)
+| Bileşen | Adres | Notlar |
+|---------|-------|--------|
+| Web Arayüzü | `http://localhost:8080` | |
+| Giriş bilgileri | `.env` deki `ADMIN_USER` / `ADMIN_PASS` | Varsayılan: `cti_admin` / `admin123` |
+
+#### Çalışan Servisler
+
+```
+keywordhunter-tor   → Tor proxy (dahili: tor:9050)
+keywordhunter-app   → Go web sunucusu (dışa: 8080)
+```
+
+Uygulama başladıktan sonra Tor bağlantısı kurulana kadar arama özelliği **~10-30 saniye** bekleyebilir.
+
+#### Ortam Değişkenleri Referansı
+
+| Değişken | Varsayılan | Açıklama |
+|----------|------------|----------|
+| `ADMIN_USER` | — | **Zorunlu.** Giriş kullanıcı adı |
+| `ADMIN_PASS` | — | **Zorunlu.** Güçlü bir şifre seçin |
+| `TOR_PROXY` | `tor:9050` | Docker içi Tor adresi (değiştirmeyin) |
+| `DB_PATH` | `/data/keywordhunter.db` | SQLite veritabanı yolu |
+| `WEB_ADDR` | `:8080` | Sunucu dinleme adresi |
+| `LOG_DIR` | `/data/logs` | Log dosyaları dizini |
+| `LOG_LEVEL` | `info` | Log seviyesi: `debug` / `info` / `warn` / `error` |
+| `SESSION_TTL_HOURS` | `24` | Oturum geçerlilik süresi (1–720) |
+| `RATE_LIMIT_RPS` | `12` | Saniyede maksimum istek (1–200) |
+| `RATE_LIMIT_BURST` | `30` | Ani yük toleransı (1–500) |
+| `WEB_SECURE_COOKIES` | `false` | HTTPS kullanıyorsanız `true` yapın |
+
+#### Faydalı Komutlar
+
+```bash
+# Logları canlı izle
+docker compose logs -f
+
+# Sadece uygulama loglarını izle
+docker compose logs -f app
+
+# Konteyner durumunu gör
+docker compose ps
+
+# Durdur (veriler korunur)
+docker compose down
+
+# Tamamen sıfırla (VERİTABANI SİLİNİR)
+docker compose down -v
+rm -rf ./data
+
+# Güncelleme sonrası yeniden derle
+docker compose up -d --build --force-recreate
+```
+
+#### Kalıcı Veriler
+
+```
+./data/
+├── keywordhunter.db   ← SQLite veritabanı (tüm bulgular)
+├── .env               ← /settings ekranından yapılan değişiklikler buraya yazılır
+└── logs/              ← Uygulama logları
+```
+
+> `/settings` ekranından yapılan tüm runtime ayar değişiklikleri `./data/.env` dosyasına yazılır ve konteyner yeniden başlatılsa bile korunur.
+
+#### Sorun Giderme
+
+**Konteyner başlamıyor:**
+```bash
+docker compose logs app
+# "ADMIN_USER ve ADMIN_PASS zorunludur" hatası → .env dosyasını kontrol edin
+```
+
+**Tor bağlantısı kurulamıyor:**
+```bash
+docker compose logs tor
+# tor servisi running değilse: docker compose restart tor
+```
+
+**Port 8080 kullanımda:**
+```bash
+# .env içinde WEB_ADDR=:9090 yapın, ardından docker-compose.yml'de
+# ports: "9090:9090" olarak güncelleyin
+```
+
+**Sağlık kontrolü:**
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/login
+# 200 dönüyorsa sistem hazır
+```
+
+![Giriş Ekranı](docs/screenshots/login_view.jpg)
 
 ### Yöntem 2: Manuel Kurulum (Windows/Linux)
 
@@ -54,13 +131,13 @@ Geliştirme yapmak veya Docker kullanmadan çalıştırmak isterseniz:
 1. Gereksinimler:
    - Go 1.24 veya üzeri
    - Tor Browser (Arka planda çalışmalı ve 9150 portunu dinlemeli)
-   - GCC (SQLite derlemesi için gerekli)
+   - CGO_ENABLED=0 ile derleme yapıldığından GCC gerekmez
 
 2. Derleme ve Başlatma:
    Windows kullanıcıları için hazır script bulunmaktadır. Bu script eski derlemeleri temizler ve projeyi yeniden başlatır:
    ```bash
    copy .env.example .env
-   # .env dosyasında gerekli düzenlemeleri yapın
+   # .env dosyasında ADMIN_USER ve ADMIN_PASS değerlerini düzenleyin
    build_and_run.bat
    ```
 
@@ -116,6 +193,12 @@ Platform ayarlarının `.env` üzerinden yönetildiği kontrol ekranıdır (`/se
 - **Yönetilebilir Konfigürasyon:** Admin bilgileri, rate-limit, session TTL, Tor/DB/Web adresleri.
 - **Canlı Etki:** Rate-limit ayarları kaydedildiği anda uygulanır.
 - **Güvenlik:** API POST işlemlerinde CSRF koruması ve IP bazlı rate-limit aktif çalışır.
+
+### 7. Bildirim Merkezi (`/scheduled`)
+Yeni bulgular için webhook bildirimleri yapılandırma ekranıdır.
+- **Webhook Desteği:** Slack, Discord, Teams veya herhangi bir HTTP webhook ile entegrasyon.
+- **Eşik Ayarı:** Minimum kritiklik seviyesi belirlenerek gereksiz bildirimler engellenir.
+- **Canlı Feed:** Son N saatteki yeni bulgular bu ekranda anlık takip edilebilir.
 
 ## Teknik Mimari
 
