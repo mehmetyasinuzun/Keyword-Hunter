@@ -206,6 +206,28 @@ Yeni bulgular için webhook bildirimleri yapılandırma ekranıdır.
 - **Eşik Ayarı:** Minimum kritiklik seviyesi belirlenerek gereksiz bildirimler engellenir.
 - **Canlı Feed:** Son N saatteki yeni bulgular bu ekranda anlık takip edilebilir.
 
+![Webhook Bildirim Ayarlari](docs/screenshots/webhook.jpg)
+
+Bu modülün amacı, kritik bulguları manuel kontrol beklemeden ekiplerin kullandığı sistemlere otomatik aktarmaktır.
+
+#### Ne İşe Yarar?
+- Tehdit istihbaratını anlık olarak Slack, Discord veya Teams kanallarına düşürür.
+- Yalnızca belirlediğiniz kritiklik seviyesinin üstündeki bulguları göndererek gürültüyü azaltır.
+- SOC/SecOps ekiplerinin olay müdahale süresini kısaltır.
+
+#### Önerilen Kullanım Akışı
+1. `Bildirimleri Etkinleştir` seçeneğini açın.
+2. Webhook URL alanına hedef sistem URL'sini girin.
+3. `Minimum Kritiklik Seviyesi` değerini operasyonunuza göre seçin (genelde 3 ve üzeri).
+4. `Kaydet` ile ayarları kalıcı hale getirin.
+5. Yeni bulgu geldiğinde sistem ilgili webhook adresine JSON payload olarak POST atar.
+6. `Son Bulgular Feed` alanından hangi bulguların bildirime geçtiğini hızlıca kontrol edin.
+
+#### Nerede Kullanılır?
+- SIEM/SOAR besleme hatlarında ilk alarm katmanı olarak.
+- Incident response ekiplerine öncelikli tehditlerin anlık iletilmesinde.
+- Mavi takım operasyonlarında vardiya ekibine otomatik bilgilendirme amacıyla.
+
 ## Teknik Mimari
 
 - **Backend:** Go (Golang) - Gin Framework
