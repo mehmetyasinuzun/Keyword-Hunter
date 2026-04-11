@@ -142,6 +142,65 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("tagging_jobs tablosu oluşturulamadı: %w", err)
 	}
 
+	// Engine stats tablosu - arama motorlarının sağlık durumu
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS engine_stats (
+			name TEXT PRIMARY KEY,
+			url TEXT NOT NULL,
+			is_active INTEGER DEFAULT 1,
+			last_checked_at DATETIME,
+			last_status TEXT DEFAULT 'unknown',
+			last_response_ms INTEGER DEFAULT 0,
+			success_count INTEGER DEFAULT 0,
+			fail_count INTEGER DEFAULT 0,
+			total_results INTEGER DEFAULT 0,
+			consecutive_fails INTEGER DEFAULT 0,
+			added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("engine_stats tablosu oluşturulamadı: %w", err)
+	}
+
+	// Scheduled searches tablosu - otomatik tarama planlaması
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS scheduled_searches (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			query TEXT NOT NULL,
+			interval_minutes INTEGER NOT NULL DEFAULT 60,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			webhook_url TEXT DEFAULT '',
+			alert_threshold INTEGER DEFAULT 3,
+			last_run_at DATETIME,
+			next_run_at DATETIME,
+			last_result_count INTEGER DEFAULT 0,
+			last_new_count INTEGER DEFAULT 0,
+			total_runs INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_searches(next_run_at);
+		CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_searches(enabled);
+	`)
+	if err != nil {
+		return fmt.Errorf("scheduled_searches tablosu oluşturulamadı: %w", err)
+	}
+
+	// Alert config tablosu - genel bildirim ayarları
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS alert_config (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("alert_config tablosu oluşturulamadı: %w", err)
+	}
+
+	// search_results tablosuna first_seen_run_id ekle (diff için)
+	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN is_new INTEGER DEFAULT 0`)
+
 	return nil
 }
 

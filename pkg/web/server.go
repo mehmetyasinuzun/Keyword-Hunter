@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/monitor"
+	"keywordhunter-mvp/pkg/scheduler"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
 	"keywordhunter-mvp/pkg/storage"
@@ -35,19 +37,33 @@ type BatchRunner interface {
 	RecoverPendingJobs() error
 }
 
+// EngineMonitorIface engine monitor arayüzü
+type EngineMonitorIface interface {
+	CheckNow()
+	Stop()
+}
+
+// SchedulerIface scheduler arayüzü
+type SchedulerIface interface {
+	RunNow(id int64)
+	Stop()
+}
+
 // Server web sunucusu
 type Server struct {
-	db          *storage.DB
-	searcher    *search.Searcher
-	scraper     *scraper.Scraper
-	tagEngine   TagEngine
-	batchRunner BatchRunner
-	router      *gin.Engine
-	httpServer  *http.Server
-	sessions    map[string]time.Time
-	cleanupStop chan struct{}
-	cleanupOnce sync.Once
-	mu          sync.RWMutex
+	db            *storage.DB
+	searcher      *search.Searcher
+	scraper       *scraper.Scraper
+	tagEngine     TagEngine
+	batchRunner   BatchRunner
+	engineMonitor EngineMonitorIface
+	scheduler     SchedulerIface
+	router        *gin.Engine
+	httpServer    *http.Server
+	sessions      map[string]time.Time
+	cleanupStop   chan struct{}
+	cleanupOnce   sync.Once
+	mu            sync.RWMutex
 }
 
 // Config sunucu yapılandırması
@@ -55,6 +71,7 @@ type Config struct {
 	DB       *storage.DB
 	Searcher *search.Searcher
 	Scraper  *scraper.Scraper
+	TorProxy string
 	Username string
 	Password string
 }
@@ -86,6 +103,24 @@ func New(cfg Config) *Server {
 	if err := s.batchRunner.RecoverPendingJobs(); err != nil {
 		logger.Warn("Tagging job recovery başarısız: %v", err)
 	}
+
+	// Engine Monitor başlat (her 5 dakikada bir kontrol)
+	torProxy := cfg.TorProxy
+	if torProxy == "" {
+		torProxy = "127.0.0.1:9150"
+	}
+	em, err := monitor.New(cfg.DB, torProxy, 5*time.Minute)
+	if err != nil {
+		logger.Warn("Engine Monitor başlatılamadı: %v", err)
+	} else {
+		s.engineMonitor = em
+		em.Start()
+	}
+
+	// Scheduler başlat
+	sched := scheduler.New(cfg.DB, cfg.Searcher)
+	sched.Start()
+	s.scheduler = sched
 
 	s.setupRoutes()
 	s.startSessionCleanup()
@@ -124,9 +159,18 @@ func (s *Server) setupRoutes() {
 			}
 			return str[:length] + "..."
 		},
-		"formatTime": func(t time.Time) string {
-			return t.Format("02.01.2006 15:04")
-		},
+		"formatTime": func(t interface{}) string {
+				switch v := t.(type) {
+				case time.Time:
+					return v.Format("02.01.2006 15:04")
+				case *time.Time:
+					if v == nil {
+						return "—"
+					}
+					return v.Format("02.01.2006 15:04")
+				}
+				return "—"
+			},
 		"seq": func(start, end int) []int {
 			var res []int
 			for i := start; i <= end; i++ {
@@ -192,6 +236,28 @@ func (s *Server) setupRoutes() {
 		// Etiket İstatistikleri API
 		protected.GET("/api/tags", s.handleTagStats)
 		protected.GET("/api/results-by-tag", s.handleResultsByTag)
+
+		// Engine Monitor
+		protected.GET("/monitor", s.handleMonitorPage)
+		protected.GET("/api/engines", s.handleEnginesAPI)
+		protected.POST("/api/engines/check-now", s.handleEngineCheckNow)
+		protected.POST("/api/engines/:name/toggle", s.handleEngineToggle)
+		protected.GET("/api/monitor/summary", s.handleMonitorSummary)
+
+		// Scheduled Searches
+		protected.GET("/scheduled", s.handleScheduledPage)
+		protected.GET("/api/scheduled", s.handleGetScheduledSearches)
+		protected.POST("/api/scheduled", s.handleCreateScheduled)
+		protected.POST("/api/scheduled/:id/toggle", s.handleToggleScheduled)
+		protected.DELETE("/api/scheduled/:id", s.handleDeleteScheduled)
+		protected.POST("/api/scheduled/:id/run-now", s.handleRunScheduledNow)
+
+		// Alert Config
+		protected.GET("/api/alert-config", s.handleGetAlertConfig)
+		protected.POST("/api/alert-config", s.handleSaveAlertConfig)
+
+		// Yeni bulgular (diff sonuçları)
+		protected.GET("/api/new-results", s.handleNewResultsAPI)
 	}
 }
 
@@ -218,6 +284,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.cleanupOnce.Do(func() {
 		close(s.cleanupStop)
 	})
+
+	if s.engineMonitor != nil {
+		s.engineMonitor.Stop()
+	}
+	if s.scheduler != nil {
+		s.scheduler.Stop()
+	}
 
 	if s.httpServer == nil {
 		return nil

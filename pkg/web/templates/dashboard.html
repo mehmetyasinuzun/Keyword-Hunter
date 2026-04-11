@@ -205,19 +205,39 @@
             <!-- Algoritma Açıklaması -->
             <div class="mt-6 p-4 bg-gray-900/30 rounded-lg border border-gray-700/50">
                 <div class="flex items-start gap-3">
-                    <span class="text-2xl"></span>
+                    <span class="text-2xl">🧠</span>
                     <div>
-                        <h4 class="font-bold text-gray-300 mb-1">PredictCTI Algoritması Nasıl Çalışır?</h4>
+                        <h4 class="font-bold text-gray-300 mb-1">PredictCTI v2 — Çok-Sinyalli Sınıflandırma Motoru</h4>
                         <p class="text-xs text-gray-500 leading-relaxed">
-                            Her bulgu kaydedilirken, <code class="bg-gray-800 px-1 rounded">Title</code> ve <code
-                                class="bg-gray-800 px-1 rounded">URL</code> metni
-                            <span class="text-yellow-400">6 kategori grubundaki anahtar kelimelere</span> karşı taranır
-                            (ransomware, database, carding, market, forum, chat).
-                            İlk eşleşme kazanır ve kritiklik seviyesi atanır. Eşleşme yoksa → <span
-                                class="text-gray-400">Seviye 1, Kategori: Genel</span>.
+                            Her bulgu kaydedilirken <code class="bg-gray-800 px-1 rounded">Title</code> + <code class="bg-gray-800 px-1 rounded">URL</code> metni,
+                            <span class="text-yellow-400">26 kategori grubundaki 200+ anahtar kelimeye</span> karşı skorlanır.
+                            <strong class="text-gray-400">Weight × Hit</strong> çarpım sistemi ile en güçlü eşleşme kazanır —
+                            Ransomware, APT, Exploit/0day, Veri Sızıntısı, Finansal Dolandırıcılık, Malware/Botnet, İlk Erişim Satışı, DDoS Hizmeti,
+                            Phishing, Uyuşturucu, Silah, Sahte Belge, Hacker Forumu, Spam, Doxxing, Kripto Aklaması ve daha fazlası.
+                            Eşleşme yoksa → <span class="text-gray-400">Seviye 1, Kategori: Genel</span>.
                         </p>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Live System Status -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- Engine Monitor Widget -->
+            <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-5 shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold flex items-center gap-2">📡 Arama Motoru Durumu</h3>
+                    <a href="/monitor" class="text-blue-400 text-xs hover:text-blue-300">Detaylı →</a>
+                </div>
+                <div id="engineWidget" class="text-gray-500 text-sm">Yükleniyor...</div>
+            </div>
+            <!-- Scheduler Widget -->
+            <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-5 shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold flex items-center gap-2">⏰ Zamanlanmış Taramalar</h3>
+                    <a href="/scheduled" class="text-blue-400 text-xs hover:text-blue-300">Yönet →</a>
+                </div>
+                <div id="schedulerWidget" class="text-gray-500 text-sm">Yükleniyor...</div>
             </div>
         </div>
 
@@ -343,7 +363,76 @@
             document.querySelectorAll('.progress-bar[data-width]').forEach(function (bar) {
                 bar.style.width = bar.dataset.width + '%';
             });
+
+            loadMonitorSummary();
         });
+
+        async function loadMonitorSummary() {
+            try {
+                const res = await fetch('/api/monitor/summary');
+                const d = await res.json();
+
+                // Engine widget
+                const engUp = d.enginesUp || 0;
+                const engTotal = d.enginesTotal || 0;
+                const engDown = engTotal - engUp;
+                const engPct = engTotal > 0 ? Math.round(engUp / engTotal * 100) : 0;
+                const engColor = engPct >= 80 ? '#48bb78' : engPct >= 50 ? '#ecc94b' : '#f56565';
+
+                document.getElementById('engineWidget').innerHTML = `
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+                        <div style="text-align:center;">
+                            <div style="font-size:2rem;font-weight:900;color:${engColor};font-family:monospace;">${engUp}</div>
+                            <div style="font-size:0.65rem;color:#8b9dc3;text-transform:uppercase;letter-spacing:1px;">Çevrimiçi</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:2rem;font-weight:900;color:#f56565;font-family:monospace;">${engDown}</div>
+                            <div style="font-size:0.65rem;color:#8b9dc3;text-transform:uppercase;letter-spacing:1px;">Çevrimdışı</div>
+                        </div>
+                        <div style="flex:1;">
+                            <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#8b9dc3;margin-bottom:4px;">
+                                <span>Erişilebilirlik</span><span style="color:${engColor};font-weight:700;">%${engPct}</span>
+                            </div>
+                            <div style="height:6px;background:rgba(139,157,195,0.15);border-radius:3px;">
+                                <div style="height:6px;width:${engPct}%;background:${engColor};border-radius:3px;transition:width 0.5s;"></div>
+                            </div>
+                            <div style="font-size:0.72rem;color:#5a6a8a;margin-top:4px;">${engTotal} motor toplam — <a href="/monitor" style="color:#63b3ed;">Detay için tıkla</a></div>
+                        </div>
+                    </div>`;
+
+                // Scheduler widget
+                const scActive = d.scheduledActive || 0;
+                const scTotal = d.scheduledTotal || 0;
+                if (scTotal === 0) {
+                    document.getElementById('schedulerWidget').innerHTML = `
+                        <div style="text-align:center;padding:12px 0;color:#5a6a8a;">
+                            <div style="font-size:2rem;margin-bottom:6px;">⏰</div>
+                            <div style="font-size:0.85rem;">Henüz zamanlanmış tarama yok.</div>
+                            <a href="/scheduled#new" style="color:#63b3ed;font-size:0.82rem;margin-top:6px;display:inline-block;">+ Hemen Oluştur</a>
+                        </div>`;
+                } else {
+                    document.getElementById('schedulerWidget').innerHTML = `
+                        <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+                            <div style="text-align:center;">
+                                <div style="font-size:2rem;font-weight:900;color:#48bb78;font-family:monospace;">${scActive}</div>
+                                <div style="font-size:0.65rem;color:#8b9dc3;text-transform:uppercase;letter-spacing:1px;">Aktif</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-size:2rem;font-weight:900;color:#8b9dc3;font-family:monospace;">${scTotal - scActive}</div>
+                                <div style="font-size:0.65rem;color:#8b9dc3;text-transform:uppercase;letter-spacing:1px;">Durduruldu</div>
+                            </div>
+                            <div style="flex:1;font-size:0.8rem;color:#8b9dc3;line-height:1.7;">
+                                <div>${scTotal} tarama planlandı</div>
+                                <div style="color:#5a6a8a;font-size:0.75rem;">Her dakika kontrol edilir, yeni bulgular diff ile tespit edilir</div>
+                                <a href="/scheduled" style="color:#63b3ed;font-size:0.78rem;">Yönet →</a>
+                            </div>
+                        </div>`;
+                }
+            } catch(e) {
+                document.getElementById('engineWidget').innerHTML = '<span style="color:#5a6a8a;">Veri alınamadı</span>';
+                document.getElementById('schedulerWidget').innerHTML = '<span style="color:#5a6a8a;">Veri alınamadı</span>';
+            }
+        }
     </script>
 </body>
 

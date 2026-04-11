@@ -84,6 +84,7 @@ func main() {
 		DB:       db,
 		Searcher: searcher,
 		Scraper:  scraperClient,
+		TorProxy: TorProxy,
 		Username: Username,
 		Password: Password,
 	})

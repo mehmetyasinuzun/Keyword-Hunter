@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <title>Zamanlanmış Taramalar — KeywordHunter CTI</title>
+    {{template "head" .}}
+    <style>
+        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+        .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 18px; }
+        .schedule-card { background: var(--bg-card); border: 1px solid var(--bg-card-border); border-radius: var(--radius-lg); padding: 20px; transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .schedule-card:hover { border-color: rgba(99,179,237,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .schedule-card.disabled { opacity: 0.55; }
+        .schedule-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+        .schedule-card.disabled::before { background: rgba(139,157,195,0.3); }
+        .sc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+        .sc-query { font-size: 1rem; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); word-break: break-all; }
+        .sc-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; }
+        .sc-active { background: rgba(72,187,120,0.15); color: #48bb78; border: 1px solid rgba(72,187,120,0.3); }
+        .sc-paused { background: rgba(139,157,195,0.12); color: #8b9dc3; border: 1px solid rgba(139,157,195,0.2); }
+        .sc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+        .sc-stat { background: rgba(7,8,13,0.4); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+        .sc-stat-val { font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono); color: var(--text-primary); }
+        .sc-stat-lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+        .sc-meta { font-size: 0.78rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+        .sc-meta span { display: flex; align-items: center; gap: 6px; }
+        .sc-meta strong { color: var(--text-secondary); }
+        .sc-actions { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(99,179,237,0.06); }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+        .btn-ghost { background: rgba(99,179,237,0.08); color: var(--accent-primary); border: 1px solid rgba(99,179,237,0.2); }
+        .btn-ghost:hover { background: rgba(99,179,237,0.15); }
+        .btn-danger { background: rgba(245,101,101,0.1); color: #f56565; border: 1px solid rgba(245,101,101,0.2); }
+        .btn-danger:hover { background: rgba(245,101,101,0.2); }
+        .btn-success { background: rgba(72,187,120,0.1); color: #48bb78; border: 1px solid rgba(72,187,120,0.2); }
+        .btn-success:hover { background: rgba(72,187,120,0.2); }
+        .btn-warning { background: rgba(236,201,75,0.1); color: #ecc94b; border: 1px solid rgba(236,201,75,0.2); }
+        .btn-warning:hover { background: rgba(236,201,75,0.2); }
+        .new-badge { background: rgba(72,187,120,0.2); color: #48bb78; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 700; }
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--bg-secondary); border: 1px solid var(--bg-card-border); border-radius: var(--radius-xl); padding: 32px; width: 500px; max-width: 95vw; }
+        .modal h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: 20px; color: var(--text-primary); }
+        .form-group { margin-bottom: 16px; }
+        .form-label { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; display: block; }
+        .form-input { width: 100%; background: rgba(7,8,13,0.6); border: 1px solid rgba(99,179,237,0.15); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text-primary); font-size: 0.9rem; outline: none; transition: border-color 0.2s; font-family: var(--font-primary); }
+        .form-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(99,179,237,0.1); }
+        .form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+        .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+        .interval-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .preset-btn { padding: 4px 10px; font-size: 0.75rem; background: rgba(99,179,237,0.08); border: 1px solid rgba(99,179,237,0.15); border-radius: 20px; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+        .preset-btn:hover, .preset-btn.active { background: rgba(99,179,237,0.2); border-color: var(--accent-primary); color: var(--accent-primary); }
+        .empty-state { text-align: center; padding: 80px 20px; color: var(--text-muted); }
+        .empty-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.3; }
+        .crit-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+        .next-run { font-size: 0.75rem; color: var(--accent-primary); font-family: var(--font-mono); }
+        .webhook-icon { font-size: 0.9rem; }
+        .threshold-label { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; }
+        .thr-1 { background: rgba(72,187,120,0.15); color: #48bb78; }
+        .thr-3 { background: rgba(237,137,54,0.15); color: #ed8936; }
+        .thr-5 { background: rgba(245,101,101,0.15); color: #f56565; }
+    </style>
+</head>
+<body>
+{{template "navbar" .}}
+<main class="main">
+    <div class="page-header">
+        <div>
+            <h1 style="font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--text-primary),var(--accent-primary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Zamanlanmış Taramalar</h1>
+            <p style="color:var(--text-muted);margin-top:4px;">Keyword'leri otomatik olarak periyodik tara, yeni bulguları anlık tespit et</p>
+        </div>
+        <button class="btn btn-primary" onclick="openModal()">
+            + Yeni Tarama Planla
+        </button>
+    </div>
+
+    <!-- Schedules Grid -->
+    <div id="schedulesContainer">
+        {{if .searches}}
+        <div class="schedule-grid" id="scheduleGrid">
+            {{range .searches}}
+            <div class="schedule-card {{if not .Enabled}}disabled{{end}}" id="sc-{{.ID}}">
+                <div class="sc-header">
+                    <div>
+                        <div class="sc-query">{{.Query}}</div>
+                        <div style="margin-top:6px;">
+                            {{if .Enabled}}
+                            <span class="sc-badge sc-active">● Aktif</span>
+                            {{else}}
+                            <span class="sc-badge sc-paused">⏸ Durduruldu</span>
+                            {{end}}
+                            {{if .WebhookURL}}<span style="margin-left:6px;" title="Webhook aktif" class="webhook-icon">🔔</span>{{end}}
+                        </div>
+                    </div>
+                    <div style="font-size:0.8rem;color:var(--text-muted);text-align:right;">
+                        <div>Her <strong style="color:var(--accent-primary)">{{.IntervalMinutes}} dk</strong></div>
+                        <div style="margin-top:2px;">
+                            Uyarı ≥
+                            <span class="threshold-label {{if ge .AlertThreshold 5}}thr-5{{else if ge .AlertThreshold 3}}thr-3{{else}}thr-1{{end}}">Sev {{.AlertThreshold}}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sc-stats">
+                    <div class="sc-stat">
+                        <div class="sc-stat-val">{{.TotalRuns}}</div>
+                        <div class="sc-stat-lbl">Toplam Çalışma</div>
+                    </div>
+                    <div class="sc-stat">
+                        <div class="sc-stat-val" style="color:var(--accent-primary)">{{.LastResultCount}}</div>
+                        <div class="sc-stat-lbl">Son Sonuç</div>
+                    </div>
+                    <div class="sc-stat">
+                        <div class="sc-stat-val" style="{{if gt .LastNewCount 0}}color:#48bb78{{end}}">
+                            {{.LastNewCount}}
+                            {{if gt .LastNewCount 0}}<span class="new-badge">YENİ</span>{{end}}
+                        </div>
+                        <div class="sc-stat-lbl">Son Çalışmada Yeni</div>
+                    </div>
+                </div>
+
+                <div class="sc-meta">
+                    {{if .LastRunAt}}
+                    <span>⏱ <strong>Son Çalışma:</strong> {{formatTime .LastRunAt}}</span>
+                    {{else}}
+                    <span>⏱ <strong>Son Çalışma:</strong> Henüz çalışmadı</span>
+                    {{end}}
+                    {{if .NextRunAt}}
+                    <span>⏭ <strong>Sonraki:</strong> <span class="next-run">{{formatTime .NextRunAt}}</span></span>
+                    {{end}}
+                    {{if .WebhookURL}}
+                    <span>🔔 <strong>Webhook:</strong> Aktif</span>
+                    {{end}}
+                </div>
+
+                <div class="sc-actions">
+                    <button class="btn btn-sm btn-ghost" onclick="runNow({{.ID}})">▶ Şimdi Çalıştır</button>
+                    {{if .Enabled}}
+                    <button class="btn btn-sm btn-warning" onclick="toggleSchedule({{.ID}})">⏸ Durdur</button>
+                    {{else}}
+                    <button class="btn btn-sm btn-success" onclick="toggleSchedule({{.ID}})">▶ Aktif Et</button>
+                    {{end}}
+                    <button class="btn btn-sm btn-danger" onclick="deleteSchedule({{.ID}}, '{{.Query}}')">Sil</button>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="empty-state">
+            <div class="empty-icon">⏰</div>
+            <h3 style="color:var(--text-secondary);margin-bottom:8px;">Henüz zamanlanmış tarama yok</h3>
+            <p style="max-width:400px;margin:0 auto 20px;">Arama keyword'lerini otomatik olarak düzenli aralıklarla tara. Yeni bulgular tespit edildiğinde Slack/Discord webhook ile bildirim al.</p>
+            <button class="btn btn-primary" onclick="openModal()">+ İlk Taramayı Planla</button>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Info Box -->
+    <div style="margin-top:20px;padding:14px 20px;background:rgba(99,179,237,0.05);border:1px solid rgba(99,179,237,0.1);border-radius:var(--radius-md);font-size:0.82rem;color:var(--text-muted);line-height:1.6;">
+        <strong style="color:var(--text-secondary);">Nasıl Çalışır?</strong>
+        Sistem her dakika DB'yi kontrol eder ve süresi gelen taramaları otomatik başlatır. Her çalışmada
+        <strong style="color:var(--accent-primary)">diff algoritması</strong> ile yalnızca <em>yeni</em> bulunan siteler tespit edilir.
+        Belirlenen kritiklik eşiğini aşan yeni bulgular varsa Webhook URL'ine bildirim gönderilir.
+        Aynı anda en fazla 1 zamanlanmış tarama çalışır (kaynak koruma).
+    </div>
+</main>
+
+<!-- New Schedule Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+    <div class="modal">
+        <h2>Yeni Zamanlanmış Tarama</h2>
+        <form onsubmit="createSchedule(event)">
+            <div class="form-group">
+                <label class="form-label">Arama Keyword *</label>
+                <input type="text" class="form-input" id="newQuery" placeholder="örn: ransomware türkiye, data breach 2025" required>
+                <div class="form-hint">Regex de desteklenir. Mevcut arama formatı kullanılır.</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Tarama Aralığı (dakika)</label>
+                <input type="number" class="form-input" id="newInterval" value="60" min="15" max="10080">
+                <div class="interval-presets">
+                    <button type="button" class="preset-btn" onclick="setInterval(15)">15 dk</button>
+                    <button type="button" class="preset-btn active" onclick="setInterval(60)">1 saat</button>
+                    <button type="button" class="preset-btn" onclick="setInterval(360)">6 saat</button>
+                    <button type="button" class="preset-btn" onclick="setInterval(720)">12 saat</button>
+                    <button type="button" class="preset-btn" onclick="setInterval(1440)">1 gün</button>
+                </div>
+                <div class="form-hint">Minimum 15 dakika önerilir. Çok sık tarama Tor bağlantısını yorabilir.</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Uyarı Kritiklik Eşiği</label>
+                <select class="form-input" id="newThreshold">
+                    <option value="1">Seviye 1+ (Her şey)</option>
+                    <option value="2">Seviye 2+ (Orta ve üstü)</option>
+                    <option value="3" selected>Seviye 3+ (Yüksek ve üstü) — Önerilen</option>
+                    <option value="4">Seviye 4+ (Kritik ve üstü)</option>
+                    <option value="5">Sadece Seviye 5 (Acil)</option>
+                </select>
+                <div class="form-hint">Sadece bu seviye ve üstü yeni bulgular için bildirim gönderilir.</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Webhook URL (opsiyonel)</label>
+                <input type="url" class="form-input" id="newWebhook" placeholder="https://discord.com/api/webhooks/... veya Slack webhook">
+                <div class="form-hint">Yeni yüksek kritiklikli bulgu tespit edildiğinde bu URL'ye JSON bildirim gönderilir. Discord ve Slack formatı desteklenir.</div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeModal()">İptal</button>
+                <button type="submit" class="btn btn-primary" id="createBtn">Taramayı Planla</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openModal() {
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('newQuery').focus();
+}
+
+function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function closeModalOutside(e) {
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+function setInterval(mins) {
+    document.getElementById('newInterval').value = mins;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
+async function createSchedule(e) {
+    e.preventDefault();
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.textContent = 'Oluşturuluyor...';
+
+    const body = {
+        query: document.getElementById('newQuery').value.trim(),
+        intervalMinutes: parseInt(document.getElementById('newInterval').value),
+        alertThreshold: parseInt(document.getElementById('newThreshold').value),
+        webhookUrl: document.getElementById('newWebhook').value.trim()
+    };
+
+    try {
+        const res = await fetch('/api/scheduled', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal();
+            window.location.reload();
+        } else {
+            alert('Hata: ' + (data.error || 'Bilinmeyen hata'));
+        }
+    } catch(err) {
+        alert('İstek hatası: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Taramayı Planla';
+    }
+}
+
+async function toggleSchedule(id) {
+    try {
+        const res = await fetch(`/api/scheduled/${id}/toggle`, {method: 'POST'});
+        const data = await res.json();
+        if (data.success) window.location.reload();
+    } catch(e) { alert('Hata: ' + e.message); }
+}
+
+async function deleteSchedule(id, query) {
+    if (!confirm(`"${query}" taramasını silmek istediğinizden emin misiniz?`)) return;
+    try {
+        const res = await fetch(`/api/scheduled/${id}`, {method: 'DELETE'});
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById(`sc-${id}`)?.remove();
+            // Grid boşaldıysa sayfayı yenile
+            if (!document.querySelector('.schedule-card')) window.location.reload();
+        }
+    } catch(e) { alert('Hata: ' + e.message); }
+}
+
+async function runNow(id) {
+    try {
+        const res = await fetch(`/api/scheduled/${id}/run-now`, {method: 'POST'});
+        const data = await res.json();
+        if (data.success) {
+            const card = document.getElementById(`sc-${id}`);
+            if (card) {
+                const hint = document.createElement('div');
+                hint.style.cssText = 'margin-top:8px;padding:6px 10px;background:rgba(72,187,120,0.1);border:1px solid rgba(72,187,120,0.2);border-radius:6px;font-size:0.8rem;color:#48bb78;';
+                hint.textContent = '▶ Tarama başlatıldı — tamamlandığında bulgular güncellenir';
+                card.querySelector('.sc-actions').after(hint);
+                setTimeout(() => hint.remove(), 10000);
+            }
+        } else {
+            alert('Hata: ' + (data.error || 'Bilinmeyen'));
+        }
+    } catch(e) { alert('Hata: ' + e.message); }
+}
+
+// Sayfa yüklendiğinde URL hash'e göre modal aç
+if (window.location.hash === '#new') openModal();
+</script>
+</body>
+</html>
