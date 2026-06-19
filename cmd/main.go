@@ -91,6 +91,7 @@ func main() {
 		RateLimitRPS:   appConfig.RateLimitRPS,
 		RateLimitBurst: appConfig.RateLimitBurst,
 		EnvStore:       envStore,
+		TorProxy:       appConfig.TorProxy,
 	})
 
 	// Sunucuyu goroutine'de başlat

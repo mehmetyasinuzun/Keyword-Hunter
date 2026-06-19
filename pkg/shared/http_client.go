@@ -1,10 +1,12 @@
 package shared
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -59,11 +61,31 @@ func DoWithRetry(client *http.Client, req *http.Request) (*http.Response, error)
 	var lastErr error
 	var resp *http.Response
 
+	ctx := req.Context()
+
+	// Gövdeli istekler için her denemede gövdeyi yeniden oluşturabilmek gerekir.
+	if req.Body != nil && req.GetBody == nil {
+		return nil, fmt.Errorf("gövdeli istekte GetBody zorunludur (retry için)")
+	}
+
 	for attempt := 0; attempt < MaxRetryAttempts; attempt++ {
-		// İlk denemeden sonra backoff uygula
+		// İlk denemeden sonra backoff uygula (iptal-edilebilir)
 		if attempt > 0 {
 			backoffDuration := CalculateBackoff(attempt)
-			time.Sleep(backoffDuration)
+			select {
+			case <-time.After(backoffDuration):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		// Her denemede gövdeyi yeniden bağla
+		if req.Body != nil && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = body
 		}
 
 		// İsteği yap
@@ -114,6 +136,15 @@ func CalculateBackoff(attempt int) time.Duration {
 func IsRetryableError(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	// Tip-tabanlı kontroller (string fallback'ten önce)
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	if errors.Is(err, io.EOF) {
+		return true
 	}
 
 	errStr := err.Error()

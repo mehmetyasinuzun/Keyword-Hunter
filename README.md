@@ -158,7 +158,7 @@ Sistemin komuta merkezidir. Anlık olarak yürütülen operasyonların özetini 
 
 ### 2. Arama Motoru (Hunter Search)
 Hedef odaklı istihbarat toplama modülüdür. Analist, Regex (Düzenli İfade) desteği sayesinde karmaşık sorgular oluşturabilir.
-- **Çoklu Kaynak:** Aynı anda 17'den fazla arama motorunu ve .onion dizinini tarar.
+- **Çoklu Kaynak:** Tor üzerinden canlı erişilebilirliği doğrulanmış tüm aktif dark web arama motorlarını eşzamanlı tarar (ölü/terk edilmiş motorlar düzenli olarak ayıklanır).
 - **Filtreleme:** Sadece belirli tarih aralığındaki veya belirli formatlardaki (örn: kredi kartı bin numaraları) verileri getirebilir.
 
 ![Arama Modülü](docs/screenshots/search_view.jpg)
@@ -241,5 +241,5 @@ Bu modülün amacı, kritik bulguları manuel kontrol beklemeden ekiplerin kulla
 Bu yazılım, siber güvenlik uzmanları ve araştırmacılar için geliştirlmiştir. Yetkisiz sistemlere erişim sağlamak veya yasadışı faaliyetlerde bulunmak amacıyla kullanılamaz. Kullanıcı, aracı yasal sınırlar içerisinde kullanmakla yükümlüdür.
 
 ---
-**Sürüm:** v0.5
+**Sürüm:** v0.9
 **Geliştirici:** Mehmet Yasin Uzun

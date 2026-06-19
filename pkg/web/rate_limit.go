@@ -8,6 +8,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// maxVisitors visitors map'inin alabileceği maksimum girdi sayısı (bellek tükenmesi koruması)
+const maxVisitors = 50000
+
 type rateVisitor struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
@@ -56,6 +59,10 @@ func (rl *IPRateLimiter) getLimiter(ip string) *rate.Limiter {
 
 	visitor, exists := rl.visitors[ip]
 	if !exists {
+		// Üst sınıra ulaşıldıysa idle girdileri temizle, hâlâ doluysa en eskiyi at
+		if len(rl.visitors) >= maxVisitors {
+			rl.evictLocked()
+		}
 		limiter := rate.NewLimiter(rl.rps, rl.burst)
 		rl.visitors[ip] = &rateVisitor{limiter: limiter, lastSeen: time.Now()}
 		return limiter
@@ -63,6 +70,31 @@ func (rl *IPRateLimiter) getLimiter(ip string) *rate.Limiter {
 
 	visitor.lastSeen = time.Now()
 	return visitor.limiter
+}
+
+// evictLocked idle girdileri temizler; hiçbiri idle değilse en eski girdiyi siler.
+// Çağıran rl.mu kilidini tutmalıdır.
+func (rl *IPRateLimiter) evictLocked() {
+	now := time.Now()
+	for ip, visitor := range rl.visitors {
+		if now.Sub(visitor.lastSeen) > 10*time.Minute {
+			delete(rl.visitors, ip)
+		}
+	}
+	if len(rl.visitors) < maxVisitors {
+		return
+	}
+	var oldestIP string
+	var oldestSeen time.Time
+	for ip, visitor := range rl.visitors {
+		if oldestIP == "" || visitor.lastSeen.Before(oldestSeen) {
+			oldestIP = ip
+			oldestSeen = visitor.lastSeen
+		}
+	}
+	if oldestIP != "" {
+		delete(rl.visitors, oldestIP)
+	}
 }
 
 func (rl *IPRateLimiter) Cleanup(maxIdle time.Duration) {

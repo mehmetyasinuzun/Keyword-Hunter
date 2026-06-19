@@ -83,6 +83,9 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 			queries = append(queries, q)
 		}
 	}
+	if err := queryRows.Err(); err != nil {
+		return root, err
+	}
 
 	// Global URL count hesapla - aynı URL kaç farklı source'ta bulundu
 	globalURLCount := make(map[string]int)
@@ -143,6 +146,7 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 			`, q)
 		}
 		if err != nil {
+			logger.Warn("Graph engine alt-sorgusu başarısız (query=%s): %v", q, err)
 			continue
 		}
 

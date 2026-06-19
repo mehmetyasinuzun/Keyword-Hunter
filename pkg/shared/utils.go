@@ -18,10 +18,22 @@ func ExtractDomain(urlStr string) string {
 	return strings.ToLower(urlStr)
 }
 
-// Truncate string kısaltma
+// Truncate string kısaltma (rune-güvenli)
 func Truncate(s string, length int) string {
-	if len(s) <= length {
+	if len([]rune(s)) <= length {
 		return s
 	}
-	return s[:length] + "..."
+	return TruncateRunes(s, length) + "..."
+}
+
+// TruncateRunes UTF-8 rune sınırını koruyarak ilk length rune'u döndürür
+func TruncateRunes(s string, length int) string {
+	if length < 0 {
+		length = 0
+	}
+	runes := []rune(s)
+	if len(runes) <= length {
+		return s
+	}
+	return string(runes[:length])
 }

@@ -1,10 +1,12 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,6 +15,18 @@ import (
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/shared"
 )
+
+// isOnionURL URL'nin geçerli bir http/https .onion adresi olup olmadığını doğrular (SSRF koruması)
+func isOnionURL(urlStr string) bool {
+	u, err := url.Parse(strings.TrimSpace(urlStr))
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	return strings.HasSuffix(u.Hostname(), ".onion")
+}
 
 // Content scrape edilmiş içerik
 type Content struct {
@@ -58,15 +72,20 @@ func (s *Scraper) isLowValueURL(urlStr string) (bool, string) {
 	return shared.IsLowValueURL(urlStr)
 }
 
+// HTTPClient Tor üzerinden istek atan paylaşılan HTTP client'ı döndürür
+func (s *Scraper) HTTPClient() *http.Client {
+	return s.client
+}
+
 // ScrapeURL tek bir URL'yi scrape eder
-func (s *Scraper) ScrapeURL(urlStr, title string) Content {
+func (s *Scraper) ScrapeURL(ctx context.Context, urlStr, title string) Content {
 	content := Content{
 		URL:       urlStr,
 		Title:     title,
 		ScrapedAt: time.Now(),
 	}
 
-	if !strings.Contains(urlStr, ".onion") {
+	if !isOnionURL(urlStr) {
 		content.Error = "Bu bir .onion adresi değil."
 		logger.Warn("Non-onion URL: %s", urlStr)
 		return content
@@ -78,7 +97,7 @@ func (s *Scraper) ScrapeURL(urlStr, title string) Content {
 		return content
 	}
 
-	req, err := http.NewRequest("GET", urlStr, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		content.Error = fmt.Sprintf("İstek hatası: %v", err)
 		return content
@@ -99,7 +118,7 @@ func (s *Scraper) ScrapeURL(urlStr, title string) Content {
 		return content
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, shared.MaxResponseBytes))
 	if err != nil {
 		content.Error = fmt.Sprintf("Read error: %v", err)
 		return content
@@ -125,10 +144,6 @@ func (s *Scraper) ScrapeURL(urlStr, title string) Content {
 	}
 
 	contentHash := generateContentHash(text)
-	if s.isDuplicate(contentHash) {
-		content.Error = "Skipped: duplicate content"
-		return content
-	}
 
 	qualityScore := s.calculateQualityScore(text, title)
 
@@ -137,15 +152,19 @@ func (s *Scraper) ScrapeURL(urlStr, title string) Content {
 		return content
 	}
 
+	// Atomik duplicate kontrolü + işaretleme (TOCTOU önlenir)
+	if !s.markIfNew(contentHash) {
+		content.Error = "Skipped: duplicate content"
+		return content
+	}
+
 	if title != "" && title != "Found Link" && title != "Untitled" && !strings.HasPrefix(title, "http") {
 		text = title + " - " + text
 	}
 
-	if len(text) > s.maxChars {
-		text = text[:s.maxChars] + "...(truncated)"
+	if len([]rune(text)) > s.maxChars {
+		text = shared.TruncateRunes(text, s.maxChars) + "...(truncated)"
 	}
-
-	s.markAsSeen(contentHash)
 
 	content.RawContent = text
 	content.ContentSize = len(text)
@@ -180,7 +199,7 @@ func (s *Scraper) htmlToText(html string) string {
 	return strings.TrimSpace(text)
 }
 
-func (s *Scraper) ScrapeMultiple(urls []struct{ URL, Title string }, maxWorkers int, progressFn func(done, total int)) []Content {
+func (s *Scraper) ScrapeMultiple(ctx context.Context, urls []struct{ URL, Title string }, maxWorkers int, progressFn func(done, total int)) []Content {
 	var results []Content
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -193,7 +212,13 @@ func (s *Scraper) ScrapeMultiple(urls []struct{ URL, Title string }, maxWorkers 
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				content := s.ScrapeURL(job.URL, job.Title)
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				content := s.ScrapeURL(ctx, job.URL, job.Title)
 
 				mu.Lock()
 				results = append(results, content)
@@ -203,7 +228,12 @@ func (s *Scraper) ScrapeMultiple(urls []struct{ URL, Title string }, maxWorkers 
 				}
 				mu.Unlock()
 
-				time.Sleep(time.Duration(500+rand.Intn(1000)) * time.Millisecond)
+				// İstekler arası gecikme (iptal-edilebilir)
+				select {
+				case <-time.After(time.Duration(500+rand.Intn(1000)) * time.Millisecond):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}()
 	}

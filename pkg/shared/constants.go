@@ -24,6 +24,9 @@ const (
 	MinContentLength    = 100
 	MinQualityScore     = 15
 	MaxResultsPerEngine = 100
+
+	// MaxResponseBytes HTTP yanıt gövdesi için üst sınır (DoS koruması)
+	MaxResponseBytes = 10 << 20
 )
 
 // ==================== TOR PROXY ====================
@@ -35,18 +38,27 @@ const (
 
 // ==================== USER AGENTS ====================
 
-// UserAgents rotasyon için kullanılacak User-Agent listesi (Robin'den alınmıştır)
+// UserAgents rotasyon için kullanılacak güncel, gerçekçi User-Agent listesi.
+// Hepsi gerçek tarayıcı sürümlerine karşılık gelir; bot/headless izi taşımaz.
 var UserAgents = []string{
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:137.0) Gecko/20100101 Firefox/137.0",
-	"Mozilla/5.0 (X11; Linux i686; rv:137.0) Gecko/20100101 Firefox/137.0",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:133.0) Gecko/20100101 Firefox/133.0",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+	// Tor Browser standardı (Firefox 128 ESR) — .onion için en iyi kamuflaj,
+	// çünkü tüm Tor Browser kullanıcıları aynı UA'yı paylaşır (parmak izi yok).
+	"Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0",
 }
+
+// ChromeUserAgent chromedp/Chromium ile motor-tutarlı gerçek Chrome UA'sı.
+// chromedp varsayılanı "HeadlessChrome" içerir ve anında engellenir; bunu kullan.
+const ChromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+
+// TorBrowserUserAgent gerçek Tor Browser User-Agent'ı (.onion HTTP istemcileri için ideal).
+const TorBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
 
 // ==================== RETRYABLE STATUS CODES ====================
 

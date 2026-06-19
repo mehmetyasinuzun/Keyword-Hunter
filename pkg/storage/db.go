@@ -14,7 +14,9 @@ type DB struct {
 
 // New yeni veritabanı bağlantısı oluşturur
 func New(dbPath string) (*DB, error) {
-	conn, err := sql.Open("sqlite", dbPath)
+	// PRAGMA'ları DSN üzerinden ayarla - her bağlantıda tutarlı uygulanır.
+	dsn := dbPath + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("veritabanı açılamadı: %w", err)
 	}
@@ -24,16 +26,6 @@ func New(dbPath string) (*DB, error) {
 	conn.SetMaxOpenConns(1)
 	conn.SetMaxIdleConns(1)
 	conn.SetConnMaxLifetime(0)
-
-	if _, err := conn.Exec("PRAGMA journal_mode = WAL;"); err != nil {
-		return nil, fmt.Errorf("sqlite WAL modu ayarlanamadı: %w", err)
-	}
-	if _, err := conn.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
-		return nil, fmt.Errorf("sqlite busy_timeout ayarlanamadı: %w", err)
-	}
-	if _, err := conn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		return nil, fmt.Errorf("sqlite foreign_keys ayarlanamadı: %w", err)
-	}
 
 	// Bağlantıyı test et
 	if err := conn.Ping(); err != nil {
@@ -190,6 +182,27 @@ func (db *DB) createTables() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("sessions tablosu oluşturulamadı: %w", err)
+	}
+
+	// İzleme listesi (watchlist) tabloları
+	if err := db.EnsureWatchlistSchema(); err != nil {
+		return err
+	}
+	if err := db.SeedDefaultWatchlist(); err != nil {
+		return fmt.Errorf("watchlist seed başarısız: %w", err)
+	}
+
+	// Planlı arama (scheduler) + motor sağlık izleme tabloları
+	if err := db.EnsureScheduledSchema(); err != nil {
+		return fmt.Errorf("scheduled şeması başarısız: %w", err)
+	}
+	if err := db.EnsureEngineStatsSchema(); err != nil {
+		return fmt.Errorf("engine_stats şeması başarısız: %w", err)
+	}
+
+	// Ekran görüntüsü tablosu
+	if err := db.EnsureScreenshotSchema(); err != nil {
+		return fmt.Errorf("screenshots şeması başarısız: %w", err)
 	}
 
 	return nil

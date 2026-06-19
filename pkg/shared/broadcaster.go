@@ -29,7 +29,7 @@ func NewBroadcaster() *Broadcaster {
 		clients:    make(map[chan string]bool),
 		register:   make(chan chan string),
 		unregister: make(chan chan string),
-		broadcast:  make(chan string),
+		broadcast:  make(chan string, 256),
 	}
 	go b.run()
 	return b
@@ -82,7 +82,11 @@ func (b *Broadcaster) BroadcastLog(msgType, message, engine string) {
 		Engine:    engine,
 		Timestamp: 0, // Frontend handles timestamp or simply current time
 	}
-	
+
 	jsonBytes, _ := json.Marshal(logMsg)
-	b.broadcast <- string(jsonBytes)
+	select {
+	case b.broadcast <- string(jsonBytes):
+	default:
+		// Kanal dolu - mesajı düşür, üretici bloke olmasın
+	}
 }

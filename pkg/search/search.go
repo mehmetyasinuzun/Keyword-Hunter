@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/html"
 
 	"keywordhunter-mvp/pkg/cti"
 	"keywordhunter-mvp/pkg/logger"
@@ -97,7 +100,7 @@ func New(torProxy string) (*Searcher, error) {
 }
 
 // SearchAll tüm arama motorlarında arama yapar
-func (s *Searcher) SearchAll(query string) []Result {
+func (s *Searcher) SearchAll(ctx context.Context, query string) []Result {
 	var results []Result
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -110,10 +113,17 @@ func (s *Searcher) SearchAll(query string) []Result {
 		go func(eng Engine) {
 			defer wg.Done()
 
+			// Bütçe/iptal kontrolü
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			// Broadcast start
 			shared.Streamer.BroadcastLog("engine_start", "Starting search...", eng.Name)
 
-			engineResults, err := s.searchEngine(eng, query)
+			engineResults, err := s.searchEngine(ctx, eng, query)
 			if err != nil {
 				logger.SearchEngineResult(eng.Name, 0, err)
 				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("SEARCH ENGINE ERROR: %v", err), eng.Name)
@@ -150,12 +160,12 @@ func (s *Searcher) SearchAll(query string) []Result {
 }
 
 // searchEngine tek bir arama motorunda arama yapar - retry ile
-func (s *Searcher) searchEngine(engine Engine, query string) ([]Result, error) {
+func (s *Searcher) searchEngine(ctx context.Context, engine Engine, query string) ([]Result, error) {
 	// URL'yi oluştur
 	searchURL := strings.Replace(engine.URL, "{query}", url.QueryEscape(query), 1)
 
 	// HTTP request oluştur
-	req, err := http.NewRequest("GET", searchURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +188,8 @@ func (s *Searcher) searchEngine(engine Engine, query string) ([]Result, error) {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	// Body'yi oku
-	body, err := io.ReadAll(resp.Body)
+	// Body'yi oku (boyut sınırlı)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, shared.MaxResponseBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -189,15 +199,23 @@ func (s *Searcher) searchEngine(engine Engine, query string) ([]Result, error) {
 }
 
 // parseResults HTML'den .onion linklerini çıkarır ve kelime sıklığını sayar
-func (s *Searcher) parseResults(html, sourceName, query string) []Result {
+func (s *Searcher) parseResults(htmlContent, sourceName, query string) []Result {
 	var results []Result
-	queryLower := strings.ToLower(query)
-	htmlLower := strings.ToLower(html)
+	queryLower := strings.ToLower(strings.TrimSpace(query))
+	htmlLower := strings.ToLower(htmlContent)
+
+	// countHits boş query'de strings.Count şişmesini önler
+	countHits := func(haystack string) int {
+		if queryLower == "" {
+			return 0
+		}
+		return strings.Count(haystack, queryLower)
+	}
 
 	// <a> taglarını bul - iç HTML dahil (nested taglar için)
 	// Önce tüm <a> bloklarını bul
 	linkRegex := regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
-	matches := linkRegex.FindAllStringSubmatch(html, -1)
+	matches := linkRegex.FindAllStringSubmatch(htmlContent, -1)
 
 	// .onion URL pattern
 	onionRegex := regexp.MustCompile(`https?://[^/]*\.onion[^\s"'<>]*`)
@@ -216,8 +234,8 @@ func (s *Searcher) parseResults(html, sourceName, query string) []Result {
 				}
 				title := cleanTitle(decodeHTMLEntities(htmlTagRegex.ReplaceAllString(innerHTML, "")), foundURL)
 				// Kelime sıklığını say (title + innerHTML içinde)
-				hits := strings.Count(strings.ToLower(innerHTML), queryLower)
-				hits += strings.Count(strings.ToLower(title), queryLower)
+				hits := countHits(strings.ToLower(innerHTML))
+				hits += countHits(strings.ToLower(title))
 				res := Result{
 					Title:       title,
 					URL:         foundURL,
@@ -231,7 +249,7 @@ func (s *Searcher) parseResults(html, sourceName, query string) []Result {
 	}
 
 	// Ayrıca düz .onion URL'leri de tara (href dışında olanlar)
-	allOnions := onionRegex.FindAllString(html, -1)
+	allOnions := onionRegex.FindAllString(htmlContent, -1)
 	seen := make(map[string]bool)
 	for _, r := range results {
 		seen[r.URL] = true
@@ -247,8 +265,7 @@ func (s *Searcher) parseResults(html, sourceName, query string) []Result {
 				// URL öncesi ve sonrasını al (max 200 karakter)
 				start := max(0, urlIdx-200)
 				end := min(len(htmlLower), urlIdx+len(onionURL)+200)
-				context := htmlLower[start:end]
-				hits = strings.Count(context, queryLower)
+				hits = countHits(htmlLower[start:end])
 			}
 			res := Result{
 				Title:       extractTitleFromURL(onionURL),
@@ -272,27 +289,9 @@ func (r *Result) PredictCTI() {
 	r.Category = analysis.Category
 }
 
-// decodeHTMLEntities HTML entity'leri decode eder
+// decodeHTMLEntities HTML entity'leri decode eder (surrogate-güvenli)
 func decodeHTMLEntities(s string) string {
-	s = strings.ReplaceAll(s, "&amp;", "&")
-	s = strings.ReplaceAll(s, "&lt;", "<")
-	s = strings.ReplaceAll(s, "&gt;", ">")
-	s = strings.ReplaceAll(s, "&#39;", "'")
-	s = strings.ReplaceAll(s, "&quot;", "\"")
-	s = strings.ReplaceAll(s, "&nbsp;", " ")
-	s = strings.ReplaceAll(s, "&#x27;", "'")
-	s = strings.ReplaceAll(s, "&#x2F;", "/")
-	// Numeric entities
-	numericRegex := regexp.MustCompile(`&#(\d+);`)
-	s = numericRegex.ReplaceAllStringFunc(s, func(match string) string {
-		var num int
-		fmt.Sscanf(match, "&#%d;", &num)
-		if num > 0 && num < 65536 {
-			return string(rune(num))
-		}
-		return match
-	})
-	return s
+	return html.UnescapeString(s)
 }
 
 // cleanTitle title'ı temizler ve anlamlı hale getirir
@@ -303,7 +302,8 @@ func cleanTitle(title, url string) string {
 	}
 
 	// Title URL ile aynı mı? (veya URL'nin bir parçası mı?)
-	if strings.Contains(url, title) || strings.Contains(title, ".onion") {
+	// Çok kısa title'lar URL içinde tesadüfen geçebilir; en az 8 karakterde kontrol et.
+	if (len(title) >= 8 && strings.Contains(url, title)) || strings.Contains(title, ".onion") {
 		return extractTitleFromURL(url)
 	}
 
@@ -314,9 +314,9 @@ func cleanTitle(title, url string) string {
 		return extractTitleFromURL(url)
 	}
 
-	// Title çok uzunsa kısalt
-	if len(title) > 150 {
-		title = title[:147] + "..."
+	// Title çok uzunsa kısalt (rune-güvenli)
+	if len([]rune(title)) > 150 {
+		title = shared.TruncateRunes(title, 147) + "..."
 	}
 
 	return title
@@ -351,9 +351,10 @@ func extractTitleFromURL(url string) string {
 		path = strings.ReplaceAll(path, ".htm", "")
 
 		if len(path) > 3 {
-			// İlk harfi büyük yap
-			if len(path) > 0 {
-				path = strings.ToUpper(string(path[0])) + path[1:]
+			// İlk harfi büyük yap (rune-güvenli)
+			pathRunes := []rune(path)
+			if len(pathRunes) > 0 {
+				path = strings.ToUpper(string(pathRunes[0])) + string(pathRunes[1:])
 			}
 			return "[" + path + "]"
 		}
@@ -364,9 +365,7 @@ func extractTitleFromURL(url string) string {
 	if strings.Contains(domain, ".onion") {
 		// xxx.onion -> [Onion: xxx...]
 		onionPart := strings.TrimSuffix(domain, ".onion")
-		if len(onionPart) > 8 {
-			onionPart = onionPart[:8]
-		}
+		onionPart = shared.TruncateRunes(onionPart, 8)
 		return "[Onion: " + onionPart + "...]"
 	}
 

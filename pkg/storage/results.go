@@ -251,7 +251,7 @@ func (db *DB) GetResults(limit int, query string) ([]SearchResult, error) {
 		results = append(results, r)
 	}
 
-	return results, nil
+	return results, rows.Err()
 }
 
 // GetNewResults son N saat içinde eklenen sonuçları döndürür
@@ -326,7 +326,7 @@ func (db *DB) GetSearchHistory(limit int) ([]SearchHistoryItem, error) {
 		}
 		history = append(history, item)
 	}
-	return history, nil
+	return history, rows.Err()
 }
 
 // GetQueries benzersiz sorguları ve sonuç sayılarını getirir

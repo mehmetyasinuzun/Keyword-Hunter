@@ -31,7 +31,7 @@
         <!-- Search Form -->
         <div class="bg-gray-800 rounded-xl p-6 shadow-lg mb-8">
             <h2 class="text-xl font-bold text-white mb-4">Dark Web Arama</h2>
-            <p class="text-gray-400 mb-4">17 dark web arama motorunda eşzamanlı arama yapın.</p>
+            <p class="text-gray-400 mb-4">Tüm aktif dark web arama motorlarında eşzamanlı tarama yapın. Regex desteklenir.</p>
 
             {{if .error}}
             <div class="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4">
@@ -51,20 +51,33 @@
                 </div>
             </form>
 
-            <div class="mt-4 flex flex-wrap gap-2">
-                <span class="text-gray-400 text-sm">Öneriler:</span>
-                <button onclick="setQuery('ransomware')"
-                    class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">ransomware</button>
-                <button onclick="setQuery('leak')"
-                    class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">leak</button>
-                <button onclick="setQuery('forum')"
-                    class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">forum</button>
-                <button onclick="setQuery('market')"
-                    class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">market</button>
-                <button onclick="setQuery('database')"
-                    class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">database</button>
-                <button onclick="setQuery('credit card')"
-                    class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 px-3 py-1 rounded">credit card</button>
+            <div class="mt-4 space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-gray-500 text-xs font-semibold uppercase tracking-wider w-16">Genel</span>
+                    <button onclick="setQuery('ransomware')"
+                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">ransomware</button>
+                    <button onclick="setQuery('leak')"
+                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">leak</button>
+                    <button onclick="setQuery('database dump')"
+                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">database dump</button>
+                    <button onclick="setQuery('combolist')"
+                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">combolist</button>
+                    <button onclick="setQuery('rdp access')"
+                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">rdp access</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-gray-500 text-xs font-semibold uppercase tracking-wider w-16">Türkiye</span>
+                    <button onclick="setQuery('turkey')"
+                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">turkey</button>
+                    <button onclick="setQuery('mernis')"
+                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">mernis</button>
+                    <button onclick="setQuery('e-devlet')"
+                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">e-devlet</button>
+                    <button onclick="setQuery('tc kimlik')"
+                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">tc kimlik</button>
+                    <button onclick="setQuery('turkish citizen')"
+                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">turkish citizen</button>
+                </div>
             </div>
 
             <!-- Live Logs Container -->
@@ -115,9 +128,22 @@
                                     class="text-blue-400 hover:text-blue-300 text-sm break-all mt-1 block">
                                     {{truncate .URL 100}}
                                 </a>
-                                <div class="mt-2">
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
                                     <span
-                                        class="bg-blue-600/30 text-blue-400 px-2 py-1 rounded text-xs">{{.Source}}</span>
+                                        class="bg-blue-600/30 text-blue-400 px-2 py-1 rounded text-xs font-mono">{{.Source}}</span>
+                                    <span class="px-2 py-1 rounded text-xs font-black
+                                        {{if eq .Criticality 5}}bg-red-500/20 text-red-400
+                                        {{else if eq .Criticality 4}}bg-orange-500/20 text-orange-400
+                                        {{else if eq .Criticality 3}}bg-yellow-500/20 text-yellow-400
+                                        {{else if eq .Criticality 2}}bg-cyan-500/20 text-cyan-400
+                                        {{else}}bg-blue-500/20 text-blue-400{{end}}"
+                                        title="Kritiklik seviyesi">SEV {{.Criticality}}</span>
+                                    {{if .Category}}
+                                    <span class="bg-gray-600/40 text-gray-300 px-2 py-1 rounded text-xs uppercase tracking-wide">{{.Category}}</span>
+                                    {{end}}
+                                    {{if gt .KeywordHits 0}}
+                                    <span class="text-green-400 text-xs font-mono" title="Anahtar kelime sıklığı">⌖ {{.KeywordHits}} hit</span>
+                                    {{end}}
                                 </div>
                             </div>
                         </div>
