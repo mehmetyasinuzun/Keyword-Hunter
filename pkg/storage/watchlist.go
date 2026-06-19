@@ -304,43 +304,17 @@ func (db *DB) GetWatchlistItem(id int64) (*WatchlistItem, error) {
 	return &item, nil
 }
 
-// watchlistSeed varsayılan izleme hedefi (yerel seed dosyasından yüklenir)
-type watchlistSeed struct {
-	Name     string `json:"name"`
-	URL      string `json:"url"`
-	Category string `json:"category"`
-	Notes    string `json:"notes"`
-}
-
-// loadWatchlistSeed varsayılan izleme hedeflerini yerel (sürüm-kontrolü dışı)
-// seed dosyasından yükler. Dosya yoksa boş döner.
+// SeedDefaultWatchlist doğrulanmış Türk onion'larını ekler (CTI seed/IOC listesi).
 //
-// Hassas hedef listesi (gerçek .onion adresleri) bilerek depoya konmaz; her
-// operatör kendi listesini WATCHLIST_SEED_FILE (veya ./data/watchlist-seed.json)
-// ile sağlar ya da hedefleri arayüzden ekler.
-func loadWatchlistSeed() []watchlistSeed {
-	path := os.Getenv("WATCHLIST_SEED_FILE")
-	if path == "" {
-		path = "data/watchlist-seed.json"
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var seeds []watchlistSeed
-	if err := json.Unmarshal(b, &seeds); err != nil {
-		return nil
-	}
-	return seeds
-}
-
-// SeedDefaultWatchlist yerel seed dosyasındaki izleme hedeflerini ekler.
-//
-// INSERT OR IGNORE + url UNIQUE sayesinde idempotenttir: her açılışta çalışır,
-// mevcut kayıtları atlar, yalnızca eksik hedefleri tamamlar. Seed dosyası yoksa
-// hiçbir şey eklemez (varsayılan boş).
+// İsteğe bağlı: WATCHLIST_SEED_FILE (veya ./data/watchlist-seed.json) varsa, hedefler
+// oradan yüklenir; yoksa aşağıdaki gömülü varsayılan liste kullanılır. INSERT OR IGNORE
+// + url UNIQUE sayesinde idempotenttir: her açılışta çalışır, mevcut kayıtları atlar,
+// yalnızca eksik hedefleri tamamlar.
 func (db *DB) SeedDefaultWatchlist() error {
 	defaults := loadWatchlistSeed()
+	if len(defaults) == 0 {
+		defaults = defaultWatchlistSeed()
+	}
 
 	tx, err := db.conn.Begin()
 	if err != nil {
@@ -364,4 +338,54 @@ func (db *DB) SeedDefaultWatchlist() error {
 	}
 
 	return tx.Commit()
+}
+
+// watchlistSeed varsayılan izleme hedefi
+type watchlistSeed struct {
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Category string `json:"category"`
+	Notes    string `json:"notes"`
+}
+
+// loadWatchlistSeed isteğe bağlı yerel seed dosyasını yükler (WATCHLIST_SEED_FILE
+// veya ./data/watchlist-seed.json). Dosya yoksa nil döner; gömülü varsayılan kullanılır.
+func loadWatchlistSeed() []watchlistSeed {
+	path := os.Getenv("WATCHLIST_SEED_FILE")
+	if path == "" {
+		path = "data/watchlist-seed.json"
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var seeds []watchlistSeed
+	if err := json.Unmarshal(b, &seeds); err != nil {
+		return nil
+	}
+	return seeds
+}
+
+// defaultWatchlistSeed gömülü varsayılan Türk onion izleme listesi (CTI seed/IOC).
+func defaultWatchlistSeed() []watchlistSeed {
+	return []watchlistSeed{
+		{"Shadow Forum", "http://w4ljqtyjnxinknz4hszn4bsof7zhfy5z2h4srfss4vvkoikiwz36o3id.onion", "Forum", ""},
+		{"MSR Index", "http://msrindexe5vujl5bqbfmycjlmxcr3dluwvksfwqnrlrkrzw447itsnqd.onion", "Dizin", ""},
+		{"MSR Forum", "http://msrforumxpzz7tvqmncc2koqhrd56u2hsq2mkg3lqd2a6m7knrlv6hyd.onion", "Forum", ""},
+		{"MSR Panel", "http://msrpanelsylp5ue3kymumb65xh7dpyquamvbk75rzwn765jyjhvzxtid.onion", "Sorgu Paneli", "TC/adres/plaka/vesika sorgu — vatandaş PII"},
+		{"MSR Market", "http://msrmarketyujpkxrx5ift3qoc3rgvkabbbo7tgpuewn7p4trpdhnviyd.onion", "Market", ""},
+		{"MSR Chat", "http://msrchat6ucldc45gzsrldnhrkgc5faowqxcey6c5qxv2udtievr3ytid.onion", "Chat", ""},
+		{"Atlantis Market", "http://atlantisrdcrud2ukxls34sihvidtww7la6rqrfvbygmovvadebnj2id.onion", "Market", ""},
+		{"Altenen Forum", "http://dydaofm5uefuulnzb63uh6coodgbxlgndk4eosoopbekebttkdxshlyd.onion", "Forum", "RelatedX/Genesis ile aynı nexus"},
+		{"Deep Web Türkçe İndex", "http://indexzz7n3cq4slh5bh2lcctmiwk2y7epxjvkpyaemtuat2alprveyid.onion", "Dizin", "Türk onion master dizini"},
+		{"Anarcho-Copy Arşivi", "http://anarcopym4ckplfg3uljfj37y27ko3vrnrp43msyu5k5rp3h46wtf7yd.onion", "Arşiv", ""},
+		{"Personality (kimlik sorgu)", "http://gsyorszxsxt57kwa5hnmqvgqu22en6rgif37uormbu6nafdxja62p5qd.onion", "Sorgu Paneli", ""},
+		{"Dark River Forum", "http://darkrw6bufwiygpzazyo4deboh4xxvhvwaixstshl6jbpere64rpweqd.onion", "Forum", ""},
+		{"Liberty Forum", "http://libertyax7z735whsmbirn5lzpiv4bq6vz6bd3ivrgvv3yjw4xos54qd.onion", "Forum", ""},
+		{"Azrail (kiralık katil)", "http://azrailgggtfmgboqumc3li3bltcj36xoxrzum7ofi7lqhcau2lsp2gid.onion", "Market", "eski azrail4b42 adresi kapandı"},
+		{"Tenebris Forum", "http://bv3g7djr2lxggud4zp6uqikky4wueiep3nnz7xcdy5z6i4exau5z6jyd.onion", "Forum", "Codex-Tenebris, 2023"},
+		{"Tenebris Haber", "http://tenebrsi5ougn2slw7i47emfuzuebulhllycuxpihozb7wrpqslfwvqd.onion", "Haber", "Codex-Tenebris haber kolu"},
+		{"Pablo Chat TR", "http://lqxqynuoppwk5w5qoybyetwsrtru6dhgn2i77s2vfra6c5cn2u3scgyd.onion", "Chat", "Türkçe sohbet"},
+		{"RelatedX (eski adres)", "http://u5qv3yvsykj673jlpyw7udpxablrcu4szuvlaee2eljudwemr2ddv3yd.onion", "Forum", "artık Altenen'e yönlendiriyor"},
+	}
 }
