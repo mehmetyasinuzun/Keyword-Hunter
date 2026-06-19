@@ -134,17 +134,14 @@ func generateContentHash(text string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// isDuplicate duplicate içerik kontrolü
-func (s *Scraper) isDuplicate(hash string) bool {
-	s.mu.RLock()
-	exists := s.seenHashes[hash]
-	s.mu.RUnlock()
-	return exists
-}
-
-// markAsSeen hash'i görülmüş olarak işaretle
-func (s *Scraper) markAsSeen(hash string) {
+// markIfNew hash daha önce görülmediyse atomik olarak işaretler ve true döner;
+// zaten görülmüşse false döner (TOCTOU yarışı önlenir).
+func (s *Scraper) markIfNew(hash string) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seenHashes[hash] {
+		return false
+	}
 	s.seenHashes[hash] = true
-	s.mu.Unlock()
+	return true
 }

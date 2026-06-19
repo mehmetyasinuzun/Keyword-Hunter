@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <title>Engine Monitor — KeywordHunter CTI</title>
+    {{template "head" .}}
+    <style>
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .status-up    { background: rgba(72,187,120,0.15); color: #48bb78; border: 1px solid rgba(72,187,120,0.3); }
+        .status-down  { background: rgba(245,101,101,0.15); color: #f56565; border: 1px solid rgba(245,101,101,0.3); }
+        .status-unknown { background: rgba(139,157,195,0.12); color: #8b9dc3; border: 1px solid rgba(139,157,195,0.2); }
+        .engine-row   { display: grid; grid-template-columns: 1fr 90px 90px 70px 70px 70px 80px 90px; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid rgba(99,179,237,0.06); transition: background 0.2s; }
+        .engine-row:hover { background: rgba(99,179,237,0.04); }
+        .engine-header { background: rgba(7,8,13,0.6); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .engine-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+        .engine-url  { font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .stat-val    { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); }
+        .stat-sub    { font-size: 0.7rem; color: var(--text-muted); }
+        .rate-bar    { height: 3px; background: rgba(99,179,237,0.1); border-radius: 2px; margin-top: 4px; }
+        .rate-fill   { height: 3px; border-radius: 2px; transition: width 0.5s ease; }
+        .pulse       { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .pulse-up    { background: #48bb78; box-shadow: 0 0 6px #48bb78; animation: pulse-anim 2s infinite; }
+        .pulse-down  { background: #f56565; }
+        .pulse-unk   { background: #8b9dc3; }
+        @keyframes pulse-anim { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .summary-card { background: var(--bg-card); border: 1px solid var(--bg-card-border); border-radius: var(--radius-md); padding: 20px; text-align: center; }
+        .summary-num  { font-size: 2.5rem; font-weight: 800; font-family: var(--font-mono); }
+        .summary-lbl  { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .c-green { color: #48bb78; }
+        .c-red   { color: #f56565; }
+        .c-blue  { color: var(--accent-primary); }
+        .c-muted { color: var(--text-muted); }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .last-updated { font-size: 0.8rem; color: var(--text-muted); }
+        .engine-toggle { background: none; border: 1px solid rgba(99,179,237,0.2); border-radius: 4px; padding: 4px 8px; font-size: 0.7rem; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+        .engine-toggle:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+        .response-bar { display: flex; align-items: center; gap: 6px; }
+        .response-ms { font-family: var(--font-mono); font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+{{template "navbar" .}}
+<main class="main">
+    <div class="page-header">
+        <div>
+            <h1 style="font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--text-primary),var(--accent-primary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Engine Monitor</h1>
+            <p style="color:var(--text-muted);margin-top:4px;">Arama motorlarının gerçek zamanlı sağlık durumu ve performans metrikleri</p>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;">
+            <span class="last-updated" id="lastUpdated">Yükleniyor...</span>
+            <button class="btn btn-primary" onclick="checkNow()" id="checkBtn">
+                <span id="checkBtnTxt">Şimdi Kontrol Et</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-grid" id="summaryGrid">
+        <div class="summary-card">
+            <div class="summary-num c-green" id="sumUp">—</div>
+            <div class="summary-lbl">Aktif Motor</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-num c-red" id="sumDown">—</div>
+            <div class="summary-lbl">Çevrimdışı Motor</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-num c-blue" id="sumTotal">—</div>
+            <div class="summary-lbl">Toplam Motor</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-num c-muted" id="sumUnknown">—</div>
+            <div class="summary-lbl">Kontrol Bekliyor</div>
+        </div>
+    </div>
+
+    <!-- Engine Table -->
+    <div class="card" style="padding:0;overflow:hidden;">
+        <!-- Header -->
+        <div class="engine-row engine-header" style="padding:12px 20px;">
+            <div>Motor</div>
+            <div>Durum</div>
+            <div>Yanıt Süresi</div>
+            <div>Başarı</div>
+            <div>Hata</div>
+            <div>Ardışık Hata</div>
+            <div>Son Kontrol</div>
+            <div></div>
+        </div>
+        <div id="enginesBody">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);">Yükleniyor...</div>
+        </div>
+    </div>
+
+    <!-- Info -->
+    <div style="margin-top:16px;padding:12px 20px;background:rgba(99,179,237,0.05);border:1px solid rgba(99,179,237,0.1);border-radius:var(--radius-md);font-size:0.8rem;color:var(--text-muted);">
+        Motorlar otomatik olarak her <strong style="color:var(--accent-primary)">5 dakikada bir</strong> kontrol edilir.
+        Ardışık 3+ hata alan motorlar kırmızı olarak işaretlenir. Motoru devre dışı bırakmak arama sonuçlarını etkilemez, sadece bu monitörden gizler.
+    </div>
+</main>
+
+<script>
+let enginesData = [];
+
+async function loadEngines() {
+    try {
+        const res = await fetch('/api/engines');
+        const data = await res.json();
+        enginesData = data.engines || [];
+
+        // Summary
+        document.getElementById('sumUp').textContent = data.upCount || 0;
+        document.getElementById('sumDown').textContent = data.downCount || 0;
+        document.getElementById('sumTotal').textContent = data.total || 0;
+        document.getElementById('sumUnknown').textContent = data.unknownCount || 0;
+
+        renderEngines(enginesData);
+        document.getElementById('lastUpdated').textContent = 'Son güncelleme: ' + new Date().toLocaleTimeString('tr-TR');
+    } catch(e) {
+        document.getElementById('enginesBody').innerHTML = '<div style="padding:40px;text-align:center;color:var(--accent-danger);">Veri yüklenemedi</div>';
+    }
+}
+
+function renderEngines(engines) {
+    if (!engines || engines.length === 0) {
+        document.getElementById('enginesBody').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Motor bulunamadı</div>';
+        return;
+    }
+
+    // Sırala: down önce, sonra unknown, sonra up
+    const sorted = [...engines].sort((a, b) => {
+        const order = {down: 0, unknown: 1, up: 2};
+        return (order[a.LastStatus] ?? 1) - (order[b.LastStatus] ?? 1);
+    });
+
+    const html = sorted.map(e => {
+        const statusClass = e.LastStatus === 'up' ? 'status-up' : e.LastStatus === 'down' ? 'status-down' : 'status-unknown';
+        const statusText  = e.LastStatus === 'up' ? 'Çevrimiçi' : e.LastStatus === 'down' ? 'Çevrimdışı' : 'Bilinmiyor';
+        const pulseClass  = e.LastStatus === 'up' ? 'pulse-up' : e.LastStatus === 'down' ? 'pulse-down' : 'pulse-unk';
+
+        const total = e.SuccessCount + e.FailCount;
+        const rate  = total > 0 ? Math.round(e.SuccessCount / total * 100) : 0;
+        const rateColor = rate >= 80 ? '#48bb78' : rate >= 50 ? '#ecc94b' : '#f56565';
+
+        const lastChecked = e.LastCheckedAt ? new Date(e.LastCheckedAt).toLocaleTimeString('tr-TR') : '—';
+
+        const msColor = e.LastResponseMs < 5000 ? '#48bb78' : e.LastResponseMs < 15000 ? '#ecc94b' : '#f56565';
+        const msText = e.LastResponseMs > 0 ? e.LastResponseMs + 'ms' : '—';
+
+        const consecColor = e.ConsecutiveFails >= 3 ? '#f56565' : e.ConsecutiveFails >= 1 ? '#ecc94b' : '#48bb78';
+
+        const toggleLabel = e.IsActive ? 'Pasif Yap' : 'Aktif Et';
+        const toggleColor = e.IsActive ? 'rgba(245,101,101,0.2)' : 'rgba(72,187,120,0.2)';
+
+        return `<div class="engine-row" style="${!e.IsActive ? 'opacity:0.5;' : ''}">
+            <div>
+                <div class="engine-name"><span class="pulse ${pulseClass}" style="margin-right:6px;"></span>${e.Name}</div>
+                <div class="engine-url">${e.URL.replace('{query}', '…')}</div>
+            </div>
+            <div>
+                <span class="status-badge ${statusClass}">${statusText}</span>
+            </div>
+            <div>
+                <div class="response-bar">
+                    <span class="response-ms" style="color:${msColor}">${msText}</span>
+                </div>
+            </div>
+            <div>
+                <div class="stat-val" style="color:#48bb78">${e.SuccessCount}</div>
+                <div class="stat-sub">${rate}% başarı</div>
+                <div class="rate-bar"><div class="rate-fill" style="width:${rate}%;background:${rateColor}"></div></div>
+            </div>
+            <div>
+                <div class="stat-val" style="color:${e.FailCount > 0 ? '#f56565' : 'var(--text-muted)'}">${e.FailCount}</div>
+                <div class="stat-sub">hata</div>
+            </div>
+            <div>
+                <div class="stat-val" style="color:${consecColor}">${e.ConsecutiveFails}</div>
+                <div class="stat-sub">ardışık</div>
+            </div>
+            <div>
+                <div class="stat-val" style="font-size:0.78rem;color:var(--text-secondary)">${lastChecked}</div>
+            </div>
+            <div>
+                <button class="engine-toggle" style="background:${toggleColor}" onclick="toggleEngine('${e.Name}', ${!e.IsActive})">${toggleLabel}</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('enginesBody').innerHTML = html;
+}
+
+async function checkNow() {
+    const btn = document.getElementById('checkBtn');
+    const txt = document.getElementById('checkBtnTxt');
+    btn.disabled = true;
+    txt.textContent = 'Kontrol başlatılıyor...';
+
+    try {
+        await fetch('/api/engines/check-now', {method: 'POST'});
+        txt.textContent = 'Kontrol ediliyor... (~30sn)';
+        // 35 saniye sonra yenile
+        setTimeout(() => {
+            loadEngines();
+            btn.disabled = false;
+            txt.textContent = 'Şimdi Kontrol Et';
+        }, 35000);
+    } catch(e) {
+        btn.disabled = false;
+        txt.textContent = 'Şimdi Kontrol Et';
+    }
+}
+
+async function toggleEngine(name, active) {
+    try {
+        await fetch(`/api/engines/${encodeURIComponent(name)}/toggle`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({active})
+        });
+        loadEngines();
+    } catch(e) {
+        console.error(e);
+    }
+}
+
+// İlk yükleme + her 60 saniyede oto-yenile
+loadEngines();
+setInterval(loadEngines, 60000);
+</script>
+</body>
+</html>

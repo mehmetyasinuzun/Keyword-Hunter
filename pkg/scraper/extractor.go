@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,8 +67,8 @@ func (s *Scraper) ExtractLinks(pageURL string, htmlContent string) ([]ExtractedL
 		if title == "" {
 			title = extractTitleFromURLPath(normalizedURL)
 		}
-		if len(title) > 100 {
-			title = title[:97] + "..."
+		if len([]rune(title)) > 100 {
+			title = shared.TruncateRunes(title, 97) + "..."
 		}
 
 		// Domain çıkar
@@ -91,9 +92,9 @@ func (s *Scraper) ExtractLinks(pageURL string, htmlContent string) ([]ExtractedL
 }
 
 // ExtractLinksFromURL bir URL'yi scrape edip linklerini çıkarır
-func (s *Scraper) ExtractLinksFromURL(targetURL string) ([]ExtractedLink, error) {
+func (s *Scraper) ExtractLinksFromURL(ctx context.Context, targetURL string) ([]ExtractedLink, error) {
 	// Sayfayı çek - derinleştirme için özel (kalite kontrolü atlanır)
-	content := s.scrapeURLForExpand(targetURL)
+	content := s.scrapeURLForExpand(ctx, targetURL)
 	if !content.Success {
 		return nil, fmt.Errorf("%s", content.Error)
 	}
@@ -103,18 +104,18 @@ func (s *Scraper) ExtractLinksFromURL(targetURL string) ([]ExtractedLink, error)
 }
 
 // scrapeURLForExpand derinleştirme için özel scrape fonksiyonu
-func (s *Scraper) scrapeURLForExpand(urlStr string) Content {
+func (s *Scraper) scrapeURLForExpand(ctx context.Context, urlStr string) Content {
 	content := Content{
 		URL:       urlStr,
 		ScrapedAt: time.Now(),
 	}
 
-	if !strings.Contains(urlStr, ".onion") {
+	if !isOnionURL(urlStr) {
 		content.Error = "Bu bir .onion adresi değil. Derinleştirme sadece Dark Web (.onion) adresleri için çalışır."
 		return content
 	}
 
-	req, err := http.NewRequest("GET", urlStr, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		content.Error = fmt.Sprintf("İstek oluşturulamadı: %v", err)
 		return content
@@ -135,8 +136,8 @@ func (s *Scraper) scrapeURLForExpand(urlStr string) Content {
 		return content
 	}
 
-	// Body oku
-	body, err := io.ReadAll(resp.Body)
+	// Body oku (boyut sınırlı)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, shared.MaxResponseBytes))
 	if err != nil {
 		content.Error = fmt.Sprintf("Sayfa içeriği okunamadı: %v", err)
 		logger.Error("Body read error during expand: %s - %v", urlStr, err)
@@ -180,17 +181,20 @@ func normalizeURL(href, baseURL string) string {
 }
 
 // CountKeywords bir sayfadaki anahtar kelime sayısını döndürür
-func (s *Scraper) CountKeywords(urlStr, keyword string) (int, error) {
+func (s *Scraper) CountKeywords(ctx context.Context, urlStr, keyword string) (int, error) {
 	// Sayfayı çek
-	content := s.scrapeURLForExpand(urlStr) // reuse for reuse simple raw content fetch
+	content := s.scrapeURLForExpand(ctx, urlStr) // reuse for reuse simple raw content fetch
 	if !content.Success {
 		return 0, fmt.Errorf("%s", content.Error)
 	}
 
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+	if keyword == "" {
+		return 0, nil
+	}
+
 	// HTML temizle
-	text := s.htmlToText(content.RawContent)
-	text = strings.ToLower(text)
-	keyword = strings.ToLower(keyword)
+	text := strings.ToLower(s.htmlToText(content.RawContent))
 
 	// Say
 	count := strings.Count(text, keyword)
@@ -237,8 +241,8 @@ func extractTitleFromURLPath(urlStr string) string {
 		return "Link"
 	}
 
-	if len(candidate) > 80 {
-		candidate = candidate[:77] + "..."
+	if len([]rune(candidate)) > 80 {
+		candidate = shared.TruncateRunes(candidate, 77) + "..."
 	}
 
 	return candidate

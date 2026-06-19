@@ -31,7 +31,7 @@ type Engine struct {
 }
 
 type KeywordExtractor interface {
-	ExtractTopKeywords(urlStr, searchQuery string, maxTags int) scraper.TagResult
+	ExtractTopKeywords(ctx context.Context, urlStr, searchQuery string, maxTags int) scraper.TagResult
 }
 
 var (
@@ -77,7 +77,7 @@ func (e *Engine) TagResultByID(ctx context.Context, resultID int64) (*AutoTagRes
 		query = strings.TrimSpace(result.Title)
 	}
 
-	tagResult := e.scraper.ExtractTopKeywords(result.URL, query, e.maxTags)
+	tagResult := e.scraper.ExtractTopKeywords(ctx, result.URL, query, e.maxTags)
 	extractedTags := []string{}
 	keywordHits := 0
 	extractionErr := ""

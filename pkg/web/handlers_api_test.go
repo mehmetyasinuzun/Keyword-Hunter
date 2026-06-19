@@ -50,6 +50,8 @@ func (m mockBatchRunner) RecoverPendingJobs() error {
 	return nil
 }
 
+func (m mockBatchRunner) Stop() {}
+
 func setupAPIRouter(s *Server) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

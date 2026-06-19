@@ -2,6 +2,8 @@ package web
 
 import (
 	"io"
+	"time"
+
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/shared"
 
@@ -16,8 +18,8 @@ func (s *Server) handleEvents(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
 
-	// Yeni bir client kanalı oluştur
-	clientChan := make(chan string)
+	// Yeni bir client kanalı oluştur (tamponlu - yavaş istemcide mesaj düşmesini azaltır)
+	clientChan := make(chan string, 64)
 
 	// Broadcaster'a kaydol
 	shared.Streamer.Register(clientChan)
@@ -30,13 +32,24 @@ func (s *Server) handleEvents(c *gin.Context) {
 
 	logger.Debug("SSE Client connected")
 
+	// Periyodik heartbeat - ölü bağlantıları tespit etmeye yardımcı olur
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
 	// Client'a veri gönder
 	c.Stream(func(w io.Writer) bool {
-		// Kanaldan mesaj bekle
-		if msg, ok := <-clientChan; ok {
+		select {
+		case msg, ok := <-clientChan:
+			if !ok {
+				return false
+			}
 			c.SSEvent("message", msg)
 			return true
+		case <-ticker.C:
+			c.SSEvent("heartbeat", "ping")
+			return true
+		case <-c.Request.Context().Done():
+			return false
 		}
-		return false
 	})
 }

@@ -6,16 +6,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="KeywordHunter - Dark Web Cyber Threat Intelligence Platform">
+<meta name="theme-color" content="#07080d">
+<meta name="robots" content="noindex, nofollow">
 
-<!-- Tailwind CSS -->
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Favicon (inline, no external request) -->
+<link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307080d'/%3E%3Ccircle cx='14' cy='14' r='7' fill='none' stroke='%2363b3ed' stroke-width='2.5'/%3E%3Cline x1='19' y1='19' x2='26' y2='26' stroke='%23805ad5' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
 
-<!-- Premium Typography -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link
-    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+<!-- Self-hosted assets (no CDN dependency — works offline / behind Tor) -->
+<link rel="stylesheet" href="/static/css/tailwind.css">
+<link rel="stylesheet" href="/static/fonts/fonts.css">
 
 
 <style>
@@ -262,6 +262,68 @@
 
     .animate-in {
         animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    /* ── Polish: scrollbar, focus, selection, motion ─────────────────── */
+    html {
+        scroll-behavior: smooth;
+    }
+
+    ::selection {
+        background: rgba(99, 179, 237, 0.3);
+        color: #fff;
+    }
+
+    /* Custom scrollbar (WebKit + Firefox) */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(99, 179, 237, 0.35) transparent;
+    }
+
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: rgba(99, 179, 237, 0.25);
+        border-radius: 8px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(99, 179, 237, 0.45);
+        background-clip: content-box;
+    }
+
+    /* Keyboard-accessible focus ring (does not affect mouse users) */
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    [tabindex]:focus-visible {
+        outline: 2px solid var(--accent-primary);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+    }
+
+    /* Respect users who prefer reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
     }
 </style>
 

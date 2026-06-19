@@ -31,6 +31,9 @@ type BatchRunner struct {
 	queue       chan string
 	workerCount int
 
+	wg       sync.WaitGroup
+	stopOnce sync.Once
+
 	mu      sync.RWMutex
 	cancels map[string]context.CancelFunc
 }
@@ -50,10 +53,19 @@ func NewBatchRunner(db *storage.DB, engine *Engine, workerCount int) *BatchRunne
 	}
 
 	for i := 0; i < r.workerCount; i++ {
+		r.wg.Add(1)
 		go r.workerLoop(i + 1)
 	}
 
 	return r
+}
+
+// Stop kuyruğu kapatır ve çalışan worker'ların bitmesini bekler (graceful shutdown).
+func (r *BatchRunner) Stop() {
+	r.stopOnce.Do(func() {
+		close(r.queue)
+	})
+	r.wg.Wait()
 }
 
 // RecoverPendingJobs restart sonrası yarım kalan işleri tekrar kuyruğa alır.
@@ -67,12 +79,18 @@ func (r *BatchRunner) RecoverPendingJobs() error {
 		return err
 	}
 
+	queued := 0
 	for _, job := range jobs {
-		r.queue <- job.ID
+		select {
+		case r.queue <- job.ID:
+			queued++
+		default:
+			logger.Warn("TAG JOB RECOVERY: kuyruk dolu, iş atlandı: %s", job.ID)
+		}
 	}
 
-	if len(jobs) > 0 {
-		logger.Info("TAG JOB RECOVERY: %d iş kuyruğa geri alındı", len(jobs))
+	if queued > 0 {
+		logger.Info("TAG JOB RECOVERY: %d iş kuyruğa geri alındı", queued)
 	}
 
 	return nil
@@ -123,9 +141,8 @@ func (r *BatchRunner) Submit(ctx context.Context, resultIDs []int64, query strin
 	select {
 	case r.queue <- job.ID:
 	default:
-		go func() {
-			r.queue <- job.ID
-		}()
+		// Kuyruk dolu - sınırsız goroutine açma, işi pending bırak (recovery sonra alır)
+		logger.Warn("TAG JOB SUBMIT: kuyruk dolu, iş pending bırakıldı: %s", job.ID)
 	}
 
 	skipped := len(ids) - len(validatedIDs)
@@ -163,6 +180,7 @@ func (r *BatchRunner) Cancel(jobID string) error {
 }
 
 func (r *BatchRunner) workerLoop(workerID int) {
+	defer r.wg.Done()
 	for jobID := range r.queue {
 		r.processJob(jobID, workerID)
 	}

@@ -86,7 +86,12 @@ func Load(envFilePath string) (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
-	secureCookies := parseBool(get("WEB_SECURE_COOKIES", "false"))
+	// Secure cookie varsayılanı ortama duyarlı: production'da true, development'ta false.
+	defaultSecure := "true"
+	if strings.EqualFold(get("APP_ENV", "production"), "development") {
+		defaultSecure = "false"
+	}
+	secureCookies := parseBool(get("WEB_SECURE_COOKIES", defaultSecure))
 
 	cfg := AppConfig{
 		EnvFilePath:     store.Path(),

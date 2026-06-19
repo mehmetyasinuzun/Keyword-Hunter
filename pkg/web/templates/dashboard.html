@@ -4,7 +4,6 @@
 <head>
     {{template "head" .}}
     <title>KeywordHunter - Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Dashboard-specific overrides */
         .stat-card {
@@ -205,7 +204,7 @@
             <!-- Algoritma Açıklaması -->
             <div class="mt-6 p-4 bg-gray-900/30 rounded-lg border border-gray-700/50">
                 <div class="flex items-start gap-3">
-                    <span class="text-2xl"></span>
+                    <span class="text-2xl">💡</span>
                     <div>
                         <h4 class="font-bold text-gray-300 mb-1">PredictCTI Algoritması Nasıl Çalışır?</h4>
                         <p class="text-xs text-gray-500 leading-relaxed">
@@ -225,7 +224,7 @@
             <!-- Category Distribution -->
             <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
                 <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                    <span></span> Kategori Dağılımı
+                    <span>🗂️</span> Kategori Dağılımı
                 </h2>
                 <div class="space-y-4">
                     {{range $cat, $count := .categoryStats}}
@@ -247,7 +246,7 @@
             <!-- Criticality Levels -->
             <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg overflow-visible">
                 <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                    <span></span> Kritiklik Dereceleri
+                    <span>🔥</span> Kritiklik Dereceleri
                 </h2>
                 <div class="grid grid-cols-5 gap-2">
                     {{range $i := (seq 1 5)}}

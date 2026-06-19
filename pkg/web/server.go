@@ -6,13 +6,18 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"keywordhunter-mvp/pkg/capture"
 	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/monitor"
+	"keywordhunter-mvp/pkg/scheduler"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
 	"keywordhunter-mvp/pkg/storage"
@@ -33,24 +38,30 @@ type BatchRunner interface {
 	Submit(ctx context.Context, resultIDs []int64, query string) (*storage.TaggingJob, error)
 	Cancel(jobID string) error
 	RecoverPendingJobs() error
+	Stop()
 }
 
 // Server web sunucusu
 type Server struct {
-	db           *storage.DB
-	searcher     *search.Searcher
-	scraper      *scraper.Scraper
-	username     string
-	password     string
-	cookieSecure bool
-	sessionTTL   time.Duration
-	envStore     *config.EnvStore
-	rateLimiter  *IPRateLimiter
-	tagEngine    TagEngine
-	batchRunner  BatchRunner
-	router       *gin.Engine
-	httpServer   *http.Server
-	cleanupStop  chan struct{}
+	db            *storage.DB
+	searcher      *search.Searcher
+	scraper       *scraper.Scraper
+	username      string
+	password      string
+	cookieSecure  bool
+	sessionTTL    time.Duration
+	envStore      *config.EnvStore
+	rateLimiter   *IPRateLimiter
+	tagEngine     TagEngine
+	batchRunner   BatchRunner
+	router        *gin.Engine
+	httpServer    *http.Server
+	cleanupStop   chan struct{}
+	watchlistStop chan struct{}
+	torProxy      string
+	scheduler     *scheduler.Scheduler
+	engineMonitor *monitor.EngineMonitor
+	capturer      *capture.Capturer
 }
 
 // Config sunucu yapılandırması
@@ -65,6 +76,7 @@ type Config struct {
 	RateLimitRPS   float64
 	RateLimitBurst int
 	EnvStore       *config.EnvStore
+	TorProxy       string
 }
 
 // New yeni web sunucusu oluşturur
@@ -86,20 +98,27 @@ func New(cfg Config) *Server {
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
+	// Proxy başlıklarına (X-Forwarded-For) güvenme - ClientIP spoofing önlenir
+	_ = router.SetTrustedProxies(nil)
+	router.MaxMultipartMemory = 1 << 20
 	router.Use(gin.Recovery())
+	router.Use(securityHeaders(cfg.CookieSecure))
+	router.Use(bodyLimit(1 << 20))
 
 	s := &Server{
-		db:           cfg.DB,
-		searcher:     cfg.Searcher,
-		scraper:      cfg.Scraper,
-		username:     cfg.Username,
-		password:     cfg.Password,
-		cookieSecure: cfg.CookieSecure,
-		sessionTTL:   sessionTTL,
-		envStore:     cfg.EnvStore,
-		rateLimiter:  NewIPRateLimiter(rateLimitRPS, rateLimitBurst),
-		router:       router,
-		cleanupStop:  make(chan struct{}),
+		db:            cfg.DB,
+		searcher:      cfg.Searcher,
+		scraper:       cfg.Scraper,
+		username:      cfg.Username,
+		password:      cfg.Password,
+		cookieSecure:  cfg.CookieSecure,
+		sessionTTL:    sessionTTL,
+		envStore:      cfg.EnvStore,
+		rateLimiter:   NewIPRateLimiter(rateLimitRPS, rateLimitBurst),
+		router:        router,
+		cleanupStop:   make(chan struct{}),
+		watchlistStop: make(chan struct{}),
+		torProxy:      cfg.TorProxy,
 	}
 
 	s.router.Use(s.rateLimiter.Middleware())
@@ -113,9 +132,55 @@ func New(cfg Config) *Server {
 		logger.Warn("Tagging job recovery başarısız: %v", err)
 	}
 
+	s.capturer = capture.New(cfg.TorProxy, "", "")
+	if s.capturer.Available() {
+		logger.Info("Ekran görüntüsü alt sistemi hazır (chromium bulundu)")
+	} else {
+		logger.Warn("Ekran görüntüsü devre dışı: chromium bulunamadı (yalnız Docker imajında mevcut)")
+	}
+
 	s.setupRoutes()
 	s.startSessionCleanup()
+	s.startWatchlistMonitor()
+	s.startScheduler()
 	return s
+}
+
+// startScheduler planlı arama motorunu ve arama motoru sağlık izleyicisini başlatır.
+// Her ikisi de kaynak-verimli arka plan worker'larıdır; hata olsa bile uygulama açılır.
+func (s *Server) startScheduler() {
+	sched := scheduler.New(s.db, s.searcher)
+	sched.Start()
+	s.scheduler = sched
+
+	em, err := monitor.New(s.db, s.torProxy, 5*time.Minute)
+	if err != nil {
+		logger.Warn("Motor izleyici başlatılamadı: %v", err)
+		return
+	}
+	em.Start()
+	s.engineMonitor = em
+}
+
+// securityHeaders temel güvenlik başlıklarını ekler
+func securityHeaders(secure bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Referrer-Policy", "no-referrer")
+		if secure {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		c.Next()
+	}
+}
+
+// bodyLimit istek gövdesini sınırlar (DoS koruması)
+func bodyLimit(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		c.Next()
+	}
 }
 
 func (s *Server) startSessionCleanup() {
@@ -135,6 +200,100 @@ func (s *Server) startSessionCleanup() {
 			}
 		}
 	}()
+}
+
+// startWatchlistMonitor izlenen siteleri periyodik olarak kontrol eden worker'ı başlatır
+func (s *Server) startWatchlistMonitor() {
+	interval := watchlistInterval()
+	logger.Info("Watchlist monitor başlatıldı (interval: %v)", interval)
+
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.runWatchlistChecks()
+			case <-s.watchlistStop:
+				return
+			}
+		}
+	}()
+}
+
+// watchlistInterval kontrol aralığını döndürür (env WATCHLIST_INTERVAL_MIN, varsayılan 15dk)
+func watchlistInterval() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("WATCHLIST_INTERVAL_MIN")); raw != "" {
+		if mins, err := strconv.Atoi(raw); err == nil && mins > 0 {
+			return time.Duration(mins) * time.Minute
+		}
+	}
+	return 15 * time.Minute
+}
+
+// runWatchlistChecks tüm aktif izleme öğelerini sırayla kontrol eder
+func (s *Server) runWatchlistChecks() {
+	items, err := s.db.GetWatchlistItems(true)
+	if err != nil {
+		logger.Warn("Watchlist öğeleri alınamadı: %v", err)
+		return
+	}
+
+	for _, item := range items {
+		select {
+		case <-s.watchlistStop:
+			return
+		default:
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		result := s.checkWatchlistItem(ctx, item)
+		cancel()
+
+		if err := s.db.RecordWatchlistCheck(item.ID, result.Status, result.HTTPCode, result.ResponseMs, result.ContentHash, result.Title, result.Changed); err != nil {
+			logger.Warn("Watchlist kontrol kaydedilemedi (ID: %d): %v", item.ID, err)
+		}
+
+		// Tetikleyici: izlenen sitede içerik değiştiyse otomatik ekran görüntüsü al
+		// (görsel kanıt). Asenkron — kontrol döngüsünü bloklamaz.
+		if result.Changed && s.capturer != nil && s.capturer.Available() {
+			logger.Info("WATCHLIST DEĞİŞİKLİK: %s — ekran görüntüsü tetiklendi", item.Name)
+			go s.captureAndStore("watchlist", item.ID, item.URL)
+		}
+	}
+}
+
+// captureAndStore bir hedefin ekran görüntüsünü alıp DB'ye kaydeder (tetikleyici eylemler için).
+// Hata olsa bile 'error' kaydı düşer; sessiz yutma yok.
+func (s *Server) captureAndStore(source string, refID int64, targetURL string) {
+	if s.capturer == nil || !s.capturer.Available() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	defer cancel()
+
+	shot, err := s.capturer.Capture(ctx, targetURL)
+	if err != nil {
+		logger.Warn("Tetiklenen ekran görüntüsü başarısız (%s): %v", targetURL, err)
+		_, _ = s.db.SaveScreenshot(storage.Screenshot{
+			TargetURL: targetURL, Source: source, RefID: refID,
+			Status: "error", ErrorMsg: truncateErr(err.Error()),
+		})
+		return
+	}
+	if shot.Challenge {
+		logger.Info("TETİKLENEN GÖRÜNTÜ: %s — engel (%s), elle müdahale gerekebilir", targetURL, shot.ChallengeKind)
+	}
+	if _, err := s.db.SaveScreenshot(storage.Screenshot{
+		TargetURL: targetURL, Source: source, RefID: refID,
+		FilePath: shot.Path, SHA256: shot.SHA256,
+		Width: shot.Width, Height: shot.Height, Bytes: shot.Bytes,
+		Status: "ok", Title: shot.Title,
+		Challenge: shot.Challenge, ChallengeKind: shot.ChallengeKind,
+		TakenAt: shot.TakenAt,
+	}); err != nil {
+		logger.Warn("Tetiklenen ekran görüntüsü kaydedilemedi: %v", err)
+	}
 }
 
 // setupRoutes rotaları ayarlar
@@ -193,6 +352,9 @@ func (s *Server) setupRoutes() {
 		protected.GET("/results/graph", s.handleResultsGraph)
 		protected.GET("/settings", s.handleSettingsPage)
 		protected.GET("/scheduled", s.handleScheduledPage)
+		protected.GET("/watchlist", s.handleWatchlistPage)
+		protected.GET("/monitor", s.handleMonitorPage)
+		protected.GET("/screenshot/file/:id", s.handleServeScreenshot)
 
 		// SSE Events - Gerçek zamanlı loglar için
 		protected.GET("/events", s.handleEvents)
@@ -224,6 +386,28 @@ func (s *Server) setupRoutes() {
 			api.POST("/alert-config", s.handleAlertConfigSave)
 			api.GET("/settings/env", s.handleEnvSettingsGet)
 			api.POST("/settings/env", s.handleEnvSettingsUpdate)
+			api.GET("/watchlist", s.handleWatchlistList)
+			api.POST("/watchlist", s.handleWatchlistAdd)
+			api.POST("/watchlist/:id/toggle", s.handleWatchlistToggle)
+			api.POST("/watchlist/:id/delete", s.handleWatchlistDelete)
+			api.POST("/watchlist/:id/check", s.handleWatchlistCheck)
+
+			// Planlı arama (scheduler)
+			api.GET("/scheduled", s.handleGetScheduledSearches)
+			api.POST("/scheduled", s.handleCreateScheduled)
+			api.POST("/scheduled/:id/toggle", s.handleToggleScheduled)
+			api.DELETE("/scheduled/:id", s.handleDeleteScheduled)
+			api.POST("/scheduled/:id/run-now", s.handleRunScheduledNow)
+
+			// Arama motoru sağlık izleme
+			api.GET("/engines", s.handleEnginesAPI)
+			api.POST("/engines/check-now", s.handleEngineCheckNow)
+			api.POST("/engines/:name/toggle", s.handleEngineToggle)
+			api.GET("/monitor/summary", s.handleMonitorSummary)
+
+			// Ekran görüntüsü
+			api.POST("/screenshot", s.handleCaptureNow)
+			api.GET("/screenshots", s.handleScreenshotsList)
 		}
 	}
 }
@@ -255,9 +439,33 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		close(s.cleanupStop)
 	}
 
+	select {
+	case <-s.watchlistStop:
+		// already closed
+	default:
+		close(s.watchlistStop)
+	}
+
+	if s.scheduler != nil {
+		s.scheduler.Stop()
+	}
+	if s.engineMonitor != nil {
+		s.engineMonitor.Stop()
+	}
+
 	if s.httpServer == nil {
+		if s.batchRunner != nil {
+			s.batchRunner.Stop()
+		}
 		return nil
 	}
 
-	return s.httpServer.Shutdown(ctx)
+	err := s.httpServer.Shutdown(ctx)
+
+	// HTTP sunucusu kapandıktan sonra batch worker'ları drain et
+	if s.batchRunner != nil {
+		s.batchRunner.Stop()
+	}
+
+	return err
 }

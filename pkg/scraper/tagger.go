@@ -1,12 +1,22 @@
 package scraper
 
 import (
+	"context"
 	"regexp"
 	"sort"
 	"strings"
 
 	"keywordhunter-mvp/pkg/shared"
 )
+
+// countKeyword boş anahtar kelimede strings.Count şişmesini önler
+func countKeyword(haystack, keyword string) int {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return 0
+	}
+	return strings.Count(haystack, keyword)
+}
 
 // TagResult otomatik etiket sonucu
 type TagResult struct {
@@ -91,7 +101,7 @@ var ctiRelevantWords = map[string]int{
 }
 
 // ExtractTopKeywords bir URL'deki içerikten en önemli kelimeleri çıkarır
-func (s *Scraper) ExtractTopKeywords(urlStr, searchQuery string, maxTags int) TagResult {
+func (s *Scraper) ExtractTopKeywords(ctx context.Context, urlStr, searchQuery string, maxTags int) TagResult {
 	result := TagResult{
 		Tags:    []string{},
 		Success: false,
@@ -102,7 +112,7 @@ func (s *Scraper) ExtractTopKeywords(urlStr, searchQuery string, maxTags int) Ta
 	}
 
 	// Sayfayı çek
-	content := s.scrapeURLForExpand(urlStr)
+	content := s.scrapeURLForExpand(ctx, urlStr)
 	if !content.Success {
 		result.Error = content.Error
 		return result
@@ -113,7 +123,7 @@ func (s *Scraper) ExtractTopKeywords(urlStr, searchQuery string, maxTags int) Ta
 	textLower := strings.ToLower(text)
 
 	// Aranan kelime kaç kez geçiyor?
-	result.KeywordHits = strings.Count(textLower, strings.ToLower(searchQuery))
+	result.KeywordHits = countKeyword(textLower, strings.ToLower(searchQuery))
 
 	// Kelimeleri say
 	wordCounts := make(map[string]int)
@@ -231,7 +241,7 @@ func (s *Scraper) ExtractTopKeywordsFromHTML(htmlContent, searchQuery string, ma
 	}
 
 	// Aranan kelime kaç kez geçiyor?
-	result.KeywordHits = strings.Count(textLower, strings.ToLower(searchQuery))
+	result.KeywordHits = countKeyword(textLower, strings.ToLower(searchQuery))
 
 	// Kelimeleri say
 	wordCounts := make(map[string]int)

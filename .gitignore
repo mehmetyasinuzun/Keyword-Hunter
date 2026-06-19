@@ -58,3 +58,19 @@ docs/screenshots/*.png
 ozellik.txt
 SKILL.md
 ultrathink.md
+
+# Yerel çalışma verisi (DB, .env, watchlist seed, geçici) — public repoya girmez
+data/
+
+# Ajan/oturum çalışma dizini
+.claude/
+
+# Hassas CTI çıktıları (TLP:RED raporlar, ekran görüntüleri, onion indeksleri)
+docs/*.docx
+docs/*.pdf
+docs/CTI-*.md
+docs/TLP-RED-*.md
+docs/OnionLinksV3-*.md
+docs/onion-screenshots/
+docs/~$*
+docs/~WRL*.tmp

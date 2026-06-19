@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,12 @@ import (
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tagging"
 )
+
+// respondInternalError istemciye generic mesaj döndürür, gerçek hatayı loglar (bilgi sızıntısı önlenir)
+func respondInternalError(c *gin.Context, op string, err error) {
+	logger.Error("%s hatası: %v", op, err)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "Sunucu hatası, lütfen tekrar deneyin"})
+}
 
 // ExpandRequest expand isteği
 type ExpandRequest struct {
@@ -87,10 +94,20 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 		return
 	}
 
+	if req.Criticality < 1 || req.Criticality > 5 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Kritiklik 1-5 arasında olmalıdır"})
+		return
+	}
+	req.Category = strings.TrimSpace(req.Category)
+	if len(req.Category) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori en fazla 64 karakter olabilir"})
+		return
+	}
+
 	query := fmt.Sprintf("UPDATE %s SET criticality = ?, category = ? WHERE id = ?", table)
 	_, err := s.db.GetDBConn().Exec(query, req.Criticality, req.Category, req.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "UpdateCriticality", err)
 		return
 	}
 
@@ -115,7 +132,8 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 		case errors.Is(err, tagging.ErrNoTaggableSignal):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"success": false, "error": "Etiket çıkarılamadı"})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			logger.Error("AutoTag hatası: ID=%d, err=%v", req.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Etiketleme başarısız oldu"})
 		}
 		return
 	}
@@ -152,7 +170,8 @@ func (s *Server) handleBatchAutoTag(c *gin.Context) {
 		if errors.Is(err, tagging.ErrNoValidResultIDs) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli result ID bulunamadı"})
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			logger.Error("BatchAutoTag submit hatası: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Toplu etiketleme başlatılamadı"})
 		}
 		return
 	}
@@ -211,7 +230,8 @@ func (s *Server) handleBatchAutoTagCancel(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Job bulunamadı"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		logger.Error("BatchAutoTag cancel hatası: jobID=%s, err=%v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "İş iptal edilemedi"})
 		return
 	}
 
@@ -237,13 +257,18 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 	// Sonucu getir
 	result, err := s.db.GetResultByID(req.ID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Bulgu bulunamadı"})
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Bulgu bulunamadı"})
+			return
+		}
+		logger.Error("Bulgu getirilemedi: ID=%d, err=%v", req.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Bulgu getirilemedi"})
 		return
 	}
 
 	logger.Info("ANALYZE START: ID=%d, URL=%s, Query=%s", result.ID, result.URL, result.Query)
 	// Kelime sayısını bul
-	count, err := s.scraper.CountKeywords(result.URL, result.Query)
+	count, err := s.scraper.CountKeywords(c.Request.Context(), result.URL, result.Query)
 	if err != nil {
 		logger.Warn("ANALYZE FAILED: ID=%d, Error=%v", req.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Tarama hatası: %v", err)})
@@ -286,7 +311,7 @@ func (s *Server) handleGraphAPI(c *gin.Context) {
 
 	graphData, err := s.db.GetGraphData(query, options)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetGraphData", err)
 		return
 	}
 	c.JSON(http.StatusOK, graphData)
@@ -565,6 +590,14 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 	req.WebAddr = strings.TrimSpace(req.WebAddr)
 	req.LogDir = strings.TrimSpace(req.LogDir)
 
+	// Path alanlarını normalize et (path traversal/temizlik)
+	if req.DBPath != "" {
+		req.DBPath = filepath.Clean(req.DBPath)
+	}
+	if req.LogDir != "" {
+		req.LogDir = filepath.Clean(req.LogDir)
+	}
+
 	if req.AdminUser == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin kullanici adi bos olamaz"})
 		return
@@ -586,6 +619,12 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 		return
 	}
 
+	newPass := strings.TrimSpace(req.AdminPass)
+	if newPass != "" && len(newPass) < 4 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin parolasi en az 4 karakter olmalidir"})
+		return
+	}
+
 	updates := map[string]string{
 		"ADMIN_USER":         req.AdminUser,
 		"TOR_PROXY":          req.TorProxy,
@@ -598,8 +637,8 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 		"RATE_LIMIT_BURST":   strconv.Itoa(req.RateLimitBurst),
 	}
 
-	if strings.TrimSpace(req.AdminPass) != "" {
-		updates["ADMIN_PASS"] = strings.TrimSpace(req.AdminPass)
+	if newPass != "" {
+		updates["ADMIN_PASS"] = newPass
 	}
 
 	if err := s.envStore.Update(updates); err != nil {
@@ -631,7 +670,7 @@ func firstNonEmpty(primary string, fallback string) string {
 func (s *Server) handleTagStats(c *gin.Context) {
 	stats, err := s.db.GetTagStats()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetTagStats", err)
 		return
 	}
 
@@ -660,11 +699,14 @@ func (s *Server) handleResultsByTag(c *gin.Context) {
 	}
 
 	limitStr := c.DefaultQuery("limit", "50")
-	limit, _ := strconv.Atoi(limitStr)
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 || limit > 500 {
+		limit = 50
+	}
 
 	results, err := s.db.GetResultsByTag(tag, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetResultsByTag", err)
 		return
 	}
 
@@ -703,7 +745,7 @@ func (s *Server) handleNewResults(c *gin.Context) {
 
 	results, err := s.db.GetNewResults(hours, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetNewResults", err)
 		return
 	}
 
@@ -718,7 +760,7 @@ func (s *Server) handleNewResults(c *gin.Context) {
 func (s *Server) handleQueriesAPI(c *gin.Context) {
 	queries, err := s.db.GetQueries()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetQueries", err)
 		return
 	}
 
@@ -733,7 +775,7 @@ func (s *Server) handleAnalyticsAPI(c *gin.Context) {
 	query := c.Query("query") // Sorgu bazlı filtreleme için
 	data, err := s.db.GetAnalyticsData(interval, query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetAnalyticsData", err)
 		return
 	}
 	c.JSON(http.StatusOK, data)
@@ -750,7 +792,7 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 	logger.Info("🔍 Derinleştirme başlatıldı: %s", req.URL)
 
 	// URL'yi scrape et ve linkleri çıkar
-	links, err := s.scraper.ExtractLinksFromURL(req.URL)
+	links, err := s.scraper.ExtractLinksFromURL(c.Request.Context(), req.URL)
 	if err != nil {
 		logger.ExpandNode(req.URL, 0, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -847,7 +889,8 @@ func (s *Server) handleGetChildren(c *gin.Context) {
 
 	children, err := s.db.GetGraphChildren(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		logger.Error("GetGraphChildren hatası: id=%d, err=%v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Çocuk düğümler alınamadı"})
 		return
 	}
 
@@ -874,7 +917,7 @@ func (s *Server) handleGetChildren(c *gin.Context) {
 func (s *Server) handleAlertConfigGet(c *gin.Context) {
 	cfg, err := s.db.GetAlertConfig()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "GetAlertConfig", err)
 		return
 	}
 	c.JSON(http.StatusOK, cfg)
@@ -901,7 +944,8 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 		Enabled:        req.Enabled,
 	}
 	if err := s.db.SaveAlertConfig(cfg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		logger.Error("SaveAlertConfig hatası: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Ayar kaydedilemedi"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})

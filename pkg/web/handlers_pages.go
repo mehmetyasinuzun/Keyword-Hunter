@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"crypto/subtle"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,7 +33,12 @@ func (s *Server) handleLogin(c *gin.Context) {
 	password := c.PostForm("password")
 	clientIP := c.ClientIP()
 
-	if username == s.username && password == s.password {
+	// Sabit-zamanlı karşılaştırma (timing attack koruması).
+	// Kullanıcı adı ve parolayı ayrı ayrı hesapla (short-circuit yok), sonra AND'le.
+	userMatch := subtle.ConstantTimeCompare([]byte(username), []byte(s.username)) == 1
+	passMatch := subtle.ConstantTimeCompare([]byte(password), []byte(s.password)) == 1
+
+	if userMatch && passMatch {
 		// Session oluştur
 		sessionID := generateSessionID()
 		csrfToken := generateSessionID()
@@ -251,9 +258,12 @@ func (s *Server) handleSearch(c *gin.Context) {
 
 	logger.Info("Web'den arama baslatildi: '%s'", query)
 
-	// Arama yap
+	// Arama yap (90sn bütçeli, iptal-edilebilir context)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
+	defer cancel()
+
 	startTime := time.Now()
-	results := s.searcher.SearchAll(query)
+	results := s.searcher.SearchAll(ctx, query)
 	elapsed := time.Since(startTime)
 
 	// Sonuçları kaydet (KeywordHits ile birlikte)
@@ -344,11 +354,30 @@ func (s *Server) handleSettingsPage(c *gin.Context) {
 	})
 }
 
-// handleScheduledPage scheduler ve bildirim ayarları sayfası
+// handleScheduledPage planlı arama (İzleme Merkezi) sayfası
 func (s *Server) handleScheduledPage(c *gin.Context) {
 	cfg, _ := s.db.GetAlertConfig()
+	searches, err := s.db.GetAllScheduledSearches()
+	if err != nil {
+		logger.Warn("Planlı taramalar alınamadı: %v", err)
+	}
 	c.HTML(http.StatusOK, "scheduled.html", gin.H{
 		"ActivePage":  "scheduled",
 		"alertConfig": cfg,
+		"searches":    searches,
+	})
+}
+
+// handleMonitorPage arama motoru sağlık izleme sayfası
+func (s *Server) handleMonitorPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "monitor.html", gin.H{
+		"ActivePage": "monitor",
+	})
+}
+
+// handleWatchlistPage izleme listesi sayfası
+func (s *Server) handleWatchlistPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "watchlist.html", gin.H{
+		"ActivePage": "watchlist",
 	})
 }

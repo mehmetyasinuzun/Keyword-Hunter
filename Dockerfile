@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
@@ -20,8 +20,15 @@ FROM alpine:3.22
 
 WORKDIR /app
 
-# wget is used by compose healthcheck
-RUN apk add --no-cache ca-certificates tzdata wget
+# wget: compose healthcheck. chromium + fontlar: Tor üzerinden .onion ekran görüntüsü
+# (chromedp ile sürülür). nss/freetype/harfbuzz/ttf-freefont headless render için gerekli.
+RUN apk add --no-cache \
+		ca-certificates tzdata wget \
+		chromium nss freetype harfbuzz ttf-freefont
+
+# chromedp'nin chromium'u bulması için
+ENV CHROME_BIN=/usr/bin/chromium-browser
+ENV SCREENSHOT_DIR=/data/screenshots
 
 COPY --from=builder /out/keywordhunter /app/keywordhunter
 COPY .env.example /app/.env.example
@@ -29,7 +36,7 @@ COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
 	&& chmod +x /app/docker-entrypoint.sh \
-	&& mkdir -p /data/logs
+	&& mkdir -p /data/logs /data/screenshots
 
 EXPOSE 8080
 

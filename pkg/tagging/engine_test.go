@@ -13,7 +13,7 @@ type fakeExtractor struct {
 	result scraper.TagResult
 }
 
-func (f fakeExtractor) ExtractTopKeywords(urlStr, searchQuery string, maxTags int) scraper.TagResult {
+func (f fakeExtractor) ExtractTopKeywords(ctx context.Context, urlStr, searchQuery string, maxTags int) scraper.TagResult {
 	return f.result
 }
 
