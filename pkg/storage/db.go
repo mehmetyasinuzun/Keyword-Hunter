@@ -3,8 +3,11 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
+
+	"keywordhunter-mvp/pkg/logger"
 )
 
 // DB veritabanı bağlantısı
@@ -15,7 +18,11 @@ type DB struct {
 // New yeni veritabanı bağlantısı oluşturur
 func New(dbPath string) (*DB, error) {
 	// PRAGMA'ları DSN üzerinden ayarla - her bağlantıda tutarlı uygulanır.
-	dsn := dbPath + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	// _time_format=sqlite: time.Time değerleri SQLite'ın datetime() fonksiyonunun
+	// parse edebildiği "YYYY-MM-DD HH:MM:SS.SSS+HH:MM" biçiminde yazılır. Sürücünün
+	// varsayılan biçimi (Go time.String, monotonic saat dahil) SQL tarafında
+	// karşılaştırılamıyordu.
+	dsn := dbPath + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_time_format=sqlite"
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("veritabanı açılamadı: %w", err)
@@ -126,6 +133,9 @@ func (db *DB) createTables() error {
 	if err != nil {
 		return fmt.Errorf("graph_nodes tablosu oluşturulamadı: %w", err)
 	}
+	if err := db.EnsureGraphNodeUniqueness(); err != nil {
+		return err
+	}
 
 	// Tagging jobs tablosu - toplu etiketleme iş kuyruğu
 	_, err = db.conn.Exec(`
@@ -205,6 +215,60 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("screenshots şeması başarısız: %w", err)
 	}
 
+	// IOC / artifact tablosu
+	if err := db.EnsureArtifactSchema(); err != nil {
+		return err
+	}
+
+	// Eski sürümlerin yazdığı, SQL tarafında parse edilemeyen zaman damgalarını normalize et
+	if err := db.normalizeLegacyTimestamps(); err != nil {
+		return fmt.Errorf("zaman damgası migrasyonu başarısız: %w", err)
+	}
+
+	return nil
+}
+
+// normalizeLegacyTimestamps eski sürümlerde Go'nun time.String() biçimiyle
+// ("2026-01-02 15:04:05.123 +0300 +03 m=+0.5") yazılmış ve SQLite datetime()
+// tarafından parse edilemeyen sütunları standart biçime çevirir. Idempotenttir:
+// yalnızca datetime(col) IS NULL olan satırlara dokunur.
+func (db *DB) normalizeLegacyTimestamps() error {
+	targets := []struct{ table, id, col string }{
+		{"scheduled_searches", "id", "next_run_at"},
+		{"scheduled_searches", "id", "last_run_at"},
+		{"sessions", "id", "expires_at"},
+		{"engine_stats", "name", "last_checked_at"},
+		{"screenshots", "id", "taken_at"},
+	}
+	for _, t := range targets {
+		q := fmt.Sprintf(`SELECT %s, %s FROM %s WHERE %s IS NOT NULL AND datetime(%s) IS NULL`, t.id, t.col, t.table, t.col, t.col)
+		rows, err := db.conn.Query(q)
+		if err != nil {
+			return err
+		}
+		type fix struct {
+			id  interface{}
+			val time.Time
+		}
+		var fixes []fix
+		for rows.Next() {
+			var id interface{}
+			var val time.Time
+			if err := rows.Scan(&id, &val); err != nil {
+				continue // parse edilemeyen değer: dokunma
+			}
+			fixes = append(fixes, fix{id: id, val: val})
+		}
+		rows.Close()
+		for _, f := range fixes {
+			if _, err := db.conn.Exec(fmt.Sprintf(`UPDATE %s SET %s = ? WHERE %s = ?`, t.table, t.col, t.id), f.val.UTC(), f.id); err != nil {
+				return err
+			}
+		}
+		if len(fixes) > 0 {
+			logger.Info("Zaman damgası migrasyonu: %s.%s için %d satır normalize edildi", t.table, t.col, len(fixes))
+		}
+	}
 	return nil
 }
 

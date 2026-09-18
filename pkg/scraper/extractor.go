@@ -124,7 +124,8 @@ func (s *Scraper) scrapeURLForExpand(ctx context.Context, urlStr string) Content
 	req.Header.Set("User-Agent", shared.RandomUserAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 
-	resp, err := shared.DoWithRetry(s.client, req)
+	// İçerik çekimi: 2 deneme yeterli (arama motorlarından farklı olarak tek site)
+	resp, err := shared.DoWithRetryN(s.client, req, 2)
 	if err != nil {
 		content.Error = shared.ClassifyError(err).Error()
 		return content

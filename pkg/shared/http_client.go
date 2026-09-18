@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -37,9 +38,24 @@ func NewHTTPClient(torProxy string) (*http.Client, error) {
 		return nil, fmt.Errorf("proxy dialer hatası: %w", err)
 	}
 
+	// SOCKS5 dialer ContextDialer'dır: DialContext ile istek bağlamı iptal
+	// edildiğinde (zaman aşımı, kullanıcı vazgeçti) Tor bağlantı denemesi de
+	// anında iptal olur; eski Dial ile bağlantı kurulumu arka planda sızıyordu.
+	dialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if cd, ok := dialer.(proxy.ContextDialer); ok {
+			return cd.DialContext(ctx, network, addr)
+		}
+		return dialer.Dial(network, addr)
+	}
+
 	transport := &http.Transport{
-		Dial:                dialer.Dial,
+		Proxy:               nil, // ortam proxy'leri (HTTP_PROXY) asla kullanılmaz; her şey Tor'dan geçer
+		DialContext:         dialContext,
 		TLSHandshakeTimeout: TLSHandshakeTimeout,
+		MaxIdleConns:        32,
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  false,
 	}
 
 	client := &http.Client{
@@ -56,19 +72,31 @@ func RandomUserAgent() string {
 }
 
 // DoWithRetry HTTP isteği yapar ve gerekirse exponential backoff ile yeniden dener
-// Robin tarzı profesyonel retry mekanizması
 func DoWithRetry(client *http.Client, req *http.Request) (*http.Response, error) {
+	return DoWithRetryN(client, req, MaxRetryAttempts)
+}
+
+// DoWithRetryN en fazla attempts deneme yapar (içerik çekimleri için daha az deneme
+// tercih edilir: ölü bir .onion'a 3×60 sn harcamak kullanıcıyı dakikalarca bekletir).
+func DoWithRetryN(client *http.Client, req *http.Request, attempts int) (*http.Response, error) {
 	var lastErr error
 	var resp *http.Response
 
 	ctx := req.Context()
+	if attempts <= 0 {
+		attempts = 1
+	}
 
 	// Gövdeli istekler için her denemede gövdeyi yeniden oluşturabilmek gerekir.
 	if req.Body != nil && req.GetBody == nil {
 		return nil, fmt.Errorf("gövdeli istekte GetBody zorunludur (retry için)")
 	}
 
-	for attempt := 0; attempt < MaxRetryAttempts; attempt++ {
+	for attempt := 0; attempt < attempts; attempt++ {
+		// Bağlam bittiyse (kullanıcı vazgeçti / zaman aşımı) denemeyi bırak
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// İlk denemeden sonra backoff uygula (iptal-edilebilir)
 		if attempt > 0 {
 			backoffDuration := CalculateBackoff(attempt)
@@ -192,7 +220,7 @@ func ClassifyError(err error) error {
 
 	// Bağlantı reddedildi - Tor kapalı
 	if strings.Contains(errStr, "connection refused") {
-		return fmt.Errorf("Tor proxy'ye bağlanılamadı: Tor Browser açık olduğundan emin olun")
+		return fmt.Errorf("tor proxy'ye bağlanılamadı: Tor Browser veya Tor servisinin çalıştığından emin olun")
 	}
 
 	// Genel socks connect hatası

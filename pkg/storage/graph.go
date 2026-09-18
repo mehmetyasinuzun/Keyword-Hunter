@@ -2,11 +2,100 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"sort"
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
 )
+
+// EnsureGraphNodeUniqueness graph_nodes tablosundaki NULL parent_id kaynaklı
+// duplikasyonu giderir ve tekrarını önler.
+//
+// Tablo şemasındaki UNIQUE(url, parent_id) kısıtı SQLite'ta NULL parent_id
+// (kök düğümler) için çalışmaz: NULL değerler birbirinden farklı sayıldığı için
+// her arama aynı URL'yi yeniden ekler. Bu fonksiyon:
+//  1. (url, COALESCE(parent_id,0)) gruplarındaki fazlalıkları tek satıra indirir
+//     (is_expanded=1 olan, sonra çocuğu olan, sonra en küçük id tercih edilir),
+//     silinen satırların çocuklarını korunan satıra bağlar;
+//  2. aynı anahtar üzerinde bir UNIQUE ifade indeksi oluşturur; INSERT OR IGNORE
+//     bundan sonra kök düğümler için de çalışır.
+func (db *DB) EnsureGraphNodeUniqueness() error {
+	type key struct {
+		url    string
+		parent int64
+	}
+	for pass := 0; pass < 8; pass++ {
+		rows, err := db.conn.Query(`
+			SELECT url, COALESCE(parent_id, 0)
+			FROM graph_nodes
+			GROUP BY url, COALESCE(parent_id, 0)
+			HAVING COUNT(*) > 1
+		`)
+		if err != nil {
+			return fmt.Errorf("graph_nodes duplikasyon taraması: %w", err)
+		}
+		var groups []key
+		for rows.Next() {
+			var k key
+			if err := rows.Scan(&k.url, &k.parent); err == nil {
+				groups = append(groups, k)
+			}
+		}
+		rows.Close()
+		if len(groups) == 0 {
+			break
+		}
+
+		tx, err := db.conn.Begin()
+		if err != nil {
+			return err
+		}
+		for _, k := range groups {
+			var keeper int64
+			err := tx.QueryRow(`
+				SELECT g.id FROM graph_nodes g
+				WHERE g.url = ? AND COALESCE(g.parent_id, 0) = ?
+				ORDER BY g.is_expanded DESC,
+					(SELECT COUNT(*) FROM graph_nodes c WHERE c.parent_id = g.id) DESC,
+					g.id ASC
+				LIMIT 1
+			`, k.url, k.parent).Scan(&keeper)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			if _, err := tx.Exec(`
+				UPDATE graph_nodes SET parent_id = ?
+				WHERE parent_id IN (
+					SELECT id FROM graph_nodes WHERE url = ? AND COALESCE(parent_id, 0) = ? AND id <> ?
+				)
+			`, keeper, k.url, k.parent, keeper); err != nil {
+				tx.Rollback()
+				return err
+			}
+			if _, err := tx.Exec(`
+				DELETE FROM graph_nodes WHERE url = ? AND COALESCE(parent_id, 0) = ? AND id <> ?
+			`, k.url, k.parent, keeper); err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		logger.Info("graph_nodes: %d duplike grup birleştirildi (geçiş %d)", len(groups), pass+1)
+	}
+
+	_, err := db.conn.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_url_parentkey
+		ON graph_nodes(url, COALESCE(parent_id, 0))
+	`)
+	if err != nil {
+		return fmt.Errorf("graph_nodes unique indeks: %w", err)
+	}
+	return nil
+}
 
 // GraphNode D3.js için ağaç node yapısı
 type GraphNode struct {

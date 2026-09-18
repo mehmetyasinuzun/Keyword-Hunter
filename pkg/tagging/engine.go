@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"keywordhunter-mvp/pkg/artifact"
 	"keywordhunter-mvp/pkg/cti"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/storage"
@@ -21,6 +22,7 @@ type AutoTagResult struct {
 	Category    string   `json:"category"`
 	Criticality int      `json:"criticality"`
 	Confidence  int      `json:"confidence"`
+	Artifacts   int      `json:"artifacts"` // çıkarılan IOC sayısı
 }
 
 // Engine ortak etiketleme iş kurallarını içerir.
@@ -37,6 +39,8 @@ type KeywordExtractor interface {
 var (
 	ErrResultNotFound   = errors.New("sonuç bulunamadı")
 	ErrNoTaggableSignal = errors.New("etiket çıkarılamadı")
+	// ErrFetchFailed sayfa Tor üzerinden çekilemedi ve meta verilerden de sinyal çıkmadı.
+	ErrFetchFailed = errors.New("sayfa çekilemedi")
 )
 
 // NewEngine yeni tagging engine oluşturur.
@@ -94,7 +98,7 @@ func (e *Engine) TagResultByID(ctx context.Context, resultID int64) (*AutoTagRes
 
 	if len(finalTags) == 0 && keywordHits == 0 && analysis.Category == "Genel" {
 		if extractionErr != "" {
-			return nil, fmt.Errorf("etiketleme başarısız: %s", extractionErr)
+			return nil, fmt.Errorf("%w: %s", ErrFetchFailed, extractionErr)
 		}
 		return nil, ErrNoTaggableSignal
 	}
@@ -118,6 +122,22 @@ func (e *Engine) TagResultByID(ctx context.Context, resultID int64) (*AutoTagRes
 		return nil, fmt.Errorf("etiketleme sonucu kaydedilemedi: %w", err)
 	}
 
+	// IOC / artifact çıkarımı (sayfa metni alınabildiyse)
+	artifactCount := 0
+	if tagResult.Success && tagResult.Text != "" {
+		found := artifact.NewExtractor().Extract(tagResult.Text, result.URL)
+		found = artifact.FilterByConfidence(found, 0.5)
+		items := make([]storage.ResultArtifact, 0, len(found))
+		for _, a := range found {
+			items = append(items, storage.ResultArtifact{
+				Type: string(a.Type), Value: a.Value, Context: a.Context, Confidence: a.Confidence,
+			})
+		}
+		if n, err := e.db.ReplaceArtifacts(result.ID, items); err == nil {
+			artifactCount = n
+		}
+	}
+
 	return &AutoTagResult{
 		ResultID:    result.ID,
 		Tags:        finalTags,
@@ -126,5 +146,6 @@ func (e *Engine) TagResultByID(ctx context.Context, resultID int64) (*AutoTagRes
 		Category:    finalCategory,
 		Criticality: finalCriticality,
 		Confidence:  analysis.Confidence,
+		Artifacts:   artifactCount,
 	}, nil
 }

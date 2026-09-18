@@ -19,7 +19,7 @@ func (db *DB) CreateSession(id, username, csrfToken string, expiresAt time.Time)
 	_, err := db.conn.Exec(`
 		INSERT INTO sessions (id, username, csrf_token, expires_at)
 		VALUES (?, ?, ?, ?)
-	`, id, username, csrfToken, expiresAt)
+	`, id, username, csrfToken, expiresAt.UTC())
 	return err
 }
 
@@ -41,7 +41,7 @@ func (db *DB) TouchSession(id string, expiresAt time.Time) error {
 		UPDATE sessions
 		SET last_seen_at = CURRENT_TIMESTAMP, expires_at = ?
 		WHERE id = ?
-	`, expiresAt, id)
+	`, expiresAt.UTC(), id)
 	return err
 }
 
@@ -51,7 +51,7 @@ func (db *DB) DeleteSession(id string) error {
 }
 
 func (db *DB) CleanupExpiredSessions(now time.Time) (int64, error) {
-	res, err := db.conn.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, now)
+	res, err := db.conn.Exec(`DELETE FROM sessions WHERE datetime(expires_at) <= datetime(?)`, now.UTC())
 	if err != nil {
 		return 0, err
 	}
@@ -72,4 +72,14 @@ func (db *DB) SessionExists(id string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// DeleteOtherSessions verilen oturum dışındaki tüm oturumları sonlandırır
+// (parola/kullanıcı adı değişikliğinden sonra çağrılır).
+func (db *DB) DeleteOtherSessions(keepID string) (int64, error) {
+	res, err := db.conn.Exec(`DELETE FROM sessions WHERE id <> ?`, keepID)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

@@ -32,8 +32,11 @@ func main() {
 	}
 	defer logger.Close()
 
-	if appConfig.AdminPass == "admin123" {
-		logger.Warn("ADMIN_PASS olarak admin123 kullaniliyor. Yalnizca kapali/development ortaminda onerilir")
+	if appConfig.AdminPass == "admin123" || appConfig.AdminPass == "admin" || appConfig.AdminPass == "password" {
+		logger.Warn("ZAYIF PAROLA: ADMIN_PASS varsayilan/zayif bir deger. /settings ekranindan hemen degistirin")
+	}
+	if appConfig.AdminPass != "" && appConfig.AdminPassHash == "" {
+		logger.Info("ADMIN_PASS duz metin olarak yuklendi; /settings ekranindan parola degistirildiginde bcrypt hash olarak saklanacak")
 	}
 
 	// Graceful shutdown için signal handler
@@ -80,12 +83,13 @@ func main() {
 	logger.Info("Durdurmak için Ctrl+C")
 	envStore := config.NewEnvStore(appConfig.EnvFilePath)
 
-	server := web.New(web.Config{
+	server, err := web.New(web.Config{
 		DB:             db,
 		Searcher:       searcher,
 		Scraper:        scraperClient,
 		Username:       appConfig.AdminUser,
 		Password:       appConfig.AdminPass,
+		PasswordHash:   appConfig.AdminPassHash,
 		CookieSecure:   appConfig.SecureCookies,
 		SessionTTL:     appConfig.SessionTTL,
 		RateLimitRPS:   appConfig.RateLimitRPS,
@@ -93,6 +97,10 @@ func main() {
 		EnvStore:       envStore,
 		TorProxy:       appConfig.TorProxy,
 	})
+	if err != nil {
+		logger.Error("Web server could not be initialized: %v", err)
+		os.Exit(1)
+	}
 
 	// Sunucuyu goroutine'de başlat
 	go func() {

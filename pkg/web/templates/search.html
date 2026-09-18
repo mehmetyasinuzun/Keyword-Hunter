@@ -1,336 +1,143 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
-
 <head>
     {{template "head" .}}
     <title>KeywordHunter - Arama</title>
     <style>
-        /* Search page specific styles */
-        .loader {
-            border-top-color: #3498db;
-            animation: spin 1s linear infinite;
-        }
-
-        .loading-spin {
-            display: inline-block;
-            animation: spin 2s linear infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
+        .search-box { display: flex; gap: 10px; }
+        .search-box .kh-input { font-size: 1.05rem; padding: 14px 16px; }
+        .presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .presets .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); font-weight: 800; width: 64px; }
+        .log { font-family: var(--font-mono); font-size: .76rem; height: 220px; overflow-y: auto; background: rgba(7,8,13,.7); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 10px 12px; }
+        .log .ln { display: flex; gap: 10px; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.03); }
+        .log .ts { color: var(--text-muted); flex: none; }
+        .log .st { font-weight: 700; width: 56px; flex: none; }
+        .result-card { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 14px; border: 1px solid var(--bg-card-border); border-radius: 12px; background: rgba(255,255,255,.02); transition: border-color .15s; }
+        .result-card:hover { border-color: rgba(99,179,237,.3); }
+        .result-card .t { font-weight: 700; margin-bottom: 4px; }
+        .result-card .u { font-family: var(--font-mono); font-size: .76rem; color: var(--accent-primary); word-break: break-all; }
+        .result-card .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+        .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+        @media (max-width: 640px) { .summary { grid-template-columns: repeat(2, 1fr); } }
     </style>
 </head>
-
-<body class="min-h-screen">
+<body>
     {{template "navbar" .}}
+    <main class="kh-page">
+        <div class="kh-header">
+            <div><h1 class="kh-title">Dark Web Arama</h1><p class="kh-subtitle">Aktif arama motorlarında eşzamanlı tarama; sonuçlar otomatik sınıflandırılır ve kaydedilir</p></div>
+            <div class="kh-actions"><a href="/monitor" class="kh-btn subtle sm" id="engine-summary">🛰️ motorlar…</a></div>
+        </div>
 
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Search Form -->
-        <div class="bg-gray-800 rounded-xl p-6 shadow-lg mb-8">
-            <h2 class="text-xl font-bold text-white mb-4">Dark Web Arama</h2>
-            <p class="text-gray-400 mb-4">Tüm aktif dark web arama motorlarında eşzamanlı tarama yapın. Regex desteklenir.</p>
-
-            {{if .error}}
-            <div class="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4">
-                {{.error}}
-            </div>
-            {{end}}
-
+        <section class="kh-card accent" style="margin-bottom:16px">
+            {{if .error}}<div class="kh-alert err" style="margin-bottom:12px">⚠️ {{.error}}</div>{{end}}
             <form method="POST" action="/search" id="searchForm">
-                <div class="flex gap-4">
-                    <input type="text" name="query" value="{{.query}}" placeholder="ransomware, leak, forum, market..."
-                        required autofocus
-                        class="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
-                    <button type="submit" id="searchBtn"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg transition flex items-center gap-2">
-                        <span>→</span> Ara
-                    </button>
+                <div class="search-box">
+                    <input class="kh-input" type="text" name="query" id="query" value="{{.query}}" placeholder="ransomware, leak, tc kimlik, şirket adı, e-posta alanı…" required autofocus maxlength="200" autocomplete="off">
+                    <button type="submit" id="searchBtn" class="kh-btn primary" style="padding:0 26px">Ara</button>
                 </div>
             </form>
-
-            <div class="mt-4 space-y-2">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-gray-500 text-xs font-semibold uppercase tracking-wider w-16">Genel</span>
-                    <button onclick="setQuery('ransomware')"
-                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">ransomware</button>
-                    <button onclick="setQuery('leak')"
-                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">leak</button>
-                    <button onclick="setQuery('database dump')"
-                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">database dump</button>
-                    <button onclick="setQuery('combolist')"
-                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">combolist</button>
-                    <button onclick="setQuery('rdp access')"
-                        class="text-blue-400 hover:text-blue-300 text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition">rdp access</button>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-gray-500 text-xs font-semibold uppercase tracking-wider w-16">Türkiye</span>
-                    <button onclick="setQuery('turkey')"
-                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">turkey</button>
-                    <button onclick="setQuery('mernis')"
-                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">mernis</button>
-                    <button onclick="setQuery('e-devlet')"
-                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">e-devlet</button>
-                    <button onclick="setQuery('tc kimlik')"
-                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">tc kimlik</button>
-                    <button onclick="setQuery('turkish citizen')"
-                        class="text-cyan-400 hover:text-cyan-300 text-sm bg-cyan-900/20 hover:bg-cyan-900/40 border border-cyan-800/40 px-3 py-1 rounded transition">turkish citizen</button>
-                </div>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+                <div class="presets"><span class="lbl">Genel</span>{{range $q := (split "ransomware,leak,database dump,combolist,rdp access,credit card" ",")}}<button type="button" class="kh-chip" onclick="setQuery('{{$q}}')">{{$q}}</button>{{end}}</div>
+                <div class="presets"><span class="lbl">Türkiye</span>{{range $q := (split "turkey,mernis,e-devlet,tc kimlik,turkish citizen,türk hacker,sorgu paneli" ",")}}<button type="button" class="kh-chip" onclick="setQuery('{{$q}}')">{{$q}}</button>{{end}}</div>
             </div>
+            <div class="kh-hint" style="margin-top:10px">İpucu: Tam ifade için tırnak kullanmayın; motorlar kelimeleri kendi mantıklarıyla eşler. Her arama 90 saniyeye kadar sürebilir (Tor gecikmesi).</div>
 
-            <!-- Live Logs Container -->
-            <div id="live-logs-section" class="mt-6 hidden transition-all duration-300">
-                <div class="bg-gray-900 border border-gray-700 rounded-lg p-0 overflow-hidden shadow-inner">
-                    <div class="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
-                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">CANLI İŞLEM
-                            LOGLARI</span>
-                        <div class="flex gap-1.5">
-                            <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                            <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                            <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                        </div>
-                    </div>
-                    <div id="log-container"
-                        class="p-4 h-48 overflow-y-auto font-mono text-sm space-y-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
-                    </div>
+            <div id="live" style="display:none;margin-top:14px">
+                <div class="kh-inline" style="justify-content:space-between;margin-bottom:8px">
+                    <div class="kh-engine-chips" id="engine-chips"></div>
+                    <span class="kh-hint" id="live-status">Başlatılıyor…</span>
                 </div>
+                <div class="kh-progress" style="margin-bottom:8px"><div id="live-bar" style="width:2%"></div></div>
+                <details class="kh-details"><summary>Canlı işlem logları</summary><div class="log" id="log-container"></div></details>
             </div>
-        </div>
+        </section>
 
         <div id="results-area">
             {{if .results}}
-            <!-- Results Summary -->
-            <div class="bg-green-500/20 border border-green-500 text-green-400 px-4 py-3 rounded-lg mb-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <strong>{{.totalFound}}</strong> sonuç bulundu, <strong>{{.newSaved}}</strong> yeni kayıt
-                        eklendi
-                        {{if .totalHits}}<span class="ml-2 text-blue-400">| Toplam <strong>{{.totalHits}}</strong>
-                            hit</span>{{end}}
-                    </div>
-                    <div class="text-sm">⏱️ {{.duration}}</div>
-                </div>
+            <div class="summary">
+                <div class="kh-stat blue"><div class="label">Sonuç</div><div class="value">{{.totalFound}}</div></div>
+                <div class="kh-stat green"><div class="label">Yeni Kayıt</div><div class="value">{{.newSaved}}</div></div>
+                <div class="kh-stat purple"><div class="label">Toplam Hit</div><div class="value">{{.totalHits}}</div></div>
+                <div class="kh-stat amber"><div class="label">Süre</div><div class="value" style="font-size:1.3rem">{{.duration}}</div></div>
             </div>
-
-            <!-- Results List -->
-            <div class="bg-gray-800 rounded-xl p-6 shadow-lg">
-                <h2 class="text-xl font-bold text-white mb-4"> Sonuçlar (İlk 20)</h2>
-
-                <div class="space-y-3">
+            <section class="kh-card">
+                <div class="kh-card-title">Sonuçlar <span class="hint">ilk 20 · kritikliğe göre rozetli</span>
+                    <span style="margin-left:auto" class="kh-inline"><a class="kh-btn xs ghost" href="/results?q={{.query}}">Tümü ({{.totalFound}}) →</a><a class="kh-btn xs subtle" href="/results/graph?q={{.query}}">🗺️ Harita</a><a class="kh-btn xs subtle" href="/scheduled#new" title="Bu sorguyu periyodik tara">⏰ Planla</a></span></div>
+                <div style="display:grid;gap:10px">
                     {{range .results}}
-                    <div class="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition">
-                        <div class="flex items-start justify-between">
-                            <div class="flex-1 min-w-0">
-                                <p class="text-white font-medium">{{truncate .Title 80}}</p>
-                                <a href="{{.URL}}" target="_blank" rel="noopener"
-                                    class="text-blue-400 hover:text-blue-300 text-sm break-all mt-1 block">
-                                    {{truncate .URL 100}}
-                                </a>
-                                <div class="mt-2 flex flex-wrap items-center gap-2">
-                                    <span
-                                        class="bg-blue-600/30 text-blue-400 px-2 py-1 rounded text-xs font-mono">{{.Source}}</span>
-                                    <span class="px-2 py-1 rounded text-xs font-black
-                                        {{if eq .Criticality 5}}bg-red-500/20 text-red-400
-                                        {{else if eq .Criticality 4}}bg-orange-500/20 text-orange-400
-                                        {{else if eq .Criticality 3}}bg-yellow-500/20 text-yellow-400
-                                        {{else if eq .Criticality 2}}bg-cyan-500/20 text-cyan-400
-                                        {{else}}bg-blue-500/20 text-blue-400{{end}}"
-                                        title="Kritiklik seviyesi">SEV {{.Criticality}}</span>
-                                    {{if .Category}}
-                                    <span class="bg-gray-600/40 text-gray-300 px-2 py-1 rounded text-xs uppercase tracking-wide">{{.Category}}</span>
-                                    {{end}}
-                                    {{if gt .KeywordHits 0}}
-                                    <span class="text-green-400 text-xs font-mono" title="Anahtar kelime sıklığı">⌖ {{.KeywordHits}} hit</span>
-                                    {{end}}
-                                </div>
-                            </div>
+                    <div class="result-card">
+                        <div>
+                            <div class="t">{{truncate .Title 90}}</div>
+                            <a class="u" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{truncate .URL 110}}</a>
+                            <div class="meta"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span>{{if .Category}}<span class="kh-badge neutral">{{.Category}}</span>{{end}}<span class="kh-badge neutral mono">{{.Source}}</span>{{if gt .KeywordHits 0}}<span class="kh-badge ok">⌖ {{.KeywordHits}} hit</span>{{end}}</div>
                         </div>
+                        <div><button class="kh-btn xs subtle" onclick="KH.copy('{{.URL}}','URL kopyalandı')" title="Kopyala">📋</button></div>
                     </div>
                     {{end}}
                 </div>
-
-                {{if gt .totalFound 20}}
-                <div class="mt-6 text-center">
-                    <a href="/results?q={{.query}}" class="text-blue-400 hover:text-blue-300">
-                        Tüm {{.totalFound}} sonucu görüntüle →
-                    </a>
-                </div>
-                {{end}}
-            </div>
+            </section>
+            {{else if .query}}
+            <section class="kh-card"><div class="kh-empty"><div class="icon">🕳️</div><h3>Sonuç bulunamadı</h3><p>Motorlar yanıt vermemiş ya da sorgu eşleşmemiş olabilir. <a href="/monitor" style="color:var(--accent-primary)">Motor sağlığını</a> kontrol edin ve daha genel bir terim deneyin.</p></div></section>
             {{end}}
         </div>
-    </div>
+    </main>
 
     <script>
-        function setQuery(q) {
-            document.querySelector('input[name="query"]').value = q;
+        function setQuery(q) { const i = document.getElementById('query'); i.value = q; i.focus(); }
+        const logEl = document.getElementById('log-container'), chipsEl = document.getElementById('engine-chips');
+        let engines = [], engineState = {};
+
+        KH.api('/api/engines').then(d => {
+            engines = (d.engines || []).filter(e => e.isActive).map(e => e.name);
+            const up = (d.engines || []).filter(e => e.isActive && e.lastStatus === 'up').length;
+            document.getElementById('engine-summary').innerHTML = '🛰️ ' + engines.length + ' aktif motor · ' + up + ' çevrimiçi';
+        }).catch(() => { });
+
+        function renderChips() { chipsEl.innerHTML = engines.map(n => { const s = engineState[n] || {}; return `<span class="kh-engine-chip ${s.cls || ''}" title="${KH.esc(s.msg || 'bekliyor')}">${s.cls === 'running' ? '⏳' : s.cls === 'done' ? '✓' : s.cls === 'fail' ? '✗' : s.cls === 'zero' ? '·' : '○'} ${KH.esc(n)}${s.count != null ? ' <b>' + s.count + '</b>' : ''}</span>`; }).join(''); }
+        function addLog(d) {
+            const t = new Date().toLocaleTimeString('tr-TR', { hour12: false });
+            const map = { engine_start: ['SCAN', '#63b3ed'], engine_end: ['DONE', '#76e4f7'], info: ['INFO', '#8b9dc3'], error: ['ERR', '#fc8181'], success: ['OK', '#68d391'], auto_tag: ['TAG', '#b794f4'], auto_tag_error: ['TAG!', '#f6ad55'] };
+            let [st, col] = map[d.type] || ['LOG', '#5a6a8a'];
+            if (d.type === 'engine_end' && /ERROR|FAILED/.test(d.message)) { st = 'FAIL'; col = '#fc8181'; }
+            const div = document.createElement('div'); div.className = 'ln';
+            div.innerHTML = `<span class="ts">${t}</span><span class="st" style="color:${col}">[${st}]</span><span>${d.engine ? '<b>' + KH.esc(d.engine) + '</b>: ' : ''}${KH.esc(d.message.replace(/^SEARCH ENGINE (SUCCESS|ERROR): ?/, ''))}</span>`;
+            logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
         }
-
-        // ========================
-        // LIVE LOGS / SSE
-        // ========================
-        const logContainer = document.getElementById('log-container');
-        const searchBtn = document.getElementById('searchBtn');
-        let refreshInterval;
-
-        // Log ekleme fonksiyonu
-        function addLog(data) {
-            const div = document.createElement('div');
-            div.className = 'text-sm font-mono py-1 border-b border-gray-800 last:border-0 hover:bg-white/5 transition px-2 flex items-start gap-3';
-
-            const time = new Date().toLocaleTimeString('tr-TR', { hour12: false });
-            let content = '';
-            let status = '[INFO]';
-            let colorClass = 'text-gray-400';
-
-            switch (data.type) {
-                case 'engine_start':
-                    status = '[SCAN]';
-                    colorClass = 'text-blue-400';
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">Target:</span> <span class="text-white">${data.engine}</span>`;
-                    break;
-                case 'engine_end':
-                    if (data.message.includes('ERROR') || data.message.includes('FAILED')) {
-                        status = '[FAIL]';
-                        colorClass = 'text-red-500';
-                    } else {
-                        status = '[DONE]';
-                        colorClass = 'text-cyan-400'; // DONE için cyan
-                    }
-                    const cleanMsg = data.message.replace('SEARCH ENGINE SUCCESS:', '').replace('SEARCH ENGINE ERROR:', '');
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">${data.engine}:</span> <span class="text-gray-300">${cleanMsg}</span>`;
-                    break;
-                case 'info':
-                    status = '[INFO]';
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-slate-400 font-bold w-16">${status}</span> <span class="text-gray-400">${data.message}</span>`;
-                    break;
-                case 'error':
-                    status = '[ERR ]';
-                    colorClass = 'text-red-500';
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-300">${data.message}</span>`;
-                    break;
-                case 'success':
-                    status = '[SUCC]';
-                    colorClass = 'text-emerald-400'; // SUCCESS için emerald (parlak yeşil)
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-200">${data.message}</span>`;
-                    break;
-                case 'auto_tag':
-                    status = '[TAG ]';
-                    colorClass = 'text-purple-400';
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-300">${data.message}</span>`;
-                    break;
-                case 'auto_tag_error':
-                    status = '[TAG!]';
-                    colorClass = 'text-orange-400';
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="${colorClass} font-bold w-16">${status}</span> <span class="text-gray-400">${data.message}</span>`;
-                    break;
-                default:
-                    content = `<span class="text-gray-600 select-none">${time}</span> <span class="text-gray-600 w-16">[LOG ]</span> <span class="text-gray-500">${data.message}</span>`;
+        function updateLive(d) {
+            if (d.type === 'engine_start' && d.engine) engineState[d.engine] = { cls: 'running', msg: 'sorgulanıyor' };
+            if (d.type === 'engine_end' && d.engine) {
+                const m = d.message.match(/(\d+) sonuç/); const n = m ? parseInt(m[1]) : 0;
+                engineState[d.engine] = /ERROR|FAILED/.test(d.message) ? { cls: 'fail', msg: d.message } : { cls: n > 0 ? 'done' : 'zero', count: n, msg: d.message };
             }
-
-            div.innerHTML = content;
-            logContainer.appendChild(div);
-            logContainer.scrollTop = logContainer.scrollHeight;
+            renderChips();
+            const finished = Object.values(engineState).filter(s => s.cls !== 'running').length;
+            document.getElementById('live-bar').style.width = Math.max(2, Math.round(finished / Math.max(engines.length, 1) * 100)) + '%';
+            document.getElementById('live-status').textContent = finished + '/' + engines.length + ' motor tamamlandı';
         }
-
-        // SSE Başlat
         function startEventStream() {
-            logContainer.innerHTML = '';
-            document.getElementById('live-logs-section').classList.remove('hidden');
-
-            if (window.eventSource) {
-                window.eventSource.close();
-            }
-
+            logEl.innerHTML = ''; engineState = {}; renderChips(); document.getElementById('live').style.display = '';
+            if (window.eventSource) window.eventSource.close();
             window.eventSource = new EventSource('/events');
-
-            window.eventSource.onmessage = function (event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    addLog(data);
-                } catch (e) {
-                    console.error("Log parse error", e);
-                }
-            };
-
-            window.eventSource.onerror = function () {
-                // Hata veya kapanma durumunda sessizce kapat
-                window.eventSource.close();
-            };
+            window.eventSource.onmessage = ev => { try { const d = JSON.parse(ev.data); addLog(d); updateLive(d); } catch (_) { } };
+            window.eventSource.onerror = () => window.eventSource.close();
         }
-
-        // Form Submit Handler (AJAX)
         document.getElementById('searchForm').addEventListener('submit', async function (e) {
             e.preventDefault();
-
-            const btn = document.getElementById('searchBtn');
-            const form = this;
-            const formData = new FormData(form);
-
-            // UI Update
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loader inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></span> Aranıyor...';
-
-            // Clear previous results
-            const resultsArea = document.getElementById('results-area');
-            if (resultsArea) {
-                resultsArea.innerHTML = '<div class="text-center text-gray-400 py-8 animate-pulse">Sonuçlar bekleniyor...</div>';
-            }
-
-            // Logs Start
+            const btn = document.getElementById('searchBtn'); KH.busy(btn, true, 'Aranıyor…');
+            document.getElementById('results-area').innerHTML = '<div class="kh-card"><div class="kh-empty"><div class="kh-skel" style="width:50%;margin:0 auto 10px"></div><p class="kh-hint">Motorlar Tor üzerinden sorgulanıyor, bu 30-90 saniye sürebilir…</p></div></div>';
             startEventStream();
-
             try {
-                const response = await fetch('/search', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const html = await response.text();
-
-                    // SSE bağlantısını kapat (işlem bitti)
-                    if (window.eventSource) window.eventSource.close();
-
-                    // Parse new HTML
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-
-                    // Update Results Area
-                    const newResultsHelper = doc.getElementById('results-area');
-                    const currentResults = document.getElementById('results-area');
-
-                    if (newResultsHelper && currentResults) {
-                        currentResults.replaceWith(newResultsHelper);
-                    } else if (newResultsHelper && !currentResults) {
-                        // Should not happen if we have the wrapper, but just in case
-                        document.querySelector('.max-w-7xl.mx-auto.px-4.py-8').appendChild(newResultsHelper);
-                    }
-
-                    // Re-enable button
-                    btn.disabled = false;
-                    btn.innerHTML = '<span></span> Ara';
-
-                } else {
-                    throw new Error('Arama isteği başarısız');
-                }
-            } catch (error) {
-                console.error('Search error:', error);
-
-                // Hata durumunda butonu eski haline getir
-                btn.disabled = false;
-                btn.innerHTML = '<span></span> Ara';
-
-                // Hata mesajı göster
-                const errDiv = document.createElement('div');
-                errDiv.className = 'bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mb-4 mt-4';
-                errDiv.textContent = ' Bir hata oluştu: ' + error.message;
-                form.insertBefore(errDiv, form.firstChild);
-            }
+                const res = await fetch('/search', { method: 'POST', body: new FormData(this) });
+                if (!res.ok) throw new Error(res.status === 429 ? 'Çok fazla istek' : 'Arama isteği başarısız (HTTP ' + res.status + ')');
+                const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+                const fresh = doc.getElementById('results-area'); if (fresh) document.getElementById('results-area').replaceWith(fresh);
+                document.getElementById('live-status').textContent = 'Tamamlandı';
+                if (window.eventSource) window.eventSource.close();
+                const total = fresh && fresh.querySelector('.kh-stat .value'); KH.toast(total ? total.textContent + ' sonuç bulundu' : 'Arama tamamlandı', 'ok');
+            } catch (err) { KH.toast(err.message, 'err'); document.getElementById('results-area').innerHTML = ''; }
+            finally { KH.busy(btn, false); }
         });
     </script>
 </body>
-
 </html>

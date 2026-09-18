@@ -6,6 +6,8 @@ import (
 	"sync"
 )
 
+var _ = sync.Once{}
+
 // ArtifactType artifact türü
 type ArtifactType string
 
@@ -35,7 +37,6 @@ type Artifact struct {
 // Extractor artifact çıkarıcı
 type Extractor struct {
 	patterns map[ArtifactType]*regexp.Regexp
-	mu       sync.RWMutex
 }
 
 // Compiled regex patterns (thread-safe singleton)
@@ -73,17 +74,16 @@ func compilePatterns() map[ArtifactType]*regexp.Regexp {
 	// IPv4 Address
 	patterns[TypeIP] = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`)
 
-	// Onion Address (v2 ve v3)
-	// v2: 16 karakter + .onion
-	// v3: 56 karakter + .onion
-	patterns[TypeOnion] = regexp.MustCompile(`\b[a-z2-7]{16,56}\.onion\b`)
+	// Onion Address (v3: 56 karakter; v2 ağdan kaldırıldı)
+	patterns[TypeOnion] = regexp.MustCompile(`\b[a-z2-7]{56}\.onion\b`)
 
 	// Credit Card (basit - Luhn kontrolü ayrı yapılabilir)
 	// Visa: 4xxx, MC: 5xxx, Amex: 34/37
 	patterns[TypeCreditCard] = regexp.MustCompile(`\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b`)
 
-	// Phone (uluslararası format)
-	patterns[TypePhone] = regexp.MustCompile(`\+?[1-9]\d{1,14}`)
+	// Phone: yalnızca uluslararası biçim (+90 5xx…, +1 …) — çıplak rakam dizileri
+	// (fiyat, tarih, ID) yanlış pozitif ürettiği için istenmez.
+	patterns[TypePhone] = regexp.MustCompile(`\+[1-9]\d{0,2}[ .-]?\(?\d{2,4}\)?[ .-]?\d{3}[ .-]?\d{2,4}(?:[ .-]?\d{2})?`)
 
 	// SSH Private Key marker
 	patterns[TypeSSH] = regexp.MustCompile(`-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----`)
@@ -94,18 +94,30 @@ func compilePatterns() map[ArtifactType]*regexp.Regexp {
 	// Username patterns (common formats)
 	patterns[TypeUsername] = regexp.MustCompile(`(?i)(?:user(?:name)?|login|account)["\s:=]+["']?([a-zA-Z0-9_\-.]{3,32})["']?`)
 
-	// Hash patterns (MD5, SHA1, SHA256)
-	patterns[TypeHash] = regexp.MustCompile(`\b([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\b`)
+	// Hash patterns (MD5, SHA1, SHA256) — tam uzunluk, hex sınırlı
+	patterns[TypeHash] = regexp.MustCompile(`\b(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{40}|[a-fA-F0-9]{32})\b`)
 
 	return patterns
+}
+
+// extractionOrder çıktı sırasını deterministik yapar (map iterasyonu rastgeledir).
+var extractionOrder = []ArtifactType{
+	TypeEmail, TypeBitcoin, TypeMonero, TypeOnion, TypeIP, TypeCreditCard,
+	TypePhone, TypeSSH, TypeAPIKey, TypeUsername, TypeHash,
 }
 
 // Extract metinden tüm artifact'ları çıkarır
 func (e *Extractor) Extract(text, sourceURL string) []Artifact {
 	var artifacts []Artifact
 	seen := make(map[string]bool) // Duplicate kontrolü
+	sourceHost := strings.ToLower(sourceURL)
+	sourceHost = strings.TrimPrefix(strings.TrimPrefix(sourceHost, "http://"), "https://")
+	if i := strings.IndexAny(sourceHost, "/?#"); i >= 0 {
+		sourceHost = sourceHost[:i]
+	}
 
-	for artifactType, pattern := range e.patterns {
+	for _, artifactType := range extractionOrder {
+		pattern := e.patterns[artifactType]
 		matches := pattern.FindAllStringIndex(text, -1)
 
 		for _, match := range matches {
@@ -121,6 +133,13 @@ func (e *Extractor) Extract(text, sourceURL string) []Artifact {
 			// Bazı false positive'leri filtrele
 			if !isValidArtifact(artifactType, value) {
 				continue
+			}
+			// Sayfanın kendi onion adresi IOC değildir
+			if artifactType == TypeOnion && sourceHost != "" && strings.HasSuffix(sourceHost, strings.ToLower(value)) {
+				continue
+			}
+			if len(artifacts) >= 500 {
+				return artifacts
 			}
 
 			// Context çıkar (50 karakter öncesi/sonrası)
@@ -229,9 +248,36 @@ func isValidArtifact(artifactType ArtifactType, value string) bool {
 		return isValidBitcoinAddress(value)
 	case TypeHash:
 		return isValidHash(value)
+	case TypeCreditCard:
+		return luhnValid(value)
+	case TypeOnion:
+		// Kendi arama motorlarımızın adresleri IOC değildir; çağıran filtreler
+		return true
 	default:
 		return true
 	}
+}
+
+// luhnValid kart numarası için Luhn sağlaması (yanlış pozitifleri %90 azaltır).
+func luhnValid(number string) bool {
+	sum := 0
+	alt := false
+	for i := len(number) - 1; i >= 0; i-- {
+		c := number[i]
+		if c < '0' || c > '9' {
+			return false
+		}
+		d := int(c - '0')
+		if alt {
+			d *= 2
+			if d > 9 {
+				d -= 9
+			}
+		}
+		sum += d
+		alt = !alt
+	}
+	return sum%10 == 0
 }
 
 // isValidEmail email doğrulama

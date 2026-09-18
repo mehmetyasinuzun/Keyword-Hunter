@@ -542,3 +542,143 @@ func trimSpace(s string) string {
 	}
 	return s[start:end]
 }
+
+// ResultFilter bulgu listesi için filtre/sıralama/sayfalama seçenekleri.
+type ResultFilter struct {
+	Query          string // sorgu adı içinde LIKE
+	Text           string // başlık veya URL içinde LIKE
+	Source         string // tam eşleşme
+	Category       string // tam eşleşme
+	MinCriticality int
+	Tag            string // result_tags tam eşleşme
+	Sort           string // "newest" (varsayılan), "oldest", "criticality", "hits"
+	Limit          int
+	Offset         int
+}
+
+// Sources ve Categories filtre menüleri için ayrık değerleri döndürür.
+func (db *DB) DistinctSourcesAndCategories() (sources []string, categories []string, err error) {
+	rows, err := db.conn.Query(`SELECT DISTINCT source FROM search_results ORDER BY source`)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var v string
+		if rows.Scan(&v) == nil {
+			sources = append(sources, v)
+		}
+	}
+	rows.Close()
+	rows, err = db.conn.Query(`SELECT DISTINCT category FROM search_results WHERE category != '' ORDER BY category`)
+	if err != nil {
+		return sources, nil, err
+	}
+	for rows.Next() {
+		var v string
+		if rows.Scan(&v) == nil {
+			categories = append(categories, v)
+		}
+	}
+	rows.Close()
+	return sources, categories, nil
+}
+
+// GetResultsFiltered filtreye uyan bulguları ve toplam eşleşme sayısını döndürür.
+func (db *DB) GetResultsFiltered(f ResultFilter) ([]SearchResult, int, error) {
+	if f.Limit <= 0 || f.Limit > 500 {
+		f.Limit = 50
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+
+	where := []string{"1=1"}
+	args := []interface{}{}
+	if q := strings.TrimSpace(f.Query); q != "" {
+		where = append(where, "query LIKE ? ESCAPE '\\'")
+		args = append(args, "%"+escapeLike(q)+"%")
+	}
+	if t := strings.TrimSpace(f.Text); t != "" {
+		where = append(where, "(title LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\')")
+		args = append(args, "%"+escapeLike(t)+"%", "%"+escapeLike(t)+"%")
+	}
+	if f.Source != "" {
+		where = append(where, "source = ?")
+		args = append(args, f.Source)
+	}
+	if f.Category != "" {
+		where = append(where, "category = ?")
+		args = append(args, f.Category)
+	}
+	if f.MinCriticality > 1 {
+		where = append(where, "criticality >= ?")
+		args = append(args, f.MinCriticality)
+	}
+	if tag := strings.ToLower(strings.TrimSpace(f.Tag)); tag != "" {
+		where = append(where, "id IN (SELECT result_id FROM result_tags WHERE tag = ?)")
+		args = append(args, tag)
+	}
+	whereSQL := strings.Join(where, " AND ")
+
+	var total int
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM search_results WHERE "+whereSQL, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	order := "created_at DESC, id DESC"
+	switch f.Sort {
+	case "oldest":
+		order = "created_at ASC, id ASC"
+	case "criticality":
+		order = "criticality DESC, created_at DESC"
+	case "hits":
+		order = "keyword_count DESC, created_at DESC"
+	}
+
+	listArgs := append(append([]interface{}{}, args...), f.Limit, f.Offset)
+	rows, err := db.conn.Query(`
+		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at
+		FROM search_results
+		WHERE `+whereSQL+`
+		ORDER BY `+order+`
+		LIMIT ? OFFSET ?
+	`, listArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	results := make([]SearchResult, 0, f.Limit)
+	for rows.Next() {
+		var r SearchResult
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt); err != nil {
+			continue
+		}
+		results = append(results, r)
+	}
+	return results, total, rows.Err()
+}
+
+// DeleteResults verilen ID'lerdeki bulguları siler (etiketler CASCADE ile gider).
+func (db *DB) DeleteResults(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]interface{}, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	res, err := db.conn.Exec("DELETE FROM search_results WHERE id IN ("+placeholders+")", args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
+}

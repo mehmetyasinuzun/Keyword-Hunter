@@ -180,7 +180,12 @@
                 <p class="auth-subtitle">Dark Web Tehdit İstihbarat Platformu</p>
             </div>
 
-            {{if .error}}
+            {{if eq .error "locked"}}
+            <div class="auth-alert error" role="alert">
+                <span aria-hidden="true">🔒</span>
+                <span>Çok fazla başarısız deneme. <span id="lock-wait">{{.wait}}</span> saniye sonra tekrar deneyin.</span>
+            </div>
+            {{else if .error}}
             <div class="auth-alert error" role="alert">
                 <span aria-hidden="true">⚠️</span>
                 <span>Kullanıcı adı veya şifre hatalı.</span>
@@ -217,12 +222,19 @@
             </form>
 
             <p class="auth-footer">
-                <span class="dot">●</span> Yetkili analistlere özel · CTI Operasyon Konsolu
+                <span class="dot">●</span> Yetkili analistlere özel · CTI Operasyon Konsolu · v{{version}}
             </p>
+            <p class="auth-footer" id="caps-warn" style="display:none;color:#f6e05e">⇪ Caps Lock açık</p>
         </main>
     </div>
 
     <script>
+        (function () {
+            var w = document.getElementById('lock-wait');
+            if (w) { var n = parseInt(w.textContent) || 0; var t = setInterval(function () { n--; if (n <= 0) { clearInterval(t); location.href = '/login'; } else w.textContent = n; }, 1000); }
+            var pw = document.getElementById('password');
+            pw.addEventListener('keyup', function (e) { document.getElementById('caps-warn').style.display = e.getModifierState && e.getModifierState('CapsLock') ? '' : 'none'; });
+        })();
         function togglePw() {
             var input = document.getElementById('password');
             var btn = document.getElementById('pwToggle');

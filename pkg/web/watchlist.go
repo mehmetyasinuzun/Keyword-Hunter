@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
@@ -92,19 +93,19 @@ func extractWatchlistTitle(body []byte) string {
 	}
 	title := strings.TrimSpace(string(m[1]))
 	title = strings.Join(strings.Fields(title), " ")
-	if len(title) > 200 {
-		title = title[:200]
-	}
-	return title
+	return shared.TruncateRunes(title, 200)
 }
 
-// hashWatchlistContent body'nin ilk 4KB'sinden sha256 hash üretir
+// hashWatchlistContent sayfanın görünür metninden (script/style/etiketler
+// atılmış, boşluk sadeleştirilmiş, ilk 16KB) sha256 üretir. Ham HTML'in ilk
+// 4KB'si CSRF nonce'ları, zaman damgaları ve rastgele sınıf adları yüzünden
+// her kontrolde "değişti" üretiyordu.
 func hashWatchlistContent(body []byte) string {
-	limit := 4096
-	if len(body) < limit {
-		limit = len(body)
+	text := strings.ToLower(scraper.HTMLToText(string(body)))
+	if len(text) > 16384 {
+		text = text[:16384]
 	}
-	sum := sha256.Sum256(body[:limit])
+	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -140,12 +141,12 @@ func (s *Server) handleWatchlistAdd(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Site adı boş olamaz"})
 		return
 	}
-	if !strings.Contains(strings.ToLower(req.URL), ".onion") {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "URL geçerli bir .onion adresi olmalı"})
+	if !shared.IsOnionURL(req.URL) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "URL geçerli bir http(s) v3 .onion adresi olmalı (56 karakter)"})
 		return
 	}
-	if len(req.Name) > 128 || len(req.Category) > 64 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Ad veya kategori çok uzun"})
+	if len(req.Name) > 128 || len(req.Category) > 64 || len(req.Notes) > 500 || len(req.URL) > 2048 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Ad, kategori, not veya URL çok uzun"})
 		return
 	}
 
@@ -226,4 +227,15 @@ func (s *Server) handleWatchlistCheck(c *gin.Context) {
 		"changed":    result.Changed,
 		"responseMs": result.ResponseMs,
 	})
+}
+
+// handleWatchlistSeed gömülü Türk onion izleme listesini analistin açık isteğiyle yükler.
+func (s *Server) handleWatchlistSeed(c *gin.Context) {
+	n, err := s.db.SeedTurkishWatchlist()
+	if err != nil {
+		respondInternalError(c, "SeedTurkishWatchlist", err)
+		return
+	}
+	logger.Info("WATCHLIST SEED: %d hedef eklendi", n)
+	c.JSON(http.StatusOK, gin.H{"success": true, "added": n})
 }

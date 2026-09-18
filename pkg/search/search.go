@@ -32,7 +32,46 @@ type Result struct {
 type Searcher struct {
 	torProxy string
 	client   *http.Client
+
+	mu           sync.RWMutex
+	engineFilter func(name string) bool // nil ise tüm motorlar aktif
 }
+
+// SetEngineFilter aramaya dahil edilecek motorları belirleyen filtre atar
+// (/monitor ekranındaki aktif/pasif durumu buradan uygulanır).
+func (s *Searcher) SetEngineFilter(filter func(name string) bool) {
+	s.mu.Lock()
+	s.engineFilter = filter
+	s.mu.Unlock()
+}
+
+// ActiveEngines filtreden geçen motorları döndürür.
+func (s *Searcher) ActiveEngines() []Engine {
+	s.mu.RLock()
+	filter := s.engineFilter
+	s.mu.RUnlock()
+
+	active := make([]Engine, 0, len(SearchEngines))
+	for _, e := range SearchEngines {
+		if filter == nil {
+			if e.DefaultActive {
+				active = append(active, e)
+			}
+			continue
+		}
+		if filter(e.Name) {
+			active = append(active, e)
+		}
+	}
+	return active
+}
+
+// Önceden derlenmiş regex'ler (her sayfa/istek için yeniden derleme maliyeti yoktu).
+var (
+	linkRegex    = regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
+	onionRegex   = regexp.MustCompile(`https?://[^/\s"'<>]*\.onion[^\s"'<>]*`)
+	htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+)
 
 // cleanURL URL'deki boşlukları ve geçersiz karakterleri temizler
 func cleanURL(urlStr string) string {
@@ -66,16 +105,9 @@ func isValidResultURL(urlStr string) bool {
 		return false
 	}
 
-	// 3. Çok kısa URL'leri atla (sadece domain)
-	// http://xxx.onion veya http://xxx.onion/ gibi
-	onionIdx := strings.Index(lowerURL, ".onion")
-	if onionIdx > 0 {
-		afterOnion := lowerURL[onionIdx+6:]
-		// Sadece / veya boş ise, ana sayfa - bunlar genelde index sayfaları
-		if afterOnion == "" || afterOnion == "/" {
-			// Ana sayfalar bazı durumlarda değerli olabilir, geçir
-			return true
-		}
+	// 3. Yalnızca geçerli .onion adresleri (v3: 56 karakter base32) sonuç sayılır
+	if !strings.Contains(lowerURL, ".onion") || !shared.IsOnionURL(urlStr) {
+		return false
 	}
 
 	return true
@@ -106,9 +138,14 @@ func (s *Searcher) SearchAll(ctx context.Context, query string) []Result {
 	var wg sync.WaitGroup
 	startTime := time.Now()
 
-	logger.SearchStarted(query, len(SearchEngines))
+	engines := s.ActiveEngines()
+	logger.SearchStarted(query, len(engines))
+	if len(engines) == 0 {
+		shared.Streamer.BroadcastLog("error", "Aktif arama motoru yok — /monitor ekranından en az bir motoru etkinleştirin", "")
+		return nil
+	}
 
-	for _, engine := range SearchEngines {
+	for _, engine := range engines {
 		wg.Add(1)
 		go func(eng Engine) {
 			defer wg.Done()
@@ -213,20 +250,13 @@ func (s *Searcher) parseResults(htmlContent, sourceName, query string) []Result 
 	}
 
 	// <a> taglarını bul - iç HTML dahil (nested taglar için)
-	// Önce tüm <a> bloklarını bul
-	linkRegex := regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
 	matches := linkRegex.FindAllStringSubmatch(htmlContent, -1)
 
-	// .onion URL pattern
-	onionRegex := regexp.MustCompile(`https?://[^/]*\.onion[^\s"'<>]*`)
-
-	// HTML tag temizleme regex
-	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
 	for _, match := range matches {
 		if len(match) >= 3 {
 			href := match[1]
 			innerHTML := match[2]
-			onionURLs := onionRegex.FindAllString(href, -1)
+			onionURLs := onionRegex.FindAllString(decodeHTMLEntities(href), -1)
 			if len(onionURLs) > 0 {
 				foundURL := cleanURL(onionURLs[0])
 				if !isValidResultURL(foundURL) {
@@ -255,8 +285,9 @@ func (s *Searcher) parseResults(htmlContent, sourceName, query string) []Result 
 		seen[r.URL] = true
 	}
 
-	for _, onionURL := range allOnions {
-		// ✅ URL filtreleme - düşük değerli URL'leri kaydetme
+	for _, rawOnionURL := range allOnions {
+		onionURL := cleanURL(decodeHTMLEntities(rawOnionURL))
+		// URL filtreleme - düşük değerli URL'leri kaydetme
 		if !seen[onionURL] && !strings.Contains(onionURL, "javascript:") && isValidResultURL(onionURL) {
 			// URL çevresinde kelime geçiyor mu kontrol et (context-aware)
 			hits := 0

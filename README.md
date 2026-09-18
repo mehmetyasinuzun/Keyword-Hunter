@@ -1,245 +1,150 @@
-# KeywordHunter - Cyber Threat Intelligence Platform
+# KeywordHunter — Dark Web Cyber Threat Intelligence Platformu
 
-KeywordHunter, Dark Web (Tor Ağı) ve çeşitli açık kaynaklı istihbarat kanallarında anahtar kelime tabanlı tarama yapan, elde edilen verileri ilişkilendiren ve analistler için görselleştiren gelişmiş bir CTI (Cyber Threat Intelligence) aracıdır.
+KeywordHunter, Tor ağındaki dark web arama motorlarını **eşzamanlı** tarayan, bulguları
+otomatik sınıflandıran (kritiklik 1-5, kategori), sayfa içeriğinden **IOC/artifact**
+(e-posta, kripto cüzdanı, IP, hash, onion adresi…) çıkaran, bilinen onion sitelerini
+**izleyen** (uptime, içerik değişikliği, captcha/engel tespiti, ekran görüntüsü) ve yeni
+bulguları **webhook** ile bildiren, tek ikili dosyadan oluşan bir CTI aracıdır.
 
-Bu proje, güvenlik analistlerinin tehditleri erken tespit etmesi, veri sızıntılarını izlemesi ve aktörler arasındaki ilişkileri haritalandırması için geliştirilmiştir. Yüksek performanslı Go mimarisi üzerine inşa edilmiştir.
+Tüm dış trafik Tor üzerinden çıkar; arayüz ve varlıklar tamamen yerel (CDN yok), veri
+yalnızca sizin makinenizde SQLite'ta tutulur.
 
-## Kurulum ve Çalıştırma
-
-Projeyi çalıştırmak için iki yöntem bulunmaktadır. Üretim ortamları ve hızlı testler için Docker önerilir.
-
-### Yöntem 1: Docker ile Kurulum (Önerilen)
-
-**Gereksinimler:** Docker 20.10+ ve Docker Compose v2+ (veya `docker-compose` v1.29+)
-
-#### Hızlı Başlangıç (3 adım)
-
-```bash
-git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
-cd Keyword-Hunter
-mkdir -p data
-cp .env.example data/.env
-docker compose up -d --build
-```
-
-Windows PowerShell için:
-
-```powershell
-git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
-cd Keyword-Hunter
-New-Item -ItemType Directory -Path data -Force | Out-Null
-Copy-Item .env.example data/.env -Force
-docker compose up -d --build
-```
-
-> Eski Docker sürümlerinde: `docker-compose up -d --build`
-
-#### Erişim
-
-| Bileşen | Adres | Notlar |
-|---------|-------|--------|
-| Web Arayüzü | `http://localhost:8080` | |
-| Giriş bilgileri | `data/.env` içindeki `ADMIN_USER` / `ADMIN_PASS` | Örnek varsayılan: `admin` / `admin123` |
-
-#### Çalışan Servisler
-
-```
-keywordhunter-tor   → Tor proxy (dahili: tor:9050)
-keywordhunter-app   → Go web sunucusu (dışa: 8080)
-```
-
-Uygulama başladıktan sonra Tor bağlantısı kurulana kadar arama özelliği **~10-30 saniye** bekleyebilir.
-
-#### Ortam Değişkenleri Referansı
-
-| Değişken | Varsayılan | Açıklama |
-|----------|------------|----------|
-| `ADMIN_USER` | — | **Zorunlu.** Giriş kullanıcı adı |
-| `ADMIN_PASS` | — | **Zorunlu.** Güçlü bir şifre seçin |
-| `TOR_PROXY` | `tor:9050` | Docker içi Tor adresi (değiştirmeyin) |
-| `DB_PATH` | `/data/keywordhunter.db` | SQLite veritabanı yolu |
-| `WEB_ADDR` | `:8080` | Sunucu dinleme adresi |
-| `LOG_DIR` | `/data/logs` | Log dosyaları dizini |
-| `LOG_LEVEL` | `info` | Log seviyesi: `debug` / `info` / `warn` / `error` |
-| `SESSION_TTL_HOURS` | `24` | Oturum geçerlilik süresi (1–720) |
-| `RATE_LIMIT_RPS` | `12` | Saniyede maksimum istek (1–200) |
-| `RATE_LIMIT_BURST` | `30` | Ani yük toleransı (1–500) |
-| `WEB_SECURE_COOKIES` | `false` | HTTPS kullanıyorsanız `true` yapın |
-
-#### Faydalı Komutlar
-
-```bash
-# Logları canlı izle
-docker compose logs -f
-
-# Sadece uygulama loglarını izle
-docker compose logs -f app
-
-# Konteyner durumunu gör
-docker compose ps
-
-# Durdur (veriler korunur)
-docker compose down
-
-# Tamamen sıfırla (VERİTABANI SİLİNİR)
-docker compose down -v
-rm -rf ./data
-
-# Güncelleme sonrası yeniden derle
-docker compose up -d --build --force-recreate
-```
-
-#### Kalıcı Veriler
-
-```
-./data/
-├── keywordhunter.db   ← SQLite veritabanı (tüm bulgular)
-├── .env               ← /settings ekranından yapılan değişiklikler buraya yazılır
-└── logs/              ← Uygulama logları
-```
-
-> `/settings` ekranından yapılan tüm runtime ayar değişiklikleri `./data/.env` dosyasına yazılır ve konteyner yeniden başlatılsa bile korunur.
-
-Docker çalışırken kaynak env dosyası `./data/.env` dosyasıdır; root `.env` dosyası Docker için kullanılmaz.
-
-#### Sorun Giderme
-
-**Konteyner başlamıyor:**
-```bash
-docker compose logs app
-# "ADMIN_USER ve ADMIN_PASS zorunludur" hatası → .env dosyasını kontrol edin
-```
-
-**Tor bağlantısı kurulamıyor:**
-```bash
-docker compose logs tor
-# tor servisi running değilse: docker compose restart tor
-```
-
-**Port 8080 kullanımda:**
-```bash
-# .env içinde WEB_ADDR=:9090 yapın, ardından docker-compose.yml'de
-# ports: "9090:9090" olarak güncelleyin
-```
-
-**Sağlık kontrolü:**
-```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/login
-# 200 dönüyorsa sistem hazır
-```
-
-![Giriş Ekranı](docs/screenshots/login_view.jpg)
-
-### Yöntem 2: Manuel Kurulum (Windows/Linux)
-
-Geliştirme yapmak veya Docker kullanmadan çalıştırmak isterseniz:
-
-1. Gereksinimler:
-   - Go 1.24 veya üzeri
-   - Tor Browser (Arka planda çalışmalı ve 9150 portunu dinlemeli)
-   - CGO_ENABLED=0 ile derleme yapıldığından GCC gerekmez
-
-2. Derleme ve Başlatma:
-   Windows kullanıcıları için hazır script bulunmaktadır. Bu script eski derlemeleri temizler ve projeyi yeniden başlatır:
-   ```bash
-   copy .env.example .env
-   # .env dosyasında ADMIN_USER ve ADMIN_PASS değerlerini düzenleyin
-   build_and_run.bat
-   ```
-
-## Modüller ve Özellikler
-
-Uygulama, istihbarat döngüsünü yönetmek için 5 ana modülden oluşur.
-
-### 1. Dashboard (Genel Bakış)
-Sistemin komuta merkezidir. Anlık olarak yürütülen operasyonların özetini sunar. Sol taraftaki istatistik paneli veritabanındaki toplam veri hacmini gösterirken, sağ taraftaki grafikler tehditlerin kritiklik seviyelerine (Level 1-5) göre dağılımını analiz eder.
-
-![Dashboard Görünümü](docs/screenshots/dashboard_view.jpg)
-
-### 2. Arama Motoru (Hunter Search)
-Hedef odaklı istihbarat toplama modülüdür. Analist, Regex (Düzenli İfade) desteği sayesinde karmaşık sorgular oluşturabilir.
-- **Çoklu Kaynak:** Tor üzerinden canlı erişilebilirliği doğrulanmış tüm aktif dark web arama motorlarını eşzamanlı tarar (ölü/terk edilmiş motorlar düzenli olarak ayıklanır).
-- **Filtreleme:** Sadece belirli tarih aralığındaki veya belirli formatlardaki (örn: kredi kartı bin numaraları) verileri getirebilir.
-
-![Arama Modülü](docs/screenshots/search_view.jpg)
-
-### 3. Bulgular (Results)
-Toplanan ham verilerin işlendiği ve listelendiği alandır. Her sonuç, bulunduğu kaynağa, tespit edilme zamanına ve içeriğin özetine göre listelenir. Analistler buradan ilgisiz verileri eleyebilir veya kritik verileri "Vaka" (Case) olarak işaretleyebilir.
-
-![Bulgular Listesi](docs/screenshots/results_view.jpg)
-
-### 4. İlişki Analizi (Graph Intelligence)
-Metin tabanlı verilerin görselleştirilmiş halidir. Özellikle organize suç gruplarını veya birbiriyle bağlantılı veri sızıntılarını tespit etmek için kullanılır.
-
-#### Görselleştirme Modları
-Analiz türüne göre 3 farklı görünüm modu sunar:
-
-**1. Radial View (Odaklı Analiz):** Seçilen düğümü merkeze alarak ilişkileri dairesel dağıtır.
-![Radial Mod](docs/screenshots/graph_radial.jpg)
-
-**2. Tree View (Hiyerarşik Analiz):** Veriler arasındaki ata-çocuk ilişkisini ağaç yapısında gösterir.
-![Tree Mod](docs/screenshots/graph_tree.jpg)
-
-**3. Network View (Serbest Kümeleme):** İlişkisi güçlü olan veriler birbirine çekilir (Force-Directed).
-![Network Mod](docs/screenshots/graph_network.jpg)
-
-#### Aksiyon Menüsü
-Analist, herhangi bir düğüme sağ tıklayarak detaylı aksiyon menüsüne erişebilir (Derinleştirme, Kopyalama, Gizleme vb.).
-![Context Menu](docs/screenshots/graph_context.jpg)
-
-### 5. Analitik Merkezi (Analytics)
-Operasyonel verilerin stratejik bilgiye dönüştüğü yerdir.
-- **Zaman Analizi:** Saldırıların veya sızıntıların hangi saatlerde/günlerde yoğunlaştığını gösteren zaman çizelgesi.
-- **Kaynak Dağılımı:** Hangi marketlerin veya forumların daha aktif olduğunu gösteren pasta grafikler.
-
-![Analitik Ekranı](docs/screenshots/analytics_view.jpg)
-
-### 6. Ayarlar Merkezi (Runtime Config)
-Platform ayarlarının `.env` üzerinden yönetildiği kontrol ekranıdır (`/settings`).
-- **Yönetilebilir Konfigürasyon:** Admin bilgileri, rate-limit, session TTL, Tor/DB/Web adresleri.
-- **Canlı Etki:** Rate-limit ayarları kaydedildiği anda uygulanır.
-- **Güvenlik:** API POST işlemlerinde CSRF koruması ve IP bazlı rate-limit aktif çalışır.
-
-### 7. Bildirim Merkezi (`/scheduled`)
-Yeni bulgular için webhook bildirimleri yapılandırma ekranıdır.
-- **Webhook Desteği:** Slack, Discord, Teams veya herhangi bir HTTP webhook ile entegrasyon.
-- **Eşik Ayarı:** Minimum kritiklik seviyesi belirlenerek gereksiz bildirimler engellenir.
-- **Canlı Feed:** Son N saatteki yeni bulgular bu ekranda anlık takip edilebilir.
-
-![Webhook Bildirim Ayarlari](docs/screenshots/webhook.jpg)
-
-Bu modülün amacı, kritik bulguları manuel kontrol beklemeden ekiplerin kullandığı sistemlere otomatik aktarmaktır.
-
-#### Ne İşe Yarar?
-- Tehdit istihbaratını anlık olarak Slack, Discord veya Teams kanallarına düşürür.
-- Yalnızca belirlediğiniz kritiklik seviyesinin üstündeki bulguları göndererek gürültüyü azaltır.
-- SOC/SecOps ekiplerinin olay müdahale süresini kısaltır.
-
-#### Önerilen Kullanım Akışı
-1. `Bildirimleri Etkinleştir` seçeneğini açın.
-2. Webhook URL alanına hedef sistem URL'sini girin.
-3. `Minimum Kritiklik Seviyesi` değerini operasyonunuza göre seçin (genelde 3 ve üzeri).
-4. `Kaydet` ile ayarları kalıcı hale getirin.
-5. Yeni bulgu geldiğinde sistem ilgili webhook adresine JSON payload olarak POST atar.
-6. `Son Bulgular Feed` alanından hangi bulguların bildirime geçtiğini hızlıca kontrol edin.
-
-#### Nerede Kullanılır?
-- SIEM/SOAR besleme hatlarında ilk alarm katmanı olarak.
-- Incident response ekiplerine öncelikli tehditlerin anlık iletilmesinde.
-- Mavi takım operasyonlarında vardiya ekibine otomatik bilgilendirme amacıyla.
-
-## Teknik Mimari
-
-- **Backend:** Go (Golang) - Gin Framework
-- **Veritabanı:** SQLite (Gorm ORM ile)
-- **Frontend:** HTML5, CSS3, Vanilla JavaScript
-- **Veri Toplama:** Colly (Scraping Framework) ve Tor Proxy
-- **Görselleştirme:** Chart.js ve D3.js
-
-## Yasal Uyarı
-
-Bu yazılım, siber güvenlik uzmanları ve araştırmacılar için geliştirlmiştir. Yetkisiz sistemlere erişim sağlamak veya yasadışı faaliyetlerde bulunmak amacıyla kullanılamaz. Kullanıcı, aracı yasal sınırlar içerisinde kullanmakla yükümlüdür.
+**Sürüm:** v0.10 · Go 1.26 · SQLite (modernc, saf Go, CGO yok) · Gin · D3.js · Chart.js
 
 ---
-**Sürüm:** v0.9
+
+## Neler yapar?
+
+| Modül | Özellik |
+|---|---|
+| **Arama** | 10 canlı doğrulanmış onion arama motorunda paralel tarama, canlı motor durumu, otomatik kritiklik/kategori (İngilizce + Türkçe sinyaller), dedup, kayıt |
+| **Bulgular** | Filtre (sorgu, metin, motor, kategori, min. kritiklik, etiket), sıralama, sayfalama, toplu seçim (etiketle / kritiklik ata / URL kopyala / sil), CSV & JSON export |
+| **Etiketleme + IOC** | Sayfayı Tor'dan çeker, Unicode/Türkçe farkındalıklı anahtar kelime çıkarır, kategori/kritiklik günceller, e-posta / BTC / XMR / IP / hash / kart (Luhn) / SSH / API key / onion IOC'lerini saklar ve pivot aramaya açar |
+| **Harita** | Sorgu → motor → sonuç ilişki grafiği (radial / tree / force), düğüm derinleştirme (sayfadaki linkleri çıkarıp graf'a ekler) |
+| **Analiz** | Zaman serisi, kaynak/sorgu/kritiklik/kategori dağılımı, domain haritası, sıklık istatistikleri |
+| **Planlı Tarama** | Dakika bazlı periyot, yalnızca *yeni* URL'leri diff'leyen çalışma, tarama-özel + genel webhook (Slack/Discord/Teams), test gönderimi |
+| **İzleme Listesi** | Onion siteleri için periyodik erişilebilirlik, görünür-metin hash'i ile değişiklik tespiti, Cloudflare/captcha/doğrulama ekranı sezimi, uptime %, tetiklenen ve manuel ekran görüntüsü (Docker) + zaman çizelgesi |
+| **Motorlar** | Canlı sağlık, yanıt süresi, başarı oranı, motoru aramaya dahil et / çıkar (gerçekten etkiler) |
+| **Ayarlar** | Kimlik (bcrypt), oturum süresi, hız limiti anında uygulanır; altyapı ayarları .env'ye yazılır |
+
+---
+
+## Hızlı Başlangıç (Docker — önerilen)
+
+Gereksinim: Docker 20.10+ ve Compose v2.
+
+```bash
+git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
+cd Keyword-Hunter
+docker compose up -d --build
+docker compose logs app | grep -A3 "yönetici parolası"   # ilk kurulumda üretilen parola
+```
+
+Windows: `temiz_baslat.bat` aynı adımları yapar.
+
+* Arayüz: **http://localhost:8080** (varsayılan olarak yalnızca bu makineden erişilir)
+* Sağlık: `http://localhost:8080/healthz`
+* Tor konteyneri yalnızca compose ağına açıktır; host'a port yayınlanmaz.
+* LAN/sunucudan erişim için: `KH_BIND=0.0.0.0 docker compose up -d` — bu durumda mutlaka
+  güçlü parola ve HTTPS ters vekil (Caddy/nginx) kullanın, `WEB_SECURE_COOKIES=true` yapın.
+
+Kalıcı veriler `./data/` altındadır: `keywordhunter.db`, `.env`, `logs/`, `screenshots/`.
+`docker compose down -v && rm -rf data` tüm veriyi siler.
+
+### Yerel çalıştırma (Go 1.26+)
+
+```bash
+cp .env.example .env        # ADMIN_PASS'ı değiştirin
+# Tor Browser (9150) veya tor servisi (9050) çalışıyor olmalı; TOR_PROXY'yi eşleyin
+go build -o keywordhunter ./cmd && ./keywordhunter
+```
+
+Windows: `build_and_run.bat`. Ekran görüntüsü özelliği yalnızca Docker imajında
+(Chromium) etkindir; yerelde `CHROME_BIN` ile bir Chromium yolu verirseniz de çalışır.
+
+---
+
+## Yapılandırma (`.env` / `data/.env`)
+
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `ADMIN_USER` | `admin` | Giriş kullanıcı adı |
+| `ADMIN_PASS` | — | Düz metin parola. /settings'ten değiştirildiğinde silinir ve `ADMIN_PASS_HASH` yazılır |
+| `ADMIN_PASS_HASH` | — | bcrypt hash; verilirse `ADMIN_PASS` gerekmez |
+| `WEB_ADDR` | `:8080` | Dinleme adresi |
+| `WEB_SECURE_COOKIES` | `false` | HTTPS arkasında `true`. Düz HTTP'de `true` ise tarayıcı çerezi reddeder |
+| `SESSION_TTL_HOURS` | `24` | Kayan oturum süresi (1–720); mutlak üst sınır 30 gün |
+| `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `25` / `80` | IP başına hız limiti (statik dosyalar muaf) |
+| `TOR_PROXY` | `127.0.0.1:9150` | SOCKS5 adresi; Docker'da otomatik `tor:9050` |
+| `DB_PATH` | `keywordhunter.db` | SQLite dosyası |
+| `LOG_DIR` / `LOG_LEVEL` | `logs` / `info` | Günlük döndürmeli log |
+| `WATCHLIST_INTERVAL_MIN` | `15` | İzleme kontrol aralığı |
+| `WATCHLIST_SEED` | `none` | `turkey` = gömülü Türk onion listesini otomatik yükle; dosya yolu = JSON seed. UI'dan da yüklenebilir |
+| `SCREENSHOT_DIR` | `/data/screenshots` (Docker) | PNG çıktı dizini |
+| `TZ` (compose) | `Europe/Istanbul` | Arayüzde gösterilen saat dilimi |
+
+Docker'da `ENV_FILE=/data/.env` kullanılır; kökteki `.env` Docker için okunmaz.
+
+---
+
+## Güvenlik modeli
+
+* Tek yönetici hesabı, **bcrypt** parola, IP başına ve global **login kilitleme** (5 hata → üstel kilit).
+* Oturum çerezi `HttpOnly + SameSite=Lax`, kayan + mutlak ömür; parola değişince diğer oturumlar düşer.
+* API yazma uçlarında **CSRF token**; `GET /logout` siteler-arası tetiklemeye karşı Fetch Metadata ile korunur.
+* **CSP** (`default-src 'self'`, harici script/iframe yok), `X-Frame-Options: DENY`, `nosniff`, `no-store`, HSTS (HTTPS'te).
+* **SSRF koruması**: derinleştirme/analiz/izleme yalnızca `.onion`; webhook ve ekran görüntüsü hedefleri dahili/loopback/link-local adreslere çözümlenemez (DNS sonrası kontrol), yönlendirme takip edilmez.
+* Dark web'den gelen tüm metinler arayüzde kaçışlanır (stored XSS yok); CSV export formül enjeksiyonuna karşı korumalı.
+* Docker: root olmayan kullanıcı, `no-new-privileges`, Tor portu host'a kapalı, `govulncheck` temiz.
+
+Bu araç saldırgan içerik barındıran siteleri ziyaret eder. Yalnızca izole bir ortamda
+ve yasal yetkiniz dahilinde kullanın; kimlik bilgilerini paylaşmayın.
+
+---
+
+## Arama motorları
+
+Liste 2026-09-18'de gerçek Tor devresi üzerinden, üç turda ve iki sorguyla doğrulandı
+(`pkg/search/engines.go`). Varsayılan aktif: **Tordex, Amnesia, Tor66, Onionway, OnionLand,
+Torland, Excavator, TorNet, Submarine, Danex**. Captcha isteyen (OSS, Torgle), JavaScript
+gerektiren (Torgol), boş dizinli (DeepSearches) veya erişilemeyen (Torch, Ahmia onion,
+FindTor) motorlar pasif gelir; `/monitor` ekranından açılabilir. Motor listesi
+değiştiğinde kullanıcı özelleştirmeleri korunur.
+
+---
+
+## API (oturum + CSRF gerekir)
+
+`GET /api/results?q=&text=&source=&category=&minCriticality=&tag=&sort=&limit=&page=` ·
+`GET /api/export/results?format=csv|json` · `POST /api/results/delete` ·
+`POST /api/auto-tag` · `POST /api/batch-auto-tag` · `GET /api/results/:id/artifacts` ·
+`GET /api/artifacts?type=&value=` · `GET /api/artifacts/stats` · `GET /api/engines` ·
+`POST /api/engines/:name/toggle` · `GET|POST /api/scheduled` · `POST /api/scheduled/:id/run-now` ·
+`GET|POST /api/alert-config` · `POST /api/alert-config/test` · `GET|POST /api/watchlist` ·
+`POST /api/watchlist/:id/check` · `POST /api/screenshot` · `GET /api/screenshots` ·
+`GET /api/analytics` · `GET /api/graph/*` · `GET /events` (SSE) · `GET /healthz` (açık).
+
+---
+
+## Geliştirme
+
+```bash
+go build ./... && go vet ./... && go test -race ./...
+```
+
+Testler: yapılandırma/env deposu, kimlik + kilitleme, auth/CSRF/logout akışı, arama
+parser'ı, CTI sınıflandırıcı (TR/EN), artifact çıkarımı, storage migrasyonları
+(graph_nodes dedup, zaman damgası normalizasyonu, saat dilimi güvenli zamanlayıcı),
+motor varsayılanı/kullanıcı seçimi.
+
+Mimari: `cmd/main.go` → `pkg/config` (.env) → `pkg/storage` (SQLite) → `pkg/search`
+(motorlar, parser) · `pkg/scraper` (Tor HTTP, metin, etiket) · `pkg/cti` (sınıflandırma) ·
+`pkg/artifact` (IOC) · `pkg/tagging` (iş kuyruğu) · `pkg/scheduler` · `pkg/monitor` ·
+`pkg/capture` (chromedp) · `pkg/notify` (webhook) · `pkg/web` (Gin, şablonlar, statik).
+
+## Yasal uyarı
+
+Bu yazılım güvenlik araştırmacıları ve SOC/CTI ekipleri içindir. Yetkisiz erişim veya
+yasadışı faaliyet için kullanılamaz; sorumluluk kullanıcıya aittir.
+
 **Geliştirici:** Mehmet Yasin Uzun

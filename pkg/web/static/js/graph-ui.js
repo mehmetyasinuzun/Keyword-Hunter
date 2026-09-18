@@ -136,13 +136,24 @@ function setLayout(layout) {
     }
 }
 
+// Güvenli HTML: düğüm adları ve URL'ler düşman .onion sayfalarından gelir,
+// innerHTML'e ham basılmaz.
+function escapeHTML(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Tooltip
 function showTooltip(event, d) {
     const tooltip = document.getElementById('tooltip');
-    let content = `<div class="title">${d.data.name}</div>`;
+    let content = `<div class="title">${escapeHTML(d.data.name)}</div>`;
 
     if (d.data.url) {
-        content += `<div class="url">${d.data.url}</div>`;
+        content += `<div class="url">${escapeHTML(d.data.url)}</div>`;
         if (d.data.url.includes('.onion')) {
             content += `<div class="onion-warning">🧅 Tor Browser gerektirir</div>`;
         }
@@ -340,10 +351,10 @@ function showLinkInfo() {
 
     content.innerHTML = `
         <div style="display: grid; gap: 10px; font-size: 14px;">
-            <div><strong>Başlık:</strong> ${node.data.name || '-'}</div>
-            <div><strong>Tür:</strong> ${node.data.type || '-'}</div>
-            <div><strong>URL:</strong><br><span style="color:#63b3ed; word-break: break-all;">${node.data.url || '-'}</span></div>
-            <div><strong>Domain:</strong> ${node.data.domain || '-'}</div>
+            <div><strong>Başlık:</strong> ${escapeHTML(node.data.name || '-')}</div>
+            <div><strong>Tür:</strong> ${escapeHTML(node.data.type || '-')}</div>
+            <div><strong>URL:</strong><br><span style="color:#63b3ed; word-break: break-all;">${escapeHTML(node.data.url || '-')}</span></div>
+            <div><strong>Domain:</strong> ${escapeHTML(node.data.domain || '-')}</div>
             <div><strong>Node ID:</strong> ${node.data.nodeId || '-'}</div>
             <div><strong>Çoklu Kaynak Sayısı:</strong> ${node.data.count || 1}</div>
         </div>

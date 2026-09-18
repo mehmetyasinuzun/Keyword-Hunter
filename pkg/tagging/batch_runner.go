@@ -34,8 +34,9 @@ type BatchRunner struct {
 	wg       sync.WaitGroup
 	stopOnce sync.Once
 
-	mu      sync.RWMutex
-	cancels map[string]context.CancelFunc
+	mu       sync.RWMutex
+	cancels  map[string]context.CancelFunc
+	stopping bool
 }
 
 // NewBatchRunner yeni iş kuyruğunu oluşturur ve worker'ları başlatır.
@@ -60,13 +61,24 @@ func NewBatchRunner(db *storage.DB, engine *Engine, workerCount int) *BatchRunne
 	return r
 }
 
-// Stop kuyruğu kapatır ve çalışan worker'ların bitmesini bekler (graceful shutdown).
+// Stop kuyruğu kapatır, çalışan işleri iptal eder ve worker'ların bitmesini
+// bekler. İptal edilen işler "pending" olarak işaretlenir ki bir sonraki
+// açılışta kaldıkları yerden (processed_count) devam edebilsinler.
 func (r *BatchRunner) Stop() {
 	r.stopOnce.Do(func() {
 		close(r.queue)
+		r.mu.Lock()
+		r.stopping = true
+		for _, cancel := range r.cancels {
+			cancel()
+		}
+		r.mu.Unlock()
 	})
 	r.wg.Wait()
 }
+
+// ErrQueueFull kuyruk doluyken Submit çağrıldığında döner.
+var ErrQueueFull = errors.New("etiketleme kuyruğu dolu, lütfen daha sonra tekrar deneyin")
 
 // RecoverPendingJobs restart sonrası yarım kalan işleri tekrar kuyruğa alır.
 func (r *BatchRunner) RecoverPendingJobs() error {
@@ -141,8 +153,11 @@ func (r *BatchRunner) Submit(ctx context.Context, resultIDs []int64, query strin
 	select {
 	case r.queue <- job.ID:
 	default:
-		// Kuyruk dolu - sınırsız goroutine açma, işi pending bırak (recovery sonra alır)
-		logger.Warn("TAG JOB SUBMIT: kuyruk dolu, iş pending bırakıldı: %s", job.ID)
+		// Kuyruk dolu: işi askıda bırakmak yerine kullanıcıya söyle (recovery
+		// yalnızca açılışta çalışır, iş sessizce beklerdi).
+		_ = r.db.MarkTaggingJobFinished(job.ID, StatusFailed, "Kuyruk dolu")
+		logger.Warn("TAG JOB SUBMIT: kuyruk dolu, iş reddedildi: %s", job.ID)
+		return nil, ErrQueueFull
 	}
 
 	skipped := len(ids) - len(validatedIDs)
@@ -234,6 +249,15 @@ func (r *BatchRunner) processJob(jobID string, workerID int) {
 	for _, resultID := range resultIDs[startIndex:] {
 		select {
 		case <-ctx.Done():
+			r.mu.RLock()
+			stopping := r.stopping
+			r.mu.RUnlock()
+			if stopping {
+				// Uygulama kapanıyor: kaldığı yerden devam etmek üzere pending'e çek
+				_ = r.db.ResetRunningTaggingJobs()
+				logger.Info("TAG JOB PAUSED (shutdown): %s", jobID)
+				return
+			}
 			_ = r.db.MarkTaggingJobFinished(jobID, StatusCancelled, "Kullanıcı tarafından iptal edildi")
 			shared.Streamer.BroadcastLog("auto_tag_error", "Etiketleme işi iptal edildi", "")
 			logger.Warn("TAG JOB CANCELLED: %s", jobID)

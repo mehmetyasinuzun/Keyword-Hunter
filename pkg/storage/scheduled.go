@@ -46,7 +46,7 @@ func (db *DB) EnsureScheduledSchema() error {
 
 // CreateScheduledSearch yeni zamanlanmış tarama oluşturur
 func (db *DB) CreateScheduledSearch(query string, intervalMinutes int, webhookURL string, threshold int) (*ScheduledSearch, error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	nextRun := now.Add(time.Duration(intervalMinutes) * time.Minute)
 
 	result, err := db.conn.Exec(`
@@ -129,14 +129,18 @@ func (db *DB) GetAllScheduledSearches() ([]ScheduledSearch, error) {
 	return list, nil
 }
 
-// GetDueScheduledSearches çalışması gereken zamanlanmış taramaları döndürür
+// GetDueScheduledSearches çalışması gereken zamanlanmış taramaları döndürür.
+//
+// next_run_at Go tarafından yerel saat dilimi ofsetiyle (örn. "+03:00") yazılır,
+// CURRENT_TIMESTAMP ise UTC'dir; ham metin karşılaştırması bu yüzden saat dilimi
+// kadar kayardı. datetime() her iki tarafı da UTC'ye normalize eder.
 func (db *DB) GetDueScheduledSearches() ([]ScheduledSearch, error) {
 	rows, err := db.conn.Query(`
 		SELECT id, query, interval_minutes, enabled, webhook_url, alert_threshold,
 		       last_run_at, next_run_at, last_result_count, last_new_count, total_runs, created_at
 		FROM scheduled_searches
-		WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= CURRENT_TIMESTAMP)
-		ORDER BY next_run_at ASC
+		WHERE enabled = 1 AND (next_run_at IS NULL OR datetime(next_run_at) <= datetime('now'))
+		ORDER BY datetime(next_run_at) ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -169,7 +173,7 @@ func (db *DB) GetDueScheduledSearches() ([]ScheduledSearch, error) {
 
 // UpdateScheduledSearchAfterRun tarama tamamlandıktan sonra istatistikleri günceller
 func (db *DB) UpdateScheduledSearchAfterRun(id int64, resultCount, newCount int) error {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	var intervalMinutes int
 	err := db.conn.QueryRow("SELECT interval_minutes FROM scheduled_searches WHERE id = ?", id).Scan(&intervalMinutes)

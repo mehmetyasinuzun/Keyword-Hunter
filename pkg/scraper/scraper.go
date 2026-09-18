@@ -3,10 +3,10 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"math/rand"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -18,15 +18,17 @@ import (
 
 // isOnionURL URL'nin geçerli bir http/https .onion adresi olup olmadığını doğrular (SSRF koruması)
 func isOnionURL(urlStr string) bool {
-	u, err := url.Parse(strings.TrimSpace(urlStr))
-	if err != nil {
-		return false
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return false
-	}
-	return strings.HasSuffix(u.Hostname(), ".onion")
+	return shared.IsOnionURL(urlStr)
 }
+
+// Sık kullanılan regex'ler bir kez derlenir (her sayfada yeniden derleme maliyeti yoktu).
+var (
+	reScript = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
+	reStyle  = regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
+	reHead   = regexp.MustCompile(`(?is)<head[^>]*>.*?</head>`)
+	reTag    = regexp.MustCompile(`<[^>]+>`)
+	reSpace  = regexp.MustCompile(`\s+`)
+)
 
 // Content scrape edilmiş içerik
 type Content struct {
@@ -175,28 +177,20 @@ func (s *Scraper) ScrapeURL(ctx context.Context, urlStr, title string) Content {
 	return content
 }
 
-func (s *Scraper) htmlToText(html string) string {
-	scriptRegex := regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
-	html = scriptRegex.ReplaceAllString(html, " ")
-
-	styleRegex := regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
-	html = styleRegex.ReplaceAllString(html, " ")
-
-	headRegex := regexp.MustCompile(`(?is)<head[^>]*>.*?</head>`)
-	html = headRegex.ReplaceAllString(html, " ")
-
-	tagRegex := regexp.MustCompile(`<[^>]+>`)
-	text := tagRegex.ReplaceAllString(html, " ")
-
-	// HTML entity replacements (simplified)
-	text = strings.ReplaceAll(text, "&nbsp;", " ")
-	text = strings.ReplaceAll(text, "&amp;", "&")
-	// ... Add detailed replacements if needed, but basic text is fine for new structure
-
-	spaceRegex := regexp.MustCompile(`\s+`)
-	text = spaceRegex.ReplaceAllString(text, " ")
-
+// HTMLToText HTML'i düz metne çevirir (script/style/head atılır, etiketler
+// kaldırılır, HTML varlıkları çözülür, boşluklar sadeleştirilir).
+func HTMLToText(htmlContent string) string {
+	htmlContent = reScript.ReplaceAllString(htmlContent, " ")
+	htmlContent = reStyle.ReplaceAllString(htmlContent, " ")
+	htmlContent = reHead.ReplaceAllString(htmlContent, " ")
+	text := reTag.ReplaceAllString(htmlContent, " ")
+	text = html.UnescapeString(text)
+	text = reSpace.ReplaceAllString(text, " ")
 	return strings.TrimSpace(text)
+}
+
+func (s *Scraper) htmlToText(htmlContent string) string {
+	return HTMLToText(htmlContent)
 }
 
 func (s *Scraper) ScrapeMultiple(ctx context.Context, urls []struct{ URL, Title string }, maxWorkers int, progressFn func(done, total int)) []Content {

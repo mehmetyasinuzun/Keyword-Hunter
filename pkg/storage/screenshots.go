@@ -7,15 +7,15 @@ import (
 
 // Screenshot alınan bir ekran görüntüsü kaydı
 type Screenshot struct {
-	ID        int64     `json:"id"`
-	TargetURL string    `json:"targetUrl"`
-	Source    string    `json:"source"` // "watchlist", "scheduled", "manual"
-	RefID     int64     `json:"refId"`  // ilgili watchlist/scheduled id (0=manuel)
-	FilePath  string    `json:"filePath"`
-	SHA256    string    `json:"sha256"`
-	Width     int       `json:"width"`
-	Height    int       `json:"height"`
-	Bytes     int       `json:"bytes"`
+	ID            int64     `json:"id"`
+	TargetURL     string    `json:"targetUrl"`
+	Source        string    `json:"source"` // "watchlist", "scheduled", "manual"
+	RefID         int64     `json:"refId"`  // ilgili watchlist/scheduled id (0=manuel)
+	FilePath      string    `json:"filePath"`
+	SHA256        string    `json:"sha256"`
+	Width         int       `json:"width"`
+	Height        int       `json:"height"`
+	Bytes         int       `json:"bytes"`
 	Status        string    `json:"status"` // "ok", "error"
 	ErrorMsg      string    `json:"errorMsg"`
 	Title         string    `json:"title"`
@@ -70,6 +70,7 @@ func (db *DB) SaveScreenshot(s Screenshot) (int64, error) {
 	if s.TakenAt.IsZero() {
 		s.TakenAt = time.Now()
 	}
+	s.TakenAt = s.TakenAt.UTC()
 	chInt := 0
 	if s.Challenge {
 		chInt = 1
@@ -157,4 +158,19 @@ func (db *DB) queryScreenshots(q string, args ...interface{}) ([]Screenshot, err
 		list = append(list, s)
 	}
 	return list, nil
+}
+
+// LastScreenshotAt bir hedef için son başarılı görüntünün zamanını döndürür
+// (tetikleyici görüntülerde bekleme süresi/cooldown için). Kayıt yoksa sıfır zaman.
+func (db *DB) LastScreenshotAt(targetURL string) (time.Time, error) {
+	var t time.Time
+	err := db.conn.QueryRow(`
+		SELECT taken_at FROM screenshots
+		WHERE target_url = ? AND status = 'ok'
+		ORDER BY datetime(taken_at) DESC LIMIT 1
+	`, targetURL).Scan(&t)
+	if err == sql.ErrNoRows {
+		return time.Time{}, nil
+	}
+	return t, err
 }

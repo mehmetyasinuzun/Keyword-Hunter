@@ -104,10 +104,7 @@ func (s *EnvStore) readUnlocked() (map[string]string, error) {
 			continue
 		}
 
-		value := strings.TrimSpace(rawValue)
-		value = strings.Trim(value, "\"")
-		value = strings.Trim(value, "'")
-		values[key] = value
+		values[key] = unquoteEnvValue(rawValue)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -166,8 +163,31 @@ func (s *EnvStore) writeUnlocked(values map[string]string) error {
 }
 
 func formatEnvValue(value string) string {
-	if strings.ContainsAny(value, " \t#=") {
+	if strings.ContainsAny(value, " \t#=\"'\\\n\r") {
 		return strconv.Quote(value)
+	}
+	return value
+}
+
+// unquoteEnvValue formatEnvValue'nun tam tersidir: Go tarzı çift tırnaklı
+// değerler strconv.Unquote ile (kaçış dizileri dahil) çözülür; tek tırnaklı
+// değerler olduğu gibi alınır; diğerleri yalnızca kırpılır. Eski sürüm
+// tırnakları naif biçimde kırpıyor ve içinde " veya \ geçen parolalar
+// /settings ile kaydedildikten sonra bozuluyordu.
+func unquoteEnvValue(raw string) string {
+	value := strings.TrimSpace(raw)
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			return unquoted
+		}
+		return value[1 : len(value)-1]
+	}
+	if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+		return value[1 : len(value)-1]
+	}
+	// Satır sonu yorumu: KEY=value # açıklama (tırnaksız değerlerde)
+	if i := strings.Index(value, " #"); i >= 0 {
+		value = strings.TrimSpace(value[:i])
 	}
 	return value
 }

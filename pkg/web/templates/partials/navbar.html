@@ -1,22 +1,25 @@
-﻿{{define "navbar"}}
+{{define "navbar"}}
 <!-- SHARED NAVIGATION - Consistent across all pages -->
 <nav class="nav">
     <div class="nav-inner">
         <div class="nav-brand">
             <span class="nav-logo">🕵️</span>
-            <span class="nav-title">KeywordHunter</span>
+            <a href="/dashboard" class="nav-title" style="text-decoration:none">KeywordHunter</a>
             <span class="nav-badge">CTI</span>
+            <span class="nav-version" title="Sürüm">v{{version}}</span>
         </div>
-        <div class="nav-links">
-            <a href="/dashboard" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}">Dashboard</a>
-            <a href="/results" class="nav-link{{if eq .ActivePage "results"}} active{{end}}">Bulgular</a>
-            <a href="/results/graph" class="nav-link{{if eq .ActivePage "graph"}} active{{end}}">Harita</a>
-            <a href="/analytics" class="nav-link{{if eq .ActivePage "analytics"}} active{{end}}">Analiz</a>
-            <a href="/search" class="nav-link{{if eq .ActivePage "search"}} active{{end}}">Arama</a>
-            <a href="/scheduled" class="nav-link{{if eq .ActivePage "scheduled"}} active{{end}}">Planlı</a>
-            <a href="/watchlist" class="nav-link{{if eq .ActivePage "watchlist"}} active{{end}}">İzleme</a>
-            <a href="/monitor" class="nav-link{{if eq .ActivePage "monitor"}} active{{end}}">Motorlar</a>
-            <a href="/settings" class="nav-link{{if eq .ActivePage "settings"}} active{{end}}">Ayarlar</a>
+        <button class="nav-burger" id="nav-burger" aria-label="Menü" aria-controls="nav-links">☰</button>
+        <div class="nav-links" id="nav-links">
+            <a href="/dashboard" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}" title="g d">Panel</a>
+            <a href="/search" class="nav-link{{if eq .ActivePage "search"}} active{{end}}" title="/">Arama</a>
+            <a href="/results" class="nav-link{{if eq .ActivePage "results"}} active{{end}}" title="g r">Bulgular</a>
+            <a href="/results/graph" class="nav-link{{if eq .ActivePage "graph"}} active{{end}}" title="g h">Harita</a>
+            <a href="/analytics" class="nav-link{{if eq .ActivePage "analytics"}} active{{end}}" title="g a">Analiz</a>
+            <a href="/scheduled" class="nav-link{{if eq .ActivePage "scheduled"}} active{{end}}" title="g p">Planlı</a>
+            <a href="/watchlist" class="nav-link{{if eq .ActivePage "watchlist"}} active{{end}}" title="g i">İzleme</a>
+            <a href="/monitor" class="nav-link{{if eq .ActivePage "monitor"}} active{{end}}" title="g m">Motorlar</a>
+            <a href="/settings" class="nav-link{{if eq .ActivePage "settings"}} active{{end}}" title="g y">Ayarlar</a>
+            <a href="/monitor" class="nav-status" id="nav-health" title="Motor sağlığı"><span class="kh-dot unknown"></span><span class="txt">…</span></a>
             <a href="/logout" class="nav-link danger">Çıkış</a>
         </div>
     </div>

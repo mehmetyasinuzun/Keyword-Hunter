@@ -25,3 +25,8 @@ data
 
 # Docs and generated artifacts
 /docs/screenshots
+
+# secrets
+.env
+.env.*
+!.env.example

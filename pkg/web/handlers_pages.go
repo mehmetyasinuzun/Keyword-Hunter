@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"crypto/subtle"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,34 +10,82 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/notify"
+	"keywordhunter-mvp/pkg/scheduler"
+	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
 
-// handleIndex ana sayfa
+// handleIndex ana sayfa: geçerli oturum varsa panele, yoksa girişe yönlendirir.
 func (s *Server) handleIndex(c *gin.Context) {
+	if sid, err := c.Cookie("session"); err == nil && sid != "" {
+		if sess, err := s.db.GetSession(sid); err == nil && time.Now().Before(sess.ExpiresAt) {
+			c.Redirect(http.StatusFound, "/dashboard")
+			return
+		}
+	}
 	c.Redirect(http.StatusFound, "/login")
+}
+
+// handleHealthz kimlik doğrulaması gerektirmeyen sağlık ucu (Docker/izleme için).
+func (s *Server) handleHealthz(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	dbOK := true
+	if _, _, err := s.db.GetStats(); err != nil {
+		dbOK = false
+	}
+	status := http.StatusOK
+	state := "ok"
+	if !dbOK {
+		status = http.StatusServiceUnavailable
+		state = "degraded"
+	}
+	c.JSON(status, gin.H{
+		"status":        state,
+		"version":       Version,
+		"uptimeSeconds": int(time.Since(s.startedAt).Seconds()),
+		"db":            dbOK,
+		"screenshots":   s.capturer != nil && s.capturer.Available(),
+	})
 }
 
 // handleLoginPage login sayfası
 func (s *Server) handleLoginPage(c *gin.Context) {
+	wait, _ := strconv.Atoi(c.Query("wait"))
+	if wait < 0 || wait > 3600 {
+		wait = 0
+	}
 	c.HTML(http.StatusOK, "login.html", gin.H{
 		"error":   c.Query("error"),
 		"message": c.Query("message"),
+		"wait":    wait,
 	})
 }
 
 // handleLogin giriş işlemi
 func (s *Server) handleLogin(c *gin.Context) {
-	username := c.PostForm("username")
+	username := strings.TrimSpace(c.PostForm("username"))
 	password := c.PostForm("password")
 	clientIP := c.ClientIP()
 
-	// Sabit-zamanlı karşılaştırma (timing attack koruması).
-	// Kullanıcı adı ve parolayı ayrı ayrı hesapla (short-circuit yok), sonra AND'le.
-	userMatch := subtle.ConstantTimeCompare([]byte(username), []byte(s.username)) == 1
-	passMatch := subtle.ConstantTimeCompare([]byte(password), []byte(s.password)) == 1
+	if len(username) > 128 || len(password) > 512 {
+		c.Redirect(http.StatusFound, "/login?error=1")
+		return
+	}
 
-	if userMatch && passMatch {
+	if s.loginGuard != nil {
+		if blocked, wait := s.loginGuard.Blocked(clientIP); blocked {
+			logger.Warn("USER LOGIN BLOCKED: IP=%s kilitli (%s kaldı)", clientIP, wait.Round(time.Second))
+			c.Header("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+			c.Redirect(http.StatusFound, "/login?error=locked&wait="+strconv.Itoa(int(wait.Seconds())+1))
+			return
+		}
+	}
+
+	if s.creds != nil && s.creds.Verify(username, password) {
+		if s.loginGuard != nil {
+			s.loginGuard.Success(clientIP)
+		}
 		// Session oluştur
 		sessionID := generateSessionID()
 		csrfToken := generateSessionID()
@@ -59,12 +106,21 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 
-	logger.UserLogin(username, false, clientIP)
+	if s.loginGuard != nil {
+		s.loginGuard.Fail(clientIP)
+	}
+	logger.UserLogin(shared.TruncateRunes(username, 32), false, clientIP)
 	c.Redirect(http.StatusFound, "/login?error=1")
 }
 
-// handleLogout çıkış işlemi
+// handleLogout çıkış işlemi. GET isteklerinde siteler-arası tetiklemeye
+// (CSRF ile oturum düşürme) karşı Fetch Metadata kontrolü yapılır; POST'ta
+// CSRF token beklenir.
 func (s *Server) handleLogout(c *gin.Context) {
+	if c.Request.Method == http.MethodGet && isCrossSiteNavigation(c) {
+		c.Redirect(http.StatusFound, "/dashboard")
+		return
+	}
 	sessionID, err := c.Cookie("session")
 	if err != nil {
 		logger.Debug("Logout: session cookie bulunamadı: %v", err)
@@ -246,12 +302,16 @@ type SearchStatus struct {
 	Error       string
 }
 
+// maxSearchQueryLen arama sorgusu için üst sınır (URL ve log güvenliği).
+const maxSearchQueryLen = 200
+
 // handleSearch arama işlemi
 func (s *Server) handleSearch(c *gin.Context) {
-	query := strings.TrimSpace(c.PostForm("query"))
-	if query == "" {
-		c.HTML(http.StatusOK, "search.html", gin.H{
-			"error": "Arama sorgusu boş olamaz",
+	query := strings.Join(strings.Fields(c.PostForm("query")), " ")
+	if query == "" || len([]rune(query)) > maxSearchQueryLen {
+		c.HTML(http.StatusBadRequest, "search.html", gin.H{
+			"ActivePage": "search",
+			"error":      "Arama sorgusu boş olamaz ve 200 karakteri aşamaz",
 		})
 		return
 	}
@@ -262,14 +322,23 @@ func (s *Server) handleSearch(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
 	defer cancel()
 
+	knownURLs, err := s.db.GetKnownURLsForQuery(query)
+	if err != nil {
+		knownURLs = map[string]bool{}
+	}
+
 	startTime := time.Now()
 	results := s.searcher.SearchAll(ctx, query)
 	elapsed := time.Since(startTime)
 
 	// Sonuçları kaydet (KeywordHits ile birlikte)
 	var storageResults []storage.SearchResult
+	var newFindings []notify.Finding
 	totalHits := 0
 	for _, r := range results {
+		if !knownURLs[r.URL] {
+			newFindings = append(newFindings, notify.Finding{Title: r.Title, URL: r.URL, Category: r.Category, Criticality: r.Criticality})
+		}
 		storageResults = append(storageResults, storage.SearchResult{
 			Title:        r.Title,
 			URL:          r.URL,
@@ -290,6 +359,11 @@ func (s *Server) handleSearch(c *gin.Context) {
 		logger.Error("Arama geçmişi kaydedilemedi: %v", err)
 	}
 
+	// Genel bildirim merkezi: eşik üstü yeni bulgu varsa webhook (asenkron)
+	if len(newFindings) > 0 {
+		go scheduler.DispatchGlobalAlert(s.db, query, len(results), len(newFindings), newFindings, startTime)
+	}
+
 	c.HTML(http.StatusOK, "search.html", gin.H{
 		"ActivePage": "search",
 		"query":      query,
@@ -301,20 +375,36 @@ func (s *Server) handleSearch(c *gin.Context) {
 	})
 }
 
-// handleResults kayıtlı sonuçlar
-func (s *Server) handleResults(c *gin.Context) {
-	query := c.Query("q")
-	limitStr := c.DefaultQuery("limit", "50")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		logger.Warn("Results: Geçersiz limit değeri: %s", limitStr)
-		limit = 50
+// parseResultFilter sorgu parametrelerinden filtre üretir (HTML sayfası, JSON API ve export ortak).
+func parseResultFilter(c *gin.Context) storage.ResultFilter {
+	f := storage.ResultFilter{
+		Query:    strings.TrimSpace(c.Query("q")),
+		Text:     strings.TrimSpace(c.Query("text")),
+		Source:   strings.TrimSpace(c.Query("source")),
+		Category: strings.TrimSpace(c.Query("category")),
+		Tag:      strings.TrimSpace(c.Query("tag")),
+		Sort:     strings.TrimSpace(c.DefaultQuery("sort", "newest")),
 	}
-	if limit <= 0 || limit > 500 {
-		limit = 50
+	f.MinCriticality, _ = strconv.Atoi(c.DefaultQuery("minCriticality", "1"))
+	if f.MinCriticality < 1 || f.MinCriticality > 5 {
+		f.MinCriticality = 1
 	}
+	f.Limit, _ = strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if f.Limit <= 0 || f.Limit > 500 {
+		f.Limit = 50
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	f.Offset = (page - 1) * f.Limit
+	return f
+}
 
-	results, err := s.db.GetResults(limit, query)
+// handleResults kayıtlı sonuçlar (filtre + sayfalama)
+func (s *Server) handleResults(c *gin.Context) {
+	f := parseResultFilter(c)
+	results, total, err := s.db.GetResultsFiltered(f)
 	if err != nil {
 		logger.Error("Sonuçlar getirilemedi: %v", err)
 	}
@@ -322,13 +412,36 @@ func (s *Server) handleResults(c *gin.Context) {
 	if err != nil {
 		logger.Error("İstatistikler getirilemedi: %v", err)
 	}
+	sources, categories, _ := s.db.DistinctSourcesAndCategories()
+
+	page := f.Offset/f.Limit + 1
+	totalPages := (total + f.Limit - 1) / f.Limit
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	// Sayfalama bağlantıları için mevcut filtreyi koru
+	qs := c.Request.URL.Query()
+	qs.Del("page")
+	baseQuery := qs.Encode()
 
 	c.HTML(http.StatusOK, "results.html", gin.H{
 		"ActivePage":   "results",
 		"results":      results,
-		"query":        query,
+		"query":        f.Query,
+		"filter":       f,
+		"total":        total,
 		"totalResults": totalResults,
-		"limit":        limit,
+		"limit":        f.Limit,
+		"page":         page,
+		"totalPages":   totalPages,
+		"hasPrev":      page > 1,
+		"hasNext":      page < totalPages,
+		"prevPage":     page - 1,
+		"nextPage":     page + 1,
+		"baseQuery":    baseQuery,
+		"sources":      sources,
+		"categories":   categories,
 	})
 }
 
@@ -379,5 +492,6 @@ func (s *Server) handleMonitorPage(c *gin.Context) {
 func (s *Server) handleWatchlistPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "watchlist.html", gin.H{
 		"ActivePage": "watchlist",
+		"interval":   int(watchlistInterval().Minutes()),
 	})
 }

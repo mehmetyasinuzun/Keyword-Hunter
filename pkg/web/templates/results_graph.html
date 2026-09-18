@@ -4,8 +4,8 @@
 <head>
     {{template "head" .}}
     <title>KeywordHunter - Sonuç Haritası</title>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="/static/css/graph.css">
+    <script src="/static/js/vendor/d3.v7.min.js?v={{version}}"></script>
+    <link rel="stylesheet" href="/static/css/graph.css?v={{version}}">
 </head>
 
 <body class="min-h-screen graph-page">
@@ -216,9 +216,9 @@
 
     <!-- Load Graph JS -->
     <!-- Load Graph JS Modules -->
-    <script src="/static/js/graph-core.js"></script>
-    <script src="/static/js/graph-render.js"></script>
-    <script src="/static/js/graph-ui.js"></script>
+    <script src="/static/js/graph-core.js?v={{version}}"></script>
+    <script src="/static/js/graph-render.js?v={{version}}"></script>
+    <script src="/static/js/graph-ui.js?v={{version}}"></script>
     <script>
         // Pass query parameter to JS
         window.currentQuery = '{{.query}}';

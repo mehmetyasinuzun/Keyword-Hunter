@@ -5,6 +5,7 @@ package scheduler
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,9 +64,16 @@ func (s *Scheduler) Stop() {
 	})
 }
 
-// RunNow belirli bir scheduled search'ü hemen çalıştırır
-func (s *Scheduler) RunNow(id int64) {
+// RunNow belirli bir scheduled search'ü hemen çalıştırır. Aynı anda tek tarama
+// kuralına uyar: başka bir tarama sürüyorsa false döner (istemci 409 alır).
+func (s *Scheduler) RunNow(id int64) bool {
+	select {
+	case s.runSem <- struct{}{}:
+	default:
+		return false
+	}
 	go func() {
+		defer func() { <-s.runSem }()
 		ss, err := s.db.GetScheduledSearch(id)
 		if err != nil {
 			logger.Warn("Scheduler RunNow: schedule bulunamadı (ID: %d): %v", id, err)
@@ -73,6 +81,12 @@ func (s *Scheduler) RunNow(id int64) {
 		}
 		s.runSearch(ss)
 	}()
+	return true
+}
+
+// Busy şu an bir tarama çalışıyor mu?
+func (s *Scheduler) Busy() bool {
+	return len(s.runSem) > 0
 }
 
 // checkAndRun süresi gelen taramaları başlatır
@@ -115,7 +129,7 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 	results := s.searcher.SearchAll(ctx, ss.Query)
 
 	// Yeni URL'leri tespit et (diff)
-	var newFindings []notify.Finding
+	var newFindings, allNewFindings []notify.Finding
 	var storageResults []storage.SearchResult
 	newCount := 0
 
@@ -123,13 +137,15 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 		isNew := !knownURLs[r.URL]
 		if isNew {
 			newCount++
+			f := notify.Finding{
+				Title:       r.Title,
+				URL:         r.URL,
+				Category:    r.Category,
+				Criticality: r.Criticality,
+			}
+			allNewFindings = append(allNewFindings, f)
 			if r.Criticality >= ss.AlertThreshold {
-				newFindings = append(newFindings, notify.Finding{
-					Title:       r.Title,
-					URL:         r.URL,
-					Category:    r.Category,
-					Criticality: r.Criticality,
-				})
+				newFindings = append(newFindings, f)
 			}
 		}
 		storageResults = append(storageResults, storage.SearchResult{
@@ -160,13 +176,13 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 	logger.Info("SCHEDULER: Tamamlandı — '%s' → %d sonuç, %d yeni, %d kaydedildi (%v)",
 		ss.Query, len(results), newCount, savedCount, elapsed)
 
-	// Webhook bildirimi gönder (sadece yeni bulgu varsa veya her zaman — webhook ayarına göre)
-	if ss.WebhookURL != "" && newCount > 0 {
+	// Tarama-özel webhook: eşik üstü yeni bulgu varsa
+	if ss.WebhookURL != "" && len(newFindings) > 0 {
 		payload := notify.AlertPayload{
 			Query:       ss.Query,
 			NewCount:    newCount,
 			TotalCount:  len(results),
-			TopFindings: topFindings(newFindings, 5),
+			TopFindings: notify.TopFindings(newFindings, 5),
 			RunAt:       startTime,
 		}
 		if err := notify.SendWebhook(ss.WebhookURL, payload); err != nil {
@@ -175,18 +191,32 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 			logger.Info("Scheduler: webhook gönderildi (%s)", ss.WebhookURL)
 		}
 	}
+
+	// Global bildirim merkezi (/scheduled → Bildirim Ayarları)
+	DispatchGlobalAlert(s.db, ss.Query, len(results), newCount, allNewFindings, startTime)
 }
 
-// topFindings kritikliğe göre sıralanmış ilk N bulguyu döndürür
-func topFindings(findings []notify.Finding, n int) []notify.Finding {
-	// Basit insertion sort — küçük slice için yeterli
-	for i := 1; i < len(findings); i++ {
-		for j := i; j > 0 && findings[j].Criticality > findings[j-1].Criticality; j-- {
-			findings[j], findings[j-1] = findings[j-1], findings[j]
-		}
+// DispatchGlobalAlert alert_config tablosundaki genel webhook'a, eşik üstü
+// yeni bulgular varsa bildirim gönderir. Hem planlı hem manuel aramalar çağırır.
+func DispatchGlobalAlert(db *storage.DB, query string, total, newCount int, newFindings []notify.Finding, runAt time.Time) {
+	cfg, err := db.GetAlertConfig()
+	if err != nil || cfg == nil || !cfg.Enabled || strings.TrimSpace(cfg.WebhookURL) == "" {
+		return
 	}
-	if len(findings) > n {
-		return findings[:n]
+	filtered := notify.FilterByThreshold(newFindings, cfg.MinCriticality)
+	if len(filtered) == 0 {
+		return
 	}
-	return findings
+	payload := notify.AlertPayload{
+		Query:       query,
+		NewCount:    newCount,
+		TotalCount:  total,
+		TopFindings: notify.TopFindings(filtered, 5),
+		RunAt:       runAt,
+	}
+	if err := notify.SendWebhook(cfg.WebhookURL, payload); err != nil {
+		logger.Warn("Genel bildirim webhook'u gönderilemedi: %v", err)
+		return
+	}
+	logger.Info("Genel bildirim gönderildi: '%s' için %d eşik üstü yeni bulgu", query, len(filtered))
 }

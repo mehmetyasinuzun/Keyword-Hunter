@@ -68,9 +68,16 @@ func New(torProxy, chromePath, outDir string) *Capturer {
 		outDir = os.Getenv("SCREENSHOT_DIR")
 	}
 	if outDir == "" {
-		outDir = "/data/screenshots"
+		// Docker'da /data bağlı; yerelde çalışma dizinine göreli "screenshots"
+		if st, err := os.Stat("/data"); err == nil && st.IsDir() {
+			outDir = "/data/screenshots"
+		} else {
+			outDir = "screenshots"
+		}
 	}
-	_ = os.MkdirAll(outDir, 0o755)
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		logger.Warn("Ekran görüntüsü dizini oluşturulamadı (%s): %v", outDir, err)
+	}
 
 	return &Capturer{
 		torProxy:   torProxy,

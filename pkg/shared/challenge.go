@@ -28,7 +28,7 @@ var challengeMarkers = []struct {
 	{"verify you are human", "captcha"},
 	{"verify you're human", "captcha"},
 	{"are you human", "captcha"},
-	{"insan olduğ", "doğrulama"},   // "insan olduğunuzu doğrulayın"
+	{"insan olduğ", "doğrulama"},    // "insan olduğunuzu doğrulayın"
 	{"doğrulama kodu", "doğrulama"}, // captcha/2FA kodu
 	{"güvenlik doğrulama", "doğrulama"},
 	{"lütfen doğrulayın", "doğrulama"},

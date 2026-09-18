@@ -1,437 +1,236 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
-
 <head>
     {{template "head" .}}
-    <title>KeywordHunter - Dashboard</title>
+    <title>KeywordHunter - Panel</title>
     <style>
-        /* Dashboard-specific overrides */
-        .stat-card {
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 32px rgba(99, 179, 237, 0.15);
-        }
+        .health-ring { --p: 0; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; flex: none;
+            background: conic-gradient(var(--ring) calc(var(--p) * 1%), rgba(255,255,255,.06) 0); }
+        .health-ring > div { width: 66px; height: 66px; border-radius: 50%; background: var(--bg-secondary); display: grid; place-items: center; font-weight: 800; font-family: var(--font-mono); font-size: 1.05rem; }
+        .feed-item { display: flex; gap: 12px; align-items: center; padding: 10px 6px; border-bottom: 1px solid rgba(99,179,237,.06); }
+        .feed-item:last-child { border-bottom: 0; }
+        .feed-item .body { min-width: 0; flex: 1; }
+        .feed-item .t { font-weight: 600; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .feed-item .u { font-family: var(--font-mono); font-size: .7rem; color: var(--accent-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-row { display: grid; grid-template-columns: 130px 1fr 44px; gap: 10px; align-items: center; font-size: .82rem; padding: 6px 0; }
+        .bar-row .name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-row .num { text-align: right; font-family: var(--font-mono); }
+        .crit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+        .crit-cell { text-align: center; padding: 12px 6px; border-radius: 10px; border: 1px solid; cursor: help; position: relative; text-decoration: none; }
+        .crit-cell .n { font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono); color: #fff; }
+        .crit-cell .l { font-size: .68rem; color: var(--text-muted); }
+        .c1 { background: rgba(99,179,237,.08); border-color: rgba(99,179,237,.25); } .c2 { background: rgba(118,228,247,.08); border-color: rgba(118,228,247,.25); }
+        .c3 { background: rgba(246,224,94,.08); border-color: rgba(246,224,94,.25); } .c4 { background: rgba(246,173,85,.1); border-color: rgba(246,173,85,.3); } .c5 { background: rgba(245,101,101,.12); border-color: rgba(245,101,101,.35); }
+        .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .quick a { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--bg-card-border); background: rgba(255,255,255,.02); text-decoration: none; color: var(--text-primary); transition: all .15s; }
+        .quick a:hover { border-color: var(--accent-primary); background: rgba(99,179,237,.08); transform: translateY(-1px); }
+        .quick a .k { font-size: .72rem; color: var(--text-muted); }
+        .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+        .shots a { display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--bg-card-border); background: #000; aspect-ratio: 16/10; position: relative; }
+        .shots img { width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: .9; }
+        .shots .cap { position: absolute; left: 0; right: 0; bottom: 0; font-size: .62rem; padding: 3px 6px; background: rgba(0,0,0,.7); color: #cbd5e0; font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
 </head>
-
 <body>
     {{template "navbar" .}}
-
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Overview Stats -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-xl backdrop-blur-sm stat-card">
-                <p class="text-gray-400 text-sm font-medium">Toplam Bulgu</p>
-                <div class="flex items-center justify-between mt-1">
-                    <p class="text-3xl font-black text-white">{{.totalResults}}</p>
-                    <div class="text-2xl opacity-50">📊</div>
-                </div>
+    <main class="kh-page">
+        <div class="kh-header">
+            <div>
+                <h1 class="kh-title">Operasyon Paneli</h1>
+                <p class="kh-subtitle">Bulgu hacmi, sınıflandırma kalitesi, motor sağlığı ve son 24 saatin özeti</p>
             </div>
-            <div
-                class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-xl backdrop-blur-sm stat-card group relative cursor-help">
-                <p class="text-gray-400 text-sm font-medium">Toplam Analiz</p>
-                <div class="flex items-center justify-between mt-1">
-                    <p class="text-3xl font-black text-white">{{.totalSearches}}</p>
-                    <div class="text-2xl opacity-50">🔍</div>
-                </div>
-
-                <!-- Tooltip: Recent Searches -->
-                <div
-                    class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-4 py-3 bg-gray-900 text-white text-xs rounded-lg shadow-2xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-64 z-20 pointer-events-none">
-                    <div class="font-bold mb-2 text-blue-400 border-b border-gray-700 pb-1"> Son Aramalar</div>
-                    <ul class="space-y-1.5 text-left">
-                        {{range $i, $h := .searchHistory}}
-                        {{if lt $i 5}}
-                        <li class="flex justify-between items-center text-gray-300">
-                            <span class="truncate font-mono text-blue-200">{{$h.Query}}</span>
-                            <span
-                                class="text-[10px] bg-gray-800 px-1.5 py-0.5 rounded text-gray-400">{{$h.ResultCount}}</span>
-                        </li>
-                        {{end}}
-                        {{else}}
-                        <li class="text-gray-500 italic">Henüz arama yapılmadı.</li>
-                        {{end}}
-                    </ul>
-                    <!-- Arrow -->
-                    <div
-                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1 border-4 border-transparent border-b-gray-900">
-                    </div>
-                </div>
-            </div>
-            <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-xl backdrop-blur-sm stat-card">
-                <p class="text-gray-400 text-sm font-medium">Kritik Bulgular</p>
-                <div class="flex items-center justify-between mt-1">
-                    <p class="text-3xl font-black text-red-500">{{index .criticalityStats 5}}</p>
-                    <div class="text-2xl opacity-50">⚠️</div>
-                </div>
+            <div class="kh-actions">
+                <a href="/search" class="kh-btn primary">🔍 Yeni Arama</a>
+                <a href="/scheduled#new" class="kh-btn ghost">⏰ Tarama Planla</a>
+                <a href="/api/export/results?format=csv" class="kh-btn subtle" title="Tüm bulguları CSV indir">⬇ CSV</a>
             </div>
         </div>
 
-        <!-- Algorithm Health Panel -->
-        <div
-            class="bg-gradient-to-r from-gray-800 via-gray-800 to-gray-900 border border-gray-700 rounded-xl p-6 shadow-xl mb-8">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold flex items-center gap-2">
-                    <span>🔬</span> Algoritma Sağlık Paneli
-                    <span class="text-xs font-normal text-gray-400 ml-2">(Otomatik Kategorizasyon Etkinliği)</span>
-                </h2>
-                <div class="flex items-center gap-2">
-                    <span class="text-sm text-gray-400">Genel Sağlık:</span>
-                    <span class="px-3 py-1 rounded-full text-sm font-bold
-                        {{if eq .healthColor "green"}}bg-green-500/20 text-green-400 border border-green-500/30 {{else
-                        if eq .healthColor "yellow"}}bg-yellow-500/20 text-yellow-400 border border-yellow-500/30
-                        {{else}}bg-red-500/20 text-red-400 border border-red-500/30{{end}}">
-                        {{.healthScore}}% {{.healthStatus}}
-                    </span>
+        <!-- KPI -->
+        <section class="kh-grid cols-4" style="margin-bottom:18px">
+            <div class="kh-stat blue"><div class="label">Toplam Bulgu</div><div class="value">{{.totalResults}}</div><div class="sub">{{.totalURLs}} benzersiz kayıt</div><div class="icon">📊</div></div>
+            <div class="kh-stat purple"><div class="label">Toplam Arama</div><div class="value">{{.totalSearches}}</div><div class="sub">manuel + planlı çalışma</div><div class="icon">🔍</div></div>
+            <div class="kh-stat red"><div class="label">Acil (Sev 5)</div><div class="value">{{index .criticalityStats 5}}</div><div class="sub">{{.highRiskCount}} yüksek risk (Sev 3+)</div><div class="icon">🚨</div></div>
+            <div class="kh-stat green" id="engine-stat"><div class="label">Motor Sağlığı</div><div class="value" id="engine-up">—</div><div class="sub" id="engine-sub">yükleniyor…</div><div class="icon">🛰️</div></div>
+        </section>
+
+        <!-- Quick actions + health -->
+        <section class="kh-grid cols-3" style="margin-bottom:18px">
+            <div class="kh-card" style="grid-column: span 2">
+                <div class="kh-card-title">⚡ Hızlı Erişim <span class="hint">klavye: <span class="kh-kbd">/</span> arama · <span class="kh-kbd">g</span>+<span class="kh-kbd">r</span> bulgular</span></div>
+                <div class="quick">
+                    <a href="/search"><span>🔍 Arama</span><span class="k">Aktif motorlarda eşzamanlı tarama</span></a>
+                    <a href="/results?minCriticality=4"><span>🚨 Kritik Bulgular</span><span class="k">Sev 4-5 filtresiyle</span></a>
+                    <a href="/results?sort=hits"><span>⌖ En Yüksek Sıklık</span><span class="k">Anahtar kelime yoğunluğu</span></a>
+                    <a href="/watchlist"><span>📡 İzleme Listesi</span><span class="k">Uptime, değişiklik, görüntü</span></a>
+                    <a href="/monitor"><span>🛰️ Motorlar</span><span class="k">Sağlık ve aç/kapat</span></a>
+                    <a href="/analytics"><span>📈 Analiz</span><span class="k">Zaman serisi ve dağılımlar</span></a>
                 </div>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <!-- Sınıflandırma Oranı -->
-                <div
-                    class="group relative bg-gray-900/50 rounded-lg p-4 border border-gray-700 hover:border-blue-500/50 transition">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-gray-400 text-xs">Sınıflandırma Oranı</span>
-                        <span class="text-lg">📊</span>
-                    </div>
-                    <div class="text-2xl font-black text-blue-400">%{{.classificationRate}}</div>
-                    <div class="text-xs text-gray-500 mt-1">
-                        {{.classifiedCount}} / {{.totalResults}} veri
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                        <div class="bg-blue-500 h-1.5 rounded-full transition-all duration-500 progress-bar"
-                            data-width="{{.classificationRate}}"></div>
-                    </div>
-                    <!-- Tooltip -->
-                    <div
-                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-56 z-20 pointer-events-none">
-                        <div class="font-bold text-blue-400 mb-1"> Sınıflandırma Oranı</div>
-                        <p class="text-gray-300 leading-tight">"Genel" kategorisi dışında anlamlı bir kategoriye atanan
-                            verilerin yüzdesi. Yüksekse algoritma iyi çalışıyor.</p>
-                        <div
-                            class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900">
-                        </div>
+            <div class="kh-card">
+                <div class="kh-card-title">🔬 Sınıflandırma Sağlığı</div>
+                <div class="kh-inline" style="gap:16px">
+                    <div class="health-ring" style="--p: {{.healthScore}}; --ring: {{if eq .healthColor "green"}}#48bb78{{else if eq .healthColor "yellow"}}#ecc94b{{else}}#f56565{{end}}"><div>%{{.healthScore}}</div></div>
+                    <div style="font-size:.8rem;line-height:1.7;color:var(--text-secondary)">
+                        <div>Sınıflandırılan: <strong>%{{.classificationRate}}</strong> ({{.classifiedCount}}/{{.totalResults}})</div>
+                        <div>Seviye çeşitliliği: <strong>{{.usedLevels}}/5</strong></div>
+                        <div>Yüksek risk oranı: <strong>%{{.highRiskRate}}</strong></div>
+                        <div>"Genel" kalan: <strong>{{.genelCount}}</strong></div>
                     </div>
                 </div>
-
-                <!-- Kritiklik Çeşitliliği -->
-                <div
-                    class="group relative bg-gray-900/50 rounded-lg p-4 border border-gray-700 hover:border-purple-500/50 transition">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-gray-400 text-xs">Kritiklik Çeşitliliği</span>
-                        <span class="text-lg">🎯</span>
-                    </div>
-                    <div class="text-2xl font-black text-purple-400">{{.usedLevels}}/5</div>
-                    <div class="text-xs text-gray-500 mt-1">
-                        Seviye kullanımı: %{{.critDiversity}}
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                        <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-500 progress-bar"
-                            data-width="{{.critDiversity}}"></div>
-                    </div>
-                    <!-- Tooltip -->
-                    <div
-                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-56 z-20 pointer-events-none">
-                        <div class="font-bold text-purple-400 mb-1"> Kritiklik Çeşitliliği</div>
-                        <p class="text-gray-300 leading-tight">5 kritiklik seviyesinden kaç tanesi kullanılıyor. Düşükse
-                            veriler tek bir seviyeye yığılmış demektir.</p>
-                        <div
-                            class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Yüksek Risk Tespiti -->
-                <div
-                    class="group relative bg-gray-900/50 rounded-lg p-4 border border-gray-700 hover:border-orange-500/50 transition">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-gray-400 text-xs">Yüksek Risk Tespiti</span>
-                        <span class="text-lg">⚠️</span>
-                    </div>
-                    <div class="text-2xl font-black text-orange-400">{{.highRiskCount}}</div>
-                    <div class="text-xs text-gray-500 mt-1">
-                        Toplam: %{{.highRiskRate}} (Sev. 3-5)
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                        <div class="bg-orange-500 h-1.5 rounded-full transition-all duration-500 progress-bar"
-                            data-width="{{.highRiskRate}}"></div>
-                    </div>
-                    <!-- Tooltip -->
-                    <div
-                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-56 z-20 pointer-events-none">
-                        <div class="font-bold text-orange-400 mb-1"> Yüksek Risk Tespiti</div>
-                        <p class="text-gray-300 leading-tight">Seviye 3, 4 ve 5 olarak etiketlenen kritik bulgular. CTI
-                            için en önemli veriler bunlardır.</p>
-                        <div
-                            class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- "Genel" Kategorisi Uyarısı -->
-                <div
-                    class="group relative bg-gray-900/50 rounded-lg p-4 border border-gray-700 hover:border-cyan-500/50 transition">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-gray-400 text-xs">"Genel" Kategorisi</span>
-                        <span class="text-lg">📁</span>
-                    </div>
-                    <div
-                        class="text-2xl font-black {{if gt .genelCount .classifiedCount}}text-red-400{{else}}text-cyan-400{{end}}">
-                        {{.genelCount}}</div>
-                    <div class="text-xs text-gray-500 mt-1">
-                        Sınıflandırılmamış veri (%{{.genelRate}})
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                        <div class="{{if gt .genelCount .classifiedCount}}bg-red-500{{else}}bg-cyan-500{{end}} h-1.5 rounded-full transition-all duration-500 progress-bar"
-                            data-width="{{.genelRate}}"></div>
-                    </div>
-                    <!-- Tooltip -->
-                    <div
-                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-56 z-20 pointer-events-none">
-                        <div class="font-bold text-cyan-400 mb-1"> "Genel" Kategorisi</div>
-                        <p class="text-gray-300 leading-tight">Algoritmanın sınıflandıramadığı veriler. Yüksekse keyword
-                            listesini genişletmek gerekebilir.</p>
-                        <div
-                            class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900">
-                        </div>
-                    </div>
-                </div>
+                <p class="kh-hint" style="margin-top:10px">Skor = %40 sınıflandırma + %30 çeşitlilik + %30 yüksek-risk tespiti. Düşükse <a href="/results" style="color:var(--accent-primary)">Bulgular</a>'da toplu etiketleme çalıştırın.</p>
             </div>
+        </section>
 
-            <!-- Algoritma Açıklaması -->
-            <div class="mt-6 p-4 bg-gray-900/30 rounded-lg border border-gray-700/50">
-                <div class="flex items-start gap-3">
-                    <span class="text-2xl">💡</span>
-                    <div>
-                        <h4 class="font-bold text-gray-300 mb-1">PredictCTI Algoritması Nasıl Çalışır?</h4>
-                        <p class="text-xs text-gray-500 leading-relaxed">
-                            Her bulgu kaydedilirken, <code class="bg-gray-800 px-1 rounded">Title</code> ve <code
-                                class="bg-gray-800 px-1 rounded">URL</code> metni
-                            <span class="text-yellow-400">6 kategori grubundaki anahtar kelimelere</span> karşı taranır
-                            (ransomware, database, carding, market, forum, chat).
-                            İlk eşleşme kazanır ve kritiklik seviyesi atanır. Eşleşme yoksa → <span
-                                class="text-gray-400">Seviye 1, Kategori: Genel</span>.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <!-- Category Distribution -->
-            <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
-                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                    <span>🗂️</span> Kategori Dağılımı
-                </h2>
-                <div class="space-y-4">
-                    {{range $cat, $count := .categoryStats}}
-                    <div>
-                        <div class="flex justify-between text-sm mb-1">
-                            <span>{{$cat}}</span>
-                            <span class="font-bold">{{$count}}</span>
-                        </div>
-                        <div class="w-full bg-gray-700 rounded-full h-2">
-                            <div class="bg-blue-500 h-2 rounded-full category-bar" data-count="{{$count}}"></div>
-                        </div>
-                    </div>
-                    {{else}}
-                    <p class="text-gray-500 text-center py-4">Veri bulunamadı.</p>
-                    {{end}}
-                </div>
-            </div>
-
-            <!-- Criticality Levels -->
-            <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg overflow-visible">
-                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                    <span>🔥</span> Kritiklik Dereceleri
-                </h2>
-                <div class="grid grid-cols-5 gap-2">
+        <section class="kh-grid cols-2" style="margin-bottom:18px">
+            <div class="kh-card">
+                <div class="kh-card-title">🔥 Kritiklik Dağılımı <span class="hint">tıkla → filtrele</span></div>
+                <div class="crit-grid">
                     {{range $i := (seq 1 5)}}
-                    <div class="group relative cursor-help text-center p-3 rounded-lg border transition duration-200
-                        {{if eq $i 1}}bg-blue-900/20 border-blue-800 hover:bg-blue-900/40
-                        {{else if eq $i 2}}bg-cyan-900/20 border-cyan-800 hover:bg-cyan-900/40
-                        {{else if eq $i 3}}bg-yellow-900/20 border-yellow-800 hover:bg-yellow-900/40
-                        {{else if eq $i 4}}bg-orange-900/20 border-orange-800 hover:bg-orange-900/40
-                        {{else}}bg-red-900/20 border-red-800 hover:bg-red-900/40{{end}}">
-
-                        <div class="text-xs text-gray-400 mb-1">Seviye {{$i}}</div>
-                        <div class="text-xl font-bold text-white">{{index $.criticalityStats $i}}</div>
-
-                        <!-- Tooltip -->
-                        <div
-                            class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-48 z-10 pointer-events-none">
-                            <div class="text-left font-bold mb-1">
-                                {{if eq $i 1}} Düşük Risk
-                                {{else if eq $i 2}} Orta Risk
-                                {{else if eq $i 3}} Yüksek Risk
-                                {{else if eq $i 4}} Kritik Risk
-                                {{else}} Acil Risk{{end}}
-                            </div>
-                            <p class="text-left leading-tight text-gray-300">
-                                {{index $.critDescs $i}}
-                            </p>
-                            <!-- Arrow -->
-                            <div
-                                class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900">
-                            </div>
-                        </div>
-                    </div>
+                    <a class="crit-cell c{{$i}}" href="/results?minCriticality={{$i}}" title="{{index $.critDescs $i}}">
+                        <div class="n">{{index $.criticalityStats $i}}</div>
+                        <div class="l">Seviye {{$i}}</div>
+                    </a>
+                    {{end}}
+                </div>
+                <div class="kh-divider"></div>
+                <div class="kh-card-title" style="margin-bottom:6px">🗂️ Kategori Dağılımı</div>
+                <div id="cat-bars">
+                    {{range $cat, $count := .categoryStats}}
+                    <div class="bar-row"><span class="name" title="{{$cat}}">{{$cat}}</span><div class="kh-progress thin"><div data-count="{{$count}}" style="width:0%"></div></div><span class="num">{{$count}}</span></div>
+                    {{else}}
+                    <p class="kh-muted" style="font-size:.85rem">Henüz veri yok.</p>
                     {{end}}
                 </div>
             </div>
-        </div>
+            <div class="kh-card">
+                <div class="kh-card-title">🧬 IOC / Artifact Özeti <span class="hint">etiketleme sırasında çıkarılır</span></div>
+                <div id="artifact-stats"><div class="kh-skel" style="width:60%"></div></div>
+                <div class="kh-divider"></div>
+                <div class="kh-card-title" style="margin-bottom:6px">📡 İzleme Listesi</div>
+                <div id="watch-summary"><div class="kh-skel" style="width:40%"></div></div>
+            </div>
+        </section>
 
-        <!-- Yeni Bulgular Feed -->
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg mb-8">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold flex items-center gap-2">
-                    <span class="relative flex h-2.5 w-2.5">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+        <section class="kh-grid cols-2" style="margin-bottom:18px">
+            <div class="kh-card">
+                <div class="kh-card-title">
+                    <span class="kh-dot up pulse"></span> Yeni Bulgular <span id="new-results-badge" class="hint"></span>
+                    <span style="margin-left:auto" class="kh-inline">
+                        <select id="new-results-hours" class="kh-select sm" onchange="loadNewResults()">
+                            <option value="1">Son 1 saat</option><option value="6">Son 6 saat</option><option value="24" selected>Son 24 saat</option><option value="72">Son 3 gün</option>
+                        </select>
                     </span>
-                    Yeni Bulgular
-                    <span id="new-results-badge" class="text-xs font-normal text-gray-400 ml-1"></span>
-                </h2>
-                <div class="flex items-center gap-3">
-                    <select id="new-results-hours" onchange="loadNewResults()"
-                        class="text-xs bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-blue-500">
-                        <option value="1">Son 1 saat</option>
-                        <option value="6">Son 6 saat</option>
-                        <option value="24" selected>Son 24 saat</option>
-                        <option value="72">Son 3 gün</option>
-                    </select>
-                    <a href="/results" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Tümünü Gör →</a>
                 </div>
+                <div id="new-results-feed"><div class="kh-skel"></div><div class="kh-skel" style="width:80%;margin-top:8px"></div></div>
             </div>
-            <div id="new-results-feed" class="space-y-2">
-                <p class="text-gray-500 text-sm text-center py-4">Yükleniyor...</p>
+            <div class="kh-card">
+                <div class="kh-card-title">🕘 Son Aramalar</div>
+                {{if .searchHistory}}
+                <div class="kh-table-wrap"><table class="kh-table">
+                    <thead><tr><th>Sorgu</th><th class="num">Sonuç</th><th>Zaman</th><th></th></tr></thead>
+                    <tbody>
+                    {{range .searchHistory}}
+                    <tr><td class="kh-mono">{{.Query}}</td><td class="num">{{.ResultCount}}</td><td class="muted">{{formatTime .SearchedAt}}</td>
+                        <td><a class="kh-btn xs subtle" href="/results?q={{.Query}}">Bulgular</a> <a class="kh-btn xs subtle" href="/results/graph?q={{.Query}}">Harita</a></td></tr>
+                    {{end}}
+                    </tbody></table></div>
+                {{else}}
+                <div class="kh-empty"><div class="icon">🔍</div><h3>Henüz arama yapılmadı</h3><a href="/search" class="kh-btn primary" style="margin-top:8px">İlk aramayı başlat</a></div>
+                {{end}}
             </div>
-        </div>
+        </section>
 
-        <!-- Recent Activity -->
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold border-l-4 border-blue-500 pl-3"> Son Bulgular</h2>
-                <a href="/results" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Tümünü Gör →</a>
-            </div>
+        <section class="kh-card" style="margin-bottom:18px">
+            <div class="kh-card-title">📸 Son Ekran Görüntüleri <span class="hint" id="shots-hint"></span></div>
+            <div class="shots" id="shots"></div>
+        </section>
 
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="text-left text-gray-400 text-xs border-b border-gray-700">
-                            <th class="pb-3 font-medium">BAŞLIK / URL</th>
-                            <th class="pb-3 font-medium">KATEGORİ</th>
-                            <th class="pb-3 font-medium text-center">KRİTİKLİK</th>
-                            <th class="pb-3 font-medium text-center" title="Kelime Sıklığı">SIKLIK</th>
-                            <th class="pb-3 font-medium text-right">TARİH</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-700/50">
-                        {{range .recentResults}}
-                        <tr class="group hover:bg-gray-700/30 transition">
-                            <td class="py-4">
-                                <p class="text-sm font-bold truncate max-w-md">{{truncate .Title 80}}</p>
-                                <p class="text-xs text-blue-500 truncate max-w-md">{{truncate .URL 60}}</p>
-                            </td>
-                            <td class="py-4">
-                                <span
-                                    class="bg-gray-700 px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider">{{.Category}}</span>
-                            </td>
-                            <td class="py-4 text-center">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-black 
-                                    {{if eq .Criticality 5}}bg-red-500/20 text-red-500
-                                    {{else if eq .Criticality 4}}bg-orange-500/20 text-orange-500
-                                    {{else if eq .Criticality 3}}bg-yellow-500/20 text-yellow-500
-                                    {{else}}bg-blue-500/20 text-blue-500{{end}}">
-                                    {{.Criticality}} / 5
-                                </span>
-                            </td>
-                            <td class="py-4 text-center font-mono font-bold">
-                                {{.KeywordCount}}
-                            </td>
-                            <td class="py-4 text-right text-xs text-gray-500 font-mono">
-                                {{formatTime .CreatedAt}}
-                            </td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+        <section class="kh-card flush">
+            <div class="kh-card-title">🧾 Son Bulgular <a href="/results" class="kh-btn xs ghost" style="margin-left:auto">Tümünü gör →</a></div>
+            <div class="kh-table-wrap"><table class="kh-table">
+                <thead><tr><th>Başlık / URL</th><th>Kategori</th><th class="center">Kritiklik</th><th class="center">Sıklık</th><th>Tarih</th></tr></thead>
+                <tbody>
+                {{range .recentResults}}
+                <tr>
+                    <td><span class="title" title="{{.Title}}">{{truncate .Title 80}}</span><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{truncate .URL 70}}</a></td>
+                    <td><span class="kh-badge neutral">{{.Category}}</span></td>
+                    <td class="center"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span></td>
+                    <td class="center kh-mono">{{.KeywordCount}}</td>
+                    <td class="muted kh-mono">{{formatTime .CreatedAt}}</td>
+                </tr>
+                {{else}}
+                <tr><td colspan="5"><div class="kh-empty"><div class="icon">📭</div><h3>Henüz bulgu yok</h3><p>Arama yaparak başlayın.</p></div></td></tr>
+                {{end}}
+                </tbody></table></div>
+        </section>
+        <p class="kh-footer">KeywordHunter v{{version}} · Tüm trafik Tor üzerinden · Veriler yalnızca bu makinede</p>
+    </main>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // Algorithm health progress bars (server-computed percentages)
-            document.querySelectorAll('.progress-bar[data-width]').forEach(function (bar) {
-                bar.style.width = bar.dataset.width + '%';
+            var total = parseInt('{{.totalResults}}') || 1;
+            document.querySelectorAll('#cat-bars .kh-progress > div[data-count]').forEach(function (bar) {
+                var c = parseInt(bar.dataset.count) || 0;
+                bar.style.width = Math.max(2, Math.round(c / total * 100)) + '%';
             });
-
-            // Category distribution bars (computed from real counts)
-            var totalResults = parseInt('{{.totalResults}}') || 1;
-            document.querySelectorAll('.category-bar[data-count]').forEach(function (bar) {
-                var count = parseInt(bar.dataset.count) || 0;
-                var pct = totalResults > 0 ? Math.max(2, Math.round(count / totalResults * 100)) : 2;
-                bar.style.width = pct + '%';
-            });
-
-            // Initial load of new results feed
-            loadNewResults();
+            loadNewResults(); loadEngineHealth(); loadArtifactStats(); loadWatchSummary(); loadShots();
         });
+
+        function loadEngineHealth() {
+            KH.api('/api/monitor/summary').then(function (d) {
+                var up = d.enginesActiveUp || 0, act = d.enginesActive || 0;
+                document.getElementById('engine-up').textContent = up + '/' + act;
+                document.getElementById('engine-sub').textContent = 'aktif motorlardan çevrimiçi · ' + (d.scheduledActive || 0) + ' planlı tarama';
+                var st = document.getElementById('engine-stat');
+                st.className = 'kh-stat ' + (up === 0 ? 'red' : (up < act / 2 ? 'amber' : 'green'));
+            }).catch(function () { document.getElementById('engine-sub').textContent = 'alınamadı'; });
+        }
+
+        function loadArtifactStats() {
+            var box = document.getElementById('artifact-stats');
+            var names = { email: '✉️ E-posta', bitcoin: '₿ Bitcoin', monero: 'ɱ Monero', ip: '🌐 IP', onion: '🧅 Onion', credit_card: '💳 Kart', phone: '📞 Telefon', ssh_key: '🔑 SSH', api_key: '🗝️ API Key', username: '👤 Kullanıcı', hash: '#️⃣ Hash' };
+            KH.api('/api/artifacts/stats').then(function (d) {
+                if (!d.types || d.types.length === 0) { box.innerHTML = '<p class="kh-hint">Henüz IOC çıkarılmadı. Bulgular sayfasında <strong>Etiketle</strong> çalıştırdığınızda sayfa metninden e-posta, cüzdan, IP, hash ve onion adresleri otomatik toplanır.</p>'; return; }
+                box.innerHTML = '<div class="kh-inline">' + d.types.map(function (t) { return '<a class="kh-chip" href="/results" title="' + KH.esc(t.type) + '">' + KH.esc(names[t.type] || t.type) + ' <span class="count">' + t.count + '</span></a>'; }).join('') + '</div><p class="kh-hint" style="margin-top:8px">Toplam ' + KH.num(d.total) + ' artifact</p>';
+            }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
+        }
+
+        function loadWatchSummary() {
+            var box = document.getElementById('watch-summary');
+            KH.api('/api/watchlist').then(function (d) {
+                var items = d.items || [];
+                if (items.length === 0) { box.innerHTML = '<p class="kh-hint">İzlenen site yok. <a href="/watchlist" style="color:var(--accent-primary)">Ekle →</a></p>'; return; }
+                var up = items.filter(function (i) { return i.status === 'up'; }).length;
+                var down = items.filter(function (i) { return i.status === 'down'; }).length;
+                var blocked = items.filter(function (i) { return i.status === 'engel'; }).length;
+                var changed = items.filter(function (i) { return i.changed; }).length;
+                box.innerHTML = '<div class="kh-inline"><span class="kh-badge ok">' + up + ' ayakta</span><span class="kh-badge err">' + down + ' kapalı</span><span class="kh-badge warn">' + blocked + ' engel</span>' + (changed ? '<span class="kh-badge info">' + changed + ' değişti</span>' : '') + '<a href="/watchlist" class="kh-btn xs subtle">Detay</a></div>';
+            }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
+        }
+
+        function loadShots() {
+            var box = document.getElementById('shots'), hint = document.getElementById('shots-hint');
+            KH.api('/api/screenshots?limit=6').then(function (d) {
+                var s = d.screenshots || [];
+                if (!d.available) hint.textContent = 'ekran görüntüsü yalnızca Docker imajında (chromium) etkin';
+                if (s.length === 0) { box.innerHTML = '<p class="kh-hint">Henüz görüntü yok.</p>'; return; }
+                box.innerHTML = s.map(function (x) { return '<a href="/screenshot/file/' + x.id + '" target="_blank" rel="noopener" title="' + KH.esc(x.targetUrl) + '"><img loading="lazy" src="/screenshot/file/' + x.id + '" alt=""><span class="cap">' + (x.challenge ? '⚠️ ' : '') + KH.esc(KH.short(x.targetUrl.replace(/^https?:\/\//, ''), 30)) + '</span></a>'; }).join('');
+            }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
+        }
 
         function loadNewResults() {
             var hours = document.getElementById('new-results-hours').value;
-            var feed = document.getElementById('new-results-feed');
-            var badge = document.getElementById('new-results-badge');
-
-            fetch('/api/new-results?hours=' + hours + '&limit=20')
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var results = data.results || [];
-                    badge.textContent = results.length > 0
-                        ? '(' + results.length + ' yeni)'
-                        : '';
-
-                    if (results.length === 0) {
-                        feed.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">Bu zaman aralığında yeni bulgu yok.</p>';
-                        return;
-                    }
-
-                    var critColors = {
-                        5: 'text-red-500 bg-red-500/10',
-                        4: 'text-orange-500 bg-orange-500/10',
-                        3: 'text-yellow-500 bg-yellow-500/10',
-                        2: 'text-cyan-400 bg-cyan-500/10',
-                        1: 'text-blue-400 bg-blue-500/10'
-                    };
-
-                    feed.innerHTML = results.map(function(r) {
-                        var color = critColors[r.Criticality] || critColors[1];
-                        var title = (r.Title || '').substring(0, 70);
-                        var url = (r.URL || '').substring(0, 55);
-                        var src = r.Source || '';
-                        return '<div class="flex items-center gap-3 py-2 border-b border-gray-700/50 last:border-0 hover:bg-gray-700/20 rounded px-2 transition">' +
-                            '<span class="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded ' + color + '">' + r.Criticality + '</span>' +
-                            '<div class="min-w-0 flex-1">' +
-                                '<p class="text-sm text-white font-medium truncate">' + escDash(title) + '</p>' +
-                                '<p class="text-xs text-blue-400 truncate font-mono">' + escDash(url) + '</p>' +
-                            '</div>' +
-                            '<span class="shrink-0 text-[10px] bg-gray-700 text-gray-400 px-2 py-0.5 rounded font-mono">' + escDash(src) + '</span>' +
-                        '</div>';
-                    }).join('');
-                })
-                .catch(function() {
-                    feed.innerHTML = '<p class="text-red-400 text-sm text-center py-4">Feed yüklenemedi.</p>';
-                });
-        }
-
-        function escDash(s) {
-            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            var feed = document.getElementById('new-results-feed'), badge = document.getElementById('new-results-badge');
+            KH.api('/api/new-results?hours=' + hours + '&limit=20').then(function (d) {
+                var r = d.results || [];
+                badge.textContent = r.length ? '(' + r.length + ' yeni)' : '';
+                if (!r.length) { feed.innerHTML = '<p class="kh-hint" style="padding:12px 0">Bu aralıkta yeni bulgu yok.</p>'; return; }
+                feed.innerHTML = r.map(function (x) {
+                    return '<div class="feed-item">' + KH.sev(x.Criticality) + '<div class="body"><div class="t">' + KH.esc(KH.short(x.Title, 80)) + '</div><div class="u">' + KH.esc(KH.short(x.URL, 70)) + '</div></div><span class="kh-badge neutral mono">' + KH.esc(x.Source) + '</span></div>';
+                }).join('');
+            }).catch(function () { feed.innerHTML = '<p class="kh-hint">Feed yüklenemedi.</p>'; });
         }
     </script>
 </body>
-
 </html>

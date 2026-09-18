@@ -1,0 +1,46 @@
+# Değişiklik Günlüğü
+
+## v0.10.0 — 2026-09-18
+
+Tam denetim + sertleştirme + yeniden tasarım sürümü. Tüm değişiklikler gerçek Tor
+devresi üzerinden canlı doğrulandı (10/10 motor, 299 sonuç / 11 sn).
+
+### Düzeltilen kritik hatalar
+- **graph_nodes sonsuz duplikasyon**: `UNIQUE(url, parent_id)` NULL parent için çalışmıyordu; her arama aynı kök düğümü yeniden ekliyordu. Açılışta birleştirme migrasyonu + `COALESCE(parent_id,0)` ifade indeksi.
+- **Planlı taramalar saat dilimi kadar geç çalışıyordu** (`next_run_at` yerel ofsetli, `CURRENT_TIMESTAMP` UTC; ham metin karşılaştırması). `datetime()` normalizasyonu, `_time_format=sqlite`, eski damgalar için migrasyon.
+- **Motorlar sayfası tamamen bozuktu** (JSON alanları camelCase, şablon PascalCase okuyordu → `TypeError`).
+- **Bulgular satır düzenleme**: kategori değişince kritiklik eski değere dönüyordu (şablona gömülü değerler); artık DOM'daki güncel değer gönderilir.
+- **Motor aç/kapat aramayı etkilemiyordu**; artık gerçekten filtreler.
+- `scheduled.html` `window.setInterval`'ı gölgeliyordu; aralık sınırları backend ile hizalandı.
+- Tamamlanmış etiketleme işi "iptal" ile geçersiz kılınıyordu.
+- Kuyruk doluyken iş sessizce askıda kalıyordu → açık hata.
+- `.env` tırnaklama asimetrisi (`"` / `\` içeren parolalar /settings sonrası bozuluyordu).
+- Rune-güvenli kısaltma (Türkçe başlıklarda `�`).
+- SSE akışı 120 sn'de kopuyordu (`WriteTimeout`); `ResponseController` ile kaldırıldı.
+- Statik dosyalar hız limitine dahildi → grafik yükleyici 429 alıyordu.
+- Ölü .onion'a etiketleme 3×60 sn bekletiyordu → 100 sn üst sınır, 2 deneme.
+- Bağlantı kurulumu bağlam iptalini dinlemiyordu (`Dial` → `DialContext`).
+
+### Güvenlik
+- bcrypt parola (düz metin `ADMIN_PASS` ilk değişiklikte hash'e dönüşür), IP + global login kilitleme.
+- Oturum mutlak ömrü (30 gün), parola değişince diğer oturumlar düşer, `no-store`.
+- CSP, Permissions-Policy, COOP/CORP; CDN bağımlılığı kaldırıldı (Chart.js, D3 yerel).
+- SSRF: webhook/ekran görüntüsü hedeflerinde dahili adres reddi (DNS sonrası kontrol), yönlendirme yok; izleme listesi yalnızca v3 .onion.
+- Dark web başlıkları grafik tooltip/modal'ında kaçışlanıyor (stored XSS kapatıldı).
+- `GET /logout` Fetch Metadata ile CSRF'e karşı korundu.
+- Docker: Tor portu host'a kapatıldı, uygulama varsayılan 127.0.0.1'e bağlanır, root olmayan kullanıcı, `no-new-privileges`, rastgele ilk parola (admin123 kaldırıldı).
+- Bağımlılıklar güncellendi; `govulncheck` 0 zafiyet (quic-go GO-2026-5676 / GO-2025-4233 kapatıldı).
+- CSV formül enjeksiyonu koruması; `.env` `.gitignore`'a eklendi.
+
+### Yeni özellikler
+- Canlı doğrulanmış motor listesi (10 aktif + 7 pasif/not'lu), kullanıcı seçimlerini koruyan varsayılan güncelleme.
+- IOC/artifact çıkarımı (e-posta, BTC, XMR, IP, hash, kart-Luhn, telefon, SSH, API key, onion) + pivot arama + istatistik.
+- Bulgular: filtre/sıralama/sayfalama, toplu seçim (etiketle, kritiklik ata, URL kopyala, sil), CSV/JSON export, izleme listesine ekle.
+- Genel bildirim merkezi (alert_config artık gerçekten kullanılıyor) + test gönderimi; manuel aramalar da bildirir.
+- Türkçe-farkındalıklı sınıflandırma ve etiketleme (Unicode tokenizasyon, TR sinyaller/durak kelimeler).
+- İzleme listesi: görünür-metin hash'i ile değişiklik tespiti, ekran görüntüsü bekleme süresi, görüntü zaman çizelgesi, tohum listesi artık opt-in.
+- `/healthz`, sürüm bilgisi, klavye kısayolları, responsive navbar, toast/modal/onay bileşenleri, mobil uyum.
+- Yeniden tasarlanan Panel / Arama (canlı motor çipleri) / Bulgular / Motorlar / Planlı / İzleme / Ayarlar / Giriş.
+
+### Testler
+config, env store, kimlik + kilitleme, auth/CSRF/logout akışı, healthz, search parser, CTI (TR/EN), artifact, storage migrasyonları, motor varsayılanları — `go test -race ./...` yeşil.

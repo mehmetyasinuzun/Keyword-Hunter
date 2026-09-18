@@ -52,11 +52,16 @@ func New(db *storage.DB, torProxy string, interval time.Duration) (*EngineMonito
 		interval: interval,
 	}
 
-	// Engine'leri DB'ye başlangıç kaydı olarak ekle
+	// Engine'leri DB'ye başlangıç kaydı olarak ekle; listeden çıkanları buda
 	for _, eng := range search.SearchEngines {
-		if err := db.UpsertEngineStat(eng.Name, eng.URL); err != nil {
+		if err := db.UpsertEngineStat(eng.Name, eng.URL, eng.DefaultActive); err != nil {
 			logger.Warn("Engine stat upsert hatası (%s): %v", eng.Name, err)
 		}
+	}
+	if n, err := db.PruneEngineStats(search.EngineNames()); err != nil {
+		logger.Warn("Engine stat budama hatası: %v", err)
+	} else if n > 0 {
+		logger.Info("Engine Monitor: listeden çıkarılan %d motor kaydı silindi", n)
 	}
 
 	return em, nil

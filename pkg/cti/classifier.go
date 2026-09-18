@@ -22,7 +22,8 @@ type rule struct {
 	phrases         map[string]int
 }
 
-var tokenRegex = regexp.MustCompile(`[a-z0-9][a-z0-9._/-]{1,40}`)
+// tokenRegex Unicode harf/rakam destekler (Türkçe ş, ı, ğ, ç, ö, ü dahil).
+var tokenRegex = regexp.MustCompile(`[\p{L}\p{N}][\p{L}\p{N}._/-]{1,40}`)
 
 var lowValueSignals = map[string]bool{
 	"home":  true,
@@ -41,21 +42,25 @@ var categoryRules = []rule{
 		category:        "Ransomware",
 		baseCriticality: 5,
 		keywords: map[string]int{
-			"ransomware": 6,
-			"ransom":     4,
-			"lockbit":    7,
-			"blackcat":   7,
-			"alphv":      7,
-			"conti":      6,
-			"revil":      6,
-			"decryptor":  5,
-			"extortion":  5,
-			"leaksite":   4,
+			"ransomware":  6,
+			"ransom":      4,
+			"lockbit":     7,
+			"blackcat":    7,
+			"alphv":       7,
+			"conti":       6,
+			"revil":       6,
+			"decryptor":   5,
+			"extortion":   5,
+			"leaksite":    4,
+			"fidye":       6, // TR
+			"şifreleyici": 5,
 		},
 		phrases: map[string]int{
 			"double extortion": 7,
 			"ransom note":      6,
 			"data leak site":   6,
+			"fidye yazılımı":   7, // TR
+			"fidye notu":       6,
 		},
 	},
 	{
@@ -74,6 +79,19 @@ var categoryRules = []rule{
 			"logs":        4,
 			"exposed":     4,
 			"dox":         4,
+			"sızıntı":     6, // TR
+			"sızdırıldı":  6,
+			"veritabanı":  5,
+			"şifre":       5,
+			"parola":      5,
+			"kimlik":      4,
+			"mernis":      7,
+			"tc":          3,
+			"tckn":        6,
+			"vatandaş":    4,
+			"e-devlet":    6,
+			"edevlet":     6,
+			"nüfus":       5,
 		},
 		phrases: map[string]int{
 			"data leak":       7,
@@ -82,32 +100,46 @@ var categoryRules = []rule{
 			"sql dump":        6,
 			"user database":   6,
 			"fresh logs":      5,
+			"veri sızıntısı":  7, // TR
+			"tc kimlik":       7,
+			"kimlik numarası": 6,
+			"vatandaş sorgu":  7,
+			"e-devlet hesap":  6,
+			"nüfus kayıt":     6,
 		},
 	},
 	{
 		category:        "Finansal Dolandırıcılık",
 		baseCriticality: 5,
 		keywords: map[string]int{
-			"carding":    7,
-			"cvv":        7,
-			"visa":       4,
-			"mastercard": 4,
-			"amex":       4,
-			"cashout":    6,
-			"paypal":     5,
-			"bank":       5,
-			"iban":       5,
-			"swift":      5,
-			"wallet":     4,
-			"bitcoin":    4,
-			"btc":        4,
-			"xmr":        4,
+			"carding":        7,
+			"cvv":            7,
+			"visa":           4,
+			"mastercard":     4,
+			"amex":           4,
+			"cashout":        6,
+			"paypal":         5,
+			"bank":           5,
+			"iban":           5,
+			"swift":          5,
+			"wallet":         4,
+			"bitcoin":        4,
+			"btc":            4,
+			"xmr":            4,
+			"dolandırıcılık": 6, // TR
+			"kredi":          3,
+			"banka":          5,
+			"havale":         5,
+			"papara":         6,
 		},
 		phrases: map[string]int{
 			"credit card":   7,
 			"bank login":    6,
 			"wire transfer": 6,
 			"bank account":  6,
+			"kredi kartı":   7, // TR
+			"banka hesabı":  6,
+			"kart bilgisi":  6,
 		},
 	},
 	{
@@ -148,12 +180,18 @@ var categoryRules = []rule{
 			"webshell": 6,
 			"loader":   4,
 			"botnet":   5,
+			"erişim":   4, // TR
+			"yönetici": 4,
+			"sunucu":   3,
 		},
 		phrases: map[string]int{
 			"initial access":   7,
 			"admin access":     6,
 			"corporate access": 7,
 			"rdp access":       7,
+			"rdp erişim":       7, // TR
+			"kurumsal erişim":  7,
+			"yönetici paneli":  5,
 		},
 	},
 	{
@@ -170,30 +208,47 @@ var categoryRules = []rule{
 			"store":       4,
 			"product":     3,
 			"shipping":    3,
+			"satıcı":      5, // TR
+			"mağaza":      4,
+			"ürün":        3,
+			"kargo":       3,
+			"kiralık":     4,
+			"satılık":     5,
 		},
 		phrases: map[string]int{
-			"trusted vendor": 6,
-			"escrow service": 6,
-			"vendor shop":    5,
+			"trusted vendor":   6,
+			"escrow service":   6,
+			"vendor shop":      5,
+			"güvenilir satıcı": 6, // TR
+			"kiralık katil":    8,
+			"sahte belge":      6,
+			"sahte kimlik":     7,
 		},
 	},
 	{
 		category:        "Siber Forum",
 		baseCriticality: 3,
 		keywords: map[string]int{
-			"forum":    6,
-			"board":    5,
-			"thread":   5,
-			"tutorial": 4,
-			"method":   4,
-			"cracked":  4,
-			"cracking": 4,
-			"member":   3,
+			"forum":     6,
+			"board":     5,
+			"thread":    5,
+			"tutorial":  4,
+			"method":    4,
+			"cracked":   4,
+			"cracking":  4,
+			"member":    3,
+			"üye":       3, // TR
+			"konu":      3,
+			"hacker":    5,
+			"hackerlar": 5,
 		},
 		phrases: map[string]int{
 			"private forum": 6,
 			"new thread":    5,
 			"forum post":    4,
+			"türk hacker":   6, // TR
+			"özel forum":    6,
+			"yeni konu":     4,
 		},
 	},
 	{
@@ -210,11 +265,15 @@ var categoryRules = []rule{
 			"channel":  3,
 			"opsec":    5,
 			"pgp":      5,
+			"sohbet":   3, // TR
+			"iletişim": 3,
 		},
 		phrases: map[string]int{
-			"contact me":   4,
-			"pgp key":      6,
-			"secure comms": 5,
+			"contact me":       4,
+			"pgp key":          6,
+			"secure comms":     5,
+			"pgp anahtarı":     6, // TR
+			"güvenli iletişim": 5,
 		},
 	},
 }
@@ -401,10 +460,12 @@ func normalizeTagList(tags []string) []string {
 
 func normalizeSignal(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
+	// Türkçe büyük İ/ı dönüşümleri: ToLower("İ") = "i̇" (noktalı) olur, sadeleştir
+	s = strings.ReplaceAll(s, "i̇", "i")
 	s = strings.ReplaceAll(s, "_", "-")
 	s = strings.ReplaceAll(s, " ", "-")
 	s = strings.Trim(s, "-./")
-	if len(s) < 3 || len(s) > 40 {
+	if n := len([]rune(s)); n < 2 || n > 40 {
 		return ""
 	}
 	return s

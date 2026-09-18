@@ -1,20 +1,24 @@
+# syntax=docker/dockerfile:1
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
-# Build dependencies
 RUN apk add --no-cache ca-certificates tzdata
 
-# Cache dependencies first
+# Bağımlılıkları önce önbelleğe al
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-# Copy only required source folders
+# Yalnızca gerekli kaynaklar
 COPY cmd ./cmd
 COPY pkg ./pkg
 
-# Build a small, static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/keywordhunter ./cmd/main.go
+ARG VERSION=dev
+# Küçük, statik ikili
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-s -w -X keywordhunter-mvp/pkg/web.Version=${VERSION}" \
+    -o /out/keywordhunter ./cmd/main.go
 
 FROM alpine:3.22
 
@@ -22,9 +26,12 @@ WORKDIR /app
 
 # wget: compose healthcheck. chromium + fontlar: Tor üzerinden .onion ekran görüntüsü
 # (chromedp ile sürülür). nss/freetype/harfbuzz/ttf-freefont headless render için gerekli.
+# su-exec: entrypoint root ile /data izinlerini düzeltip uygulamayı root DIŞI kullanıcıyla başlatır.
 RUN apk add --no-cache \
-		ca-certificates tzdata wget \
-		chromium nss freetype harfbuzz ttf-freefont
+        ca-certificates tzdata wget su-exec \
+        chromium nss freetype harfbuzz ttf-freefont \
+    && addgroup -S -g 10001 kh \
+    && adduser -S -u 10001 -G kh -h /app -s /sbin/nologin kh
 
 # chromedp'nin chromium'u bulması için
 ENV CHROME_BIN=/usr/bin/chromium-browser
@@ -35,8 +42,9 @@ COPY .env.example /app/.env.example
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
-	&& chmod +x /app/docker-entrypoint.sh \
-	&& mkdir -p /data/logs /data/screenshots
+    && chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /data/logs /data/screenshots \
+    && chown -R kh:kh /data /app
 
 EXPOSE 8080
 

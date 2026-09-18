@@ -15,8 +15,8 @@ const (
 	defaultLogDir         = "logs"
 	defaultLogLevel       = "info"
 	defaultSessionTTL     = 24
-	defaultRateLimitRPS   = 12
-	defaultRateLimitBurst = 30
+	defaultRateLimitRPS   = 25
+	defaultRateLimitBurst = 80
 )
 
 // AppConfig uygulama genel ayarlari.
@@ -28,7 +28,8 @@ type AppConfig struct {
 	LogDir          string
 	LogLevel        string
 	AdminUser       string
-	AdminPass       string
+	AdminPass       string // düz metin parola (eski kurulumlar); boş olabilir
+	AdminPassHash   string // bcrypt hash (tercih edilen); boş olabilir
 	SecureCookies   bool
 	SessionTTL      time.Duration
 	SessionTTLHours int
@@ -62,8 +63,12 @@ func Load(envFilePath string) (AppConfig, error) {
 
 	adminUser := get("ADMIN_USER", "")
 	adminPass := get("ADMIN_PASS", "")
-	if adminUser == "" || adminPass == "" {
-		return AppConfig{}, fmt.Errorf("ADMIN_USER ve ADMIN_PASS zorunludur. Lutfen .env dosyasini doldurun")
+	adminPassHash := get("ADMIN_PASS_HASH", "")
+	if adminUser == "" || (adminPass == "" && adminPassHash == "") {
+		return AppConfig{}, fmt.Errorf("ADMIN_USER ve ADMIN_PASS (veya ADMIN_PASS_HASH) zorunludur. Lutfen .env dosyasini doldurun")
+	}
+	if adminPassHash != "" && !strings.HasPrefix(adminPassHash, "$2") {
+		return AppConfig{}, fmt.Errorf("ADMIN_PASS_HASH bcrypt biçiminde olmalidir ($2a$/$2b$ ile baslar)")
 	}
 
 	sessionHours, err := parseInt(get("SESSION_TTL_HOURS", strconv.Itoa(defaultSessionTTL)), 1, 720, "SESSION_TTL_HOURS")
@@ -102,6 +107,7 @@ func Load(envFilePath string) (AppConfig, error) {
 		LogLevel:        logLevel,
 		AdminUser:       adminUser,
 		AdminPass:       adminPass,
+		AdminPassHash:   adminPassHash,
 		SecureCookies:   secureCookies,
 		SessionTTL:      time.Duration(sessionHours) * time.Hour,
 		SessionTTLHours: sessionHours,

@@ -1,177 +1,70 @@
 <!DOCTYPE html>
 <html lang="tr">
-
 <head>
     {{template "head" .}}
     <title>KeywordHunter - Ayarlar</title>
+    <style>
+        .strength { height: 4px; border-radius: 4px; background: rgba(255,255,255,.06); overflow: hidden; margin-top: 6px; }
+        .strength > div { height: 100%; width: 0; transition: width .2s, background .2s; }
+        .sec-title { font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; color: var(--text-muted); font-weight: 800; margin: 6px 0 10px; }
+    </style>
 </head>
-
-<body class="min-h-screen text-gray-100">
+<body>
     {{template "navbar" .}}
-
-    <main class="max-w-5xl mx-auto px-4 py-8">
-        <section class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
-            <div class="flex items-start justify-between gap-4 mb-6">
-                <div>
-                    <h1 class="text-2xl font-bold">Ayarlar Merkezi</h1>
-                    <p class="text-gray-400 mt-1 text-sm">.env tabanli runtime ayarlari burada yonetilir.</p>
+    <main class="kh-page" style="max-width:1000px">
+        <div class="kh-header"><div><h1 class="kh-title">Ayarlar</h1><p class="kh-subtitle">Çalışma zamanı yapılandırması · <span class="kh-mono" id="env-path"></span></p></div><div class="kh-actions"><span class="kh-badge neutral" id="ver"></span><span class="kh-badge" id="pw-storage"></span></div></div>
+        <div id="settings-alert" style="display:none;margin-bottom:14px"></div>
+        <form id="settings-form" style="display:grid;gap:18px">
+            <section class="kh-card accent">
+                <div class="sec-title">Kimlik</div>
+                <div class="kh-grid cols-2">
+                    <div class="kh-field"><label class="kh-label">Kullanıcı adı</label><input id="admin-user" class="kh-input" required maxlength="64" autocomplete="username"></div>
+                    <div class="kh-field"><label class="kh-label">Yeni parola <span class="kh-hint">(değiştirmek için doldur)</span></label><input id="admin-pass" class="kh-input" type="password" minlength="8" autocomplete="new-password" placeholder="en az 8 karakter"><div class="strength"><div id="pw-bar"></div></div><span class="kh-hint" id="pw-hint">Parola bcrypt ile hash'lenir; düz metin dosyada tutulmaz. Değişince diğer oturumlar kapanır.</span></div>
                 </div>
-                <span id="env-path" class="text-xs text-blue-300 bg-blue-900/30 px-3 py-1 rounded-full"></span>
-            </div>
-
-            <div id="settings-alert" class="hidden mb-4 rounded-lg px-4 py-3 text-sm"></div>
-
-            <form id="settings-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label class="block">
-                    <span class="text-sm text-gray-300">Admin Kullanici</span>
-                    <input id="admin-user" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Admin Sifre (degistirmek icin doldur)</span>
-                    <input id="admin-pass" type="password" placeholder="Mevcut sifreyi korumak icin bos birak" class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Tor Proxy</span>
-                    <input id="tor-proxy" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Veritabani Yolu</span>
-                    <input id="db-path" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Web Adresi</span>
-                    <input id="web-addr" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Log Dizini</span>
-                    <input id="log-dir" type="text" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Session TTL (saat)</span>
-                    <input id="session-ttl" type="number" min="1" max="720" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Rate Limit RPS</span>
-                    <input id="rate-rps" type="number" min="1" max="200" step="0.1" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="block">
-                    <span class="text-sm text-gray-300">Rate Limit Burst</span>
-                    <input id="rate-burst" type="number" min="1" max="500" required class="mt-1 w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500">
-                </label>
-
-                <label class="flex items-center gap-3 mt-7">
-                    <input id="secure-cookies" type="checkbox" class="w-4 h-4">
-                    <span class="text-sm text-gray-300">Secure Cookie (HTTPS ortaminda ac)</span>
-                </label>
-
-                <div class="md:col-span-2 flex flex-wrap gap-3 mt-2">
-                    <button type="submit" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition">Kaydet</button>
-                    <button type="button" id="reload-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-6 py-2 rounded-lg transition">Yeniden Yukle</button>
+            </section>
+            <section class="kh-card">
+                <div class="sec-title">Web &amp; Oturum <span style="color:var(--accent-success)">· anında uygulanır</span></div>
+                <div class="kh-grid cols-3">
+                    <div class="kh-field"><label class="kh-label">Oturum süresi (saat)</label><input id="session-ttl" class="kh-input" type="number" min="1" max="720" required></div>
+                    <div class="kh-field"><label class="kh-label">Hız limiti (istek/sn)</label><input id="rate-rps" class="kh-input" type="number" min="1" max="200" step="0.5" required></div>
+                    <div class="kh-field"><label class="kh-label">Ani yük toleransı (burst)</label><input id="rate-burst" class="kh-input" type="number" min="1" max="500" required></div>
                 </div>
-            </form>
-
-            <div class="mt-6 text-xs text-gray-400 leading-relaxed">
-                Not: Rate-limit ayarlari anlik uygulanir. Kimlik dogrulama, cookie ve altyapi ayarlari icin uygulamayi yeniden baslatman onerilir.
-            </div>
-        </section>
+                <label class="kh-inline" style="margin-top:12px;cursor:pointer"><input id="secure-cookies" type="checkbox"><span style="font-size:.86rem">Secure cookie (yalnızca HTTPS ters vekil arkasında açın — düz HTTP'de giriş döngüye girer)</span></label>
+            </section>
+            <section class="kh-card">
+                <div class="sec-title">Altyapı <span style="color:#f6ad55">· yeniden başlatma gerektirir</span></div>
+                <div class="kh-grid cols-2">
+                    <div class="kh-field"><label class="kh-label">Tor proxy (host:port)</label><input id="tor-proxy" class="kh-input mono" required placeholder="127.0.0.1:9150"></div>
+                    <div class="kh-field"><label class="kh-label">Web adresi</label><input id="web-addr" class="kh-input mono" required placeholder=":8080"></div>
+                    <div class="kh-field"><label class="kh-label">Veritabanı yolu</label><input id="db-path" class="kh-input mono" required></div>
+                    <div class="kh-field"><label class="kh-label">Log dizini</label><input id="log-dir" class="kh-input mono" required></div>
+                </div>
+            </section>
+            <div class="kh-inline"><button type="submit" id="save-btn" class="kh-btn primary">Kaydet</button><button type="button" id="reload-btn" class="kh-btn subtle">Yeniden Yükle</button><span class="spacer" style="flex:1"></span><a class="kh-btn subtle" href="/healthz" target="_blank">🩺 /healthz</a></div>
+        </form>
     </main>
-
     <script>
-        const form = document.getElementById('settings-form');
-        const alertBox = document.getElementById('settings-alert');
-        const saveBtn = document.getElementById('save-btn');
-
-        function showAlert(message, type) {
-            alertBox.classList.remove('hidden', 'bg-red-500/20', 'border', 'border-red-500', 'text-red-200', 'bg-green-500/20', 'border-green-500', 'text-green-100');
-            if (type === 'error') {
-                alertBox.classList.add('bg-red-500/20', 'border', 'border-red-500', 'text-red-200');
-            } else {
-                alertBox.classList.add('bg-green-500/20', 'border', 'border-green-500', 'text-green-100');
-            }
-            alertBox.textContent = message;
+        const form = document.getElementById('settings-form'), saveBtn = document.getElementById('save-btn');
+        function showAlert(msg, type) { const a = document.getElementById('settings-alert'); a.style.display = ''; a.className = 'kh-alert ' + type; a.textContent = msg; }
+        function fill(s) {
+            document.getElementById('admin-user').value = s.adminUser || ''; document.getElementById('admin-pass').value = '';
+            document.getElementById('tor-proxy').value = s.torProxy || ''; document.getElementById('db-path').value = s.dbPath || ''; document.getElementById('web-addr').value = s.webAddr || ''; document.getElementById('log-dir').value = s.logDir || '';
+            document.getElementById('session-ttl').value = s.sessionTtlHours || 24; document.getElementById('rate-rps').value = s.rateLimitRps || 25; document.getElementById('rate-burst').value = s.rateLimitBurst || 80;
+            document.getElementById('secure-cookies').checked = !!s.secureCookies; document.getElementById('env-path').textContent = s.envFilePath || '.env';
+            document.getElementById('ver').textContent = 'v' + (s.version || '');
+            const ps = document.getElementById('pw-storage'); ps.textContent = s.passwordStorage === 'bcrypt' ? '🔒 parola: bcrypt' : '⚠️ parola: düz metin'; ps.className = 'kh-badge ' + (s.passwordStorage === 'bcrypt' ? 'ok' : 'warn'); ps.title = s.passwordStorage === 'bcrypt' ? 'Parola hash olarak saklanıyor' : 'Parola .env içinde düz metin; buradan yeni parola verirseniz hash\'e dönüşür';
         }
-
-        function fillForm(s) {
-            document.getElementById('admin-user').value = s.adminUser || '';
-            document.getElementById('admin-pass').value = '';
-            document.getElementById('tor-proxy').value = s.torProxy || '';
-            document.getElementById('db-path').value = s.dbPath || '';
-            document.getElementById('web-addr').value = s.webAddr || '';
-            document.getElementById('log-dir').value = s.logDir || '';
-            document.getElementById('session-ttl').value = s.sessionTtlHours || 24;
-            document.getElementById('rate-rps').value = s.rateLimitRps || 12;
-            document.getElementById('rate-burst').value = s.rateLimitBurst || 30;
-            document.getElementById('secure-cookies').checked = !!s.secureCookies;
-            document.getElementById('env-path').textContent = s.envFilePath || '.env';
-        }
-
-        async function loadSettings() {
-            const res = await fetch('/api/settings/env');
-            const data = await res.json();
-            if (!data.success) {
-                throw new Error(data.error || 'Ayarlar yuklenemedi');
-            }
-            fillForm(data.settings);
-        }
-
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Kaydediliyor...';
-
+        async function load() { const d = await KH.api('/api/settings/env'); fill(d.settings); }
+        document.getElementById('admin-pass').addEventListener('input', e => { const v = e.target.value; let s = 0; if (v.length >= 8) s++; if (v.length >= 12) s++; if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++; if (/\d/.test(v)) s++; if (/[^\w]/.test(v)) s++; const bar = document.getElementById('pw-bar'); bar.style.width = (v ? s * 20 : 0) + '%'; bar.style.background = s <= 2 ? '#f56565' : s <= 3 ? '#ecc94b' : '#48bb78'; });
+        form.addEventListener('submit', async e => {
+            e.preventDefault(); KH.busy(saveBtn, true, 'Kaydediliyor…');
             try {
-                const payload = {
-                    adminUser: document.getElementById('admin-user').value,
-                    adminPass: document.getElementById('admin-pass').value,
-                    torProxy: document.getElementById('tor-proxy').value,
-                    dbPath: document.getElementById('db-path').value,
-                    webAddr: document.getElementById('web-addr').value,
-                    logDir: document.getElementById('log-dir').value,
-                    sessionTtlHours: Number(document.getElementById('session-ttl').value),
-                    rateLimitRps: Number(document.getElementById('rate-rps').value),
-                    rateLimitBurst: Number(document.getElementById('rate-burst').value),
-                    secureCookies: document.getElementById('secure-cookies').checked
-                };
-
-                const res = await fetch('/api/settings/env', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                if (!data.success) {
-                    throw new Error(data.error || 'Ayarlar kaydedilemedi');
-                }
-
-                showAlert('Ayarlar kaydedildi. Bazi ayarlarin etkisi icin restart onerilir.', 'success');
-                document.getElementById('admin-pass').value = '';
-            } catch (error) {
-                showAlert(error.message, 'error');
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Kaydet';
-            }
+                const d = await KH.api('/api/settings/env', { method: 'POST', body: { adminUser: document.getElementById('admin-user').value, adminPass: document.getElementById('admin-pass').value, torProxy: document.getElementById('tor-proxy').value, dbPath: document.getElementById('db-path').value, webAddr: document.getElementById('web-addr').value, logDir: document.getElementById('log-dir').value, sessionTtlHours: Number(document.getElementById('session-ttl').value), rateLimitRps: Number(document.getElementById('rate-rps').value), rateLimitBurst: Number(document.getElementById('rate-burst').value), secureCookies: document.getElementById('secure-cookies').checked } });
+                showAlert('Kaydedildi. Anında uygulanan: ' + (d.appliedRuntime || []).join(', ') + '. Yeniden başlatma gerektiren: ' + (d.requiresRestart || []).join(', ') + '.', 'ok'); KH.toast('Ayarlar kaydedildi', 'ok'); load();
+            } catch (err) { showAlert(err.message, 'err'); KH.toast(err.message, 'err'); } finally { KH.busy(saveBtn, false); }
         });
-
-        document.getElementById('reload-btn').addEventListener('click', async () => {
-            try {
-                await loadSettings();
-                showAlert('Ayarlar yeniden yuklendi.', 'success');
-            } catch (error) {
-                showAlert(error.message, 'error');
-            }
-        });
-
-        loadSettings().catch((error) => showAlert(error.message, 'error'));
+        document.getElementById('reload-btn').addEventListener('click', () => load().then(() => KH.toast('Yeniden yüklendi', 'ok')).catch(e => showAlert(e.message, 'err')));
+        load().catch(e => showAlert(e.message, 'err'));
     </script>
 </body>
-
 </html>

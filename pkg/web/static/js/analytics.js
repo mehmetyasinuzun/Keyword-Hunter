@@ -19,19 +19,10 @@ let charts = {};
 // Color Palettes
 const COLORS = {
     sources: {
-        'Ahmia': '#3b82f6',
-        'Torch': '#f97316',
-        'Haystack': '#10b981',
-        'OnionLand': '#06b6d4',
-        'DeepSearch': '#8b5cf6',
-        'FindTor': '#ec4899',
-        'Tor66': '#ef4444',
-        'Excavator': '#84cc16',
-        'Torgle': '#14b8a6',
-        'Onionway': '#6366f1',
-        'OSS': '#f59e0b',
-        'Amnesia': '#a855f7',
-        'Torland': '#22c55e'
+        'Tordex': '#3b82f6', 'Amnesia': '#a855f7', 'Tor66': '#ef4444', 'Onionway': '#6366f1',
+        'OnionLand': '#06b6d4', 'Torland': '#22c55e', 'Excavator': '#84cc16', 'TorNet': '#f59e0b',
+        'Submarine': '#14b8a6', 'Danex': '#ec4899', 'Torch': '#f97316', 'Ahmia': '#60a5fa',
+        'Torgle': '#2dd4bf', 'OSS': '#fbbf24', 'Torgol': '#c084fc', 'DeepSearches': '#8b5cf6', 'FindTor': '#f472b6'
     },
     queries: [
         '#63b3ed', '#805ad5', '#38b2ac', '#ed8936', '#48bb78',

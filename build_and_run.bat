@@ -1,53 +1,35 @@
 @echo off
 setlocal
+chcp 65001 > nul
 echo ===================================================
-echo [1] Temizlik Islemi Baslatiliyor...
-echo ===================================================
-
-:: 1. Calisan uygulamayi durdur
-echo [*] Calisan KeywordHunter islemleri kontrol ediliyor...
-taskkill /F /IM "keywordhunter.exe" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [+] Eski islem durduruldu.
-) else (
-    echo [-] Calisan islem bulunamadi or zaten durdurulmus.
-)
-
-:: 2. Eski derlemeyi sil
-echo [*] Eski derleme dosyasi siliniyor...
-if exist "keywordhunter.exe" (
-    del "keywordhunter.exe"
-    echo [+] Eski keywordhunter.exe silindi.
-)
-
-echo.
-echo ===================================================
-echo [2] Derleme Islemi (Build)
+echo  KeywordHunter - Yerel Derleme ve Baslatma (Windows)
 echo ===================================================
 
-:: 3. Yeni surumu derle
-echo [*] Go build calistiriliyor...
-go build -o keywordhunter.exe ./cmd
+where go >nul 2>&1
 if %errorlevel% neq 0 (
-    echo.
-    echo [HATA] Derleme basarisiz oldu! Lutfen kod hatalarini kontrol edin.
+    echo [HATA] Go bulunamadi. https://go.dev/dl/ adresinden Go 1.26+ kurun.
     pause
-    exit /b
+    exit /b 1
 )
-echo [+] Derleme BASARILI.
 
+if not exist ".env" (
+    echo [*] .env bulunamadi, .env.example kopyalaniyor...
+    copy /Y ".env.example" ".env" >nul
+    echo [!] .env icindeki ADMIN_PASS degerini degistirmeden devam etmeyin.
+)
+
+echo [1/3] Eski surec durduruluyor...
+taskkill /F /IM "keywordhunter.exe" >nul 2>&1
+
+echo [2/3] Derleniyor...
+go build -trimpath -o keywordhunter.exe ./cmd
+if %errorlevel% neq 0 (
+    echo [HATA] Derleme basarisiz.
+    pause
+    exit /b 1
+)
+
+echo [3/3] Baslatiliyor... (Tor Browser veya Tor servisi 9150/9050 portunda calisiyor olmali)
+echo      URL: http://localhost:8080
 echo.
-echo ===================================================
-echo [3] Uygulama Baslatiliyor
-echo ===================================================
-
-:: 4. Uygulamayi baslat
-echo [*] KeywordHunter baslatiliyor...
-echo [*] URL: http://localhost:8080
-echo.
-start keywordhunter.exe
-
-echo [BIDILGI] Uygulama arka planda calisiyor.
-echo Durdurmak icin bu pencereyi kapatabilirsiniz ama uygulama calismaya devam edebilir.
-echo Tam durdurmak icin gorev yoneticisini kullanin veya scripti tekrar calistirin.
-pause
+keywordhunter.exe

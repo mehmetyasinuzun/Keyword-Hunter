@@ -1,668 +1,229 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
-
 <head>
     {{template "head" .}}
     <title>KeywordHunter - Bulgular</title>
     <style>
-        /* Results page specific styles */
-        .loading-spin {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        .tag-pill {
-            display: inline-block;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            color: white;
-            padding: 2px 8px;
-            border-radius: 9999px;
-            font-size: 10px;
-            font-weight: 600;
-            margin: 2px;
-            text-transform: lowercase;
-        }
-
-        .tag-pill.loading {
-            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.5;
-            }
-        }
+        .filters { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
+        @media (max-width: 1100px) { .filters { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 640px) { .filters { grid-template-columns: 1fr; } }
+        .tagcloud { display: flex; flex-wrap: wrap; gap: 6px; }
+        .bulkbar { display: none; position: sticky; top: 66px; z-index: 20; background: rgba(13,15,22,.96); border: 1px solid rgba(99,179,237,.3); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; align-items: center; gap: 10px; flex-wrap: wrap; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+        .bulkbar.show { display: flex; }
+        .crit-select { font-weight: 800; font-family: var(--font-mono); }
+        .crit-select.s5 { color: #fc8181; } .crit-select.s4 { color: #f6ad55; } .crit-select.s3 { color: #f6e05e; } .crit-select.s2 { color: #76e4f7; } .crit-select.s1 { color: #90cdf4; }
+        .art-badge { font-size: .66rem; }
+        #artifact-modal .art-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: .82rem; align-items: center; }
+        #artifact-modal .art-row .v { font-family: var(--font-mono); word-break: break-all; }
     </style>
 </head>
-
-<body class="min-h-screen text-gray-100">
+<body>
     {{template "navbar" .}}
-
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Filter and Search -->
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg mb-8">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-                <div>
-                    <h2 class="text-2xl font-bold"> Veri Analiz Paneli</h2>
-                    <p class="text-gray-400 text-sm mt-1">Toplam {{.totalResults}} kayıt üzerinden analiz yapılıyor.</p>
-                </div>
-                <div class="flex gap-2">
-                    <a href="/results/graph{{if .query}}?q={{.query}}{{end}}"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition text-sm flex items-center gap-2">
-                        🗺️ Haritada Gör
-                    </a>
-                </div>
+    <main class="kh-page wide">
+        <div class="kh-header">
+            <div>
+                <h1 class="kh-title">Bulgular</h1>
+                <p class="kh-subtitle">Toplam <strong>{{.totalResults}}</strong> kayıt · filtreyle eşleşen <strong>{{.total}}</strong> · sayfa {{.page}}/{{.totalPages}}</p>
             </div>
+            <div class="kh-actions">
+                <a href="/results/graph{{if .query}}?q={{.query}}{{end}}" class="kh-btn ghost">🗺️ Haritada Gör</a>
+                <a id="export-csv" href="/api/export/results?format=csv&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri CSV indir">⬇ CSV</a>
+                <a id="export-json" href="/api/export/results?format=json&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri JSON indir">⬇ JSON</a>
+            </div>
+        </div>
 
-            <form method="GET" action="/results" class="flex flex-wrap gap-4">
-                <input type="text" name="q" value="{{.query}}" placeholder="Sorgu, başlık veya URL içinde ara..."
-                    class="flex-1 min-w-[300px] px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
-                <select name="limit"
-                    class="px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
-                    <option value="50" {{if eq .limit 50}}selected{{end}}>50 kayıt</option>
-                    <option value="100" {{if eq .limit 100}}selected{{end}}>100 kayıt</option>
-                    <option value="500" {{if eq .limit 500}}selected{{end}}>500 kayıt</option>
-                </select>
-                <button type="submit"
-                    class="bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white font-bold py-3 px-8 rounded-lg transition">
-                    Filtrele
-                </button>
+        <section class="kh-card" style="margin-bottom:14px">
+            <form method="GET" action="/results" class="filters" id="filter-form">
+                <div class="kh-field"><label class="kh-label">Sorgu</label><input class="kh-input sm" type="text" name="q" value="{{.filter.Query}}" placeholder="arama sorgusu…" list="query-list"></div>
+                <div class="kh-field"><label class="kh-label">Başlık / URL</label><input class="kh-input sm" type="text" name="text" value="{{.filter.Text}}" placeholder="metin ara…"></div>
+                <div class="kh-field"><label class="kh-label">Motor</label><select class="kh-select sm" name="source"><option value="">Tümü</option>{{range .sources}}<option value="{{.}}" {{if eq $.filter.Source .}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+                <div class="kh-field"><label class="kh-label">Kategori</label><select class="kh-select sm" name="category"><option value="">Tümü</option>{{range .categories}}<option value="{{.}}" {{if eq $.filter.Category .}}selected{{end}}>{{.}}</option>{{end}}</select></div>
+                <div class="kh-field"><label class="kh-label">Min. Kritiklik</label><select class="kh-select sm" name="minCriticality">{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $.filter.MinCriticality}}selected{{end}}>Sev {{$v}}+</option>{{end}}</select></div>
+                <div class="kh-field"><label class="kh-label">Sırala</label><select class="kh-select sm" name="sort">
+                    <option value="newest" {{if eq .filter.Sort "newest"}}selected{{end}}>En yeni</option><option value="oldest" {{if eq .filter.Sort "oldest"}}selected{{end}}>En eski</option>
+                    <option value="criticality" {{if eq .filter.Sort "criticality"}}selected{{end}}>Kritiklik</option><option value="hits" {{if eq .filter.Sort "hits"}}selected{{end}}>Sıklık</option></select></div>
+                <div class="kh-inline">
+                    <select class="kh-select sm" name="limit"><option value="25" {{if eq .limit 25}}selected{{end}}>25</option><option value="50" {{if eq .limit 50}}selected{{end}}>50</option><option value="100" {{if eq .limit 100}}selected{{end}}>100</option><option value="250" {{if eq .limit 250}}selected{{end}}>250</option></select>
+                    <button type="submit" class="kh-btn primary sm">Filtrele</button>
+                    <a href="/results" class="kh-btn subtle sm" title="Filtreleri temizle">✕</a>
+                </div>
+                {{if .filter.Tag}}<input type="hidden" name="tag" value="{{.filter.Tag}}">{{end}}
             </form>
-
-            <!-- Tag Cloud Filter -->
-            <div class="mt-4 border-t border-gray-700 pt-4">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Etikete Göre Filtrele</span>
-                    <span id="tag-cloud-loading" class="text-xs text-gray-500">yükleniyor...</span>
-                    <button onclick="clearTagFilter()" id="tag-clear-btn"
-                        class="hidden text-xs text-gray-500 hover:text-white border border-gray-600 rounded px-2 py-0.5 transition">
-                        ✕ Temizle
-                    </button>
-                </div>
-                <div id="tag-cloud" class="flex flex-wrap gap-2"></div>
+            <datalist id="query-list"></datalist>
+            <div class="kh-divider" style="margin:12px 0"></div>
+            <div class="kh-inline" style="justify-content:space-between">
+                <div class="kh-inline"><span class="kh-label">Etiket:</span><span id="tag-cloud-loading" class="kh-hint">yükleniyor…</span><div class="tagcloud" id="tag-cloud"></div></div>
+                {{if .filter.Tag}}<a href="/results" class="kh-badge info">etiket: {{.filter.Tag}} ✕</a>{{end}}
             </div>
+        </section>
 
-            {{if .results}}
-            <div class="mt-4 flex flex-col gap-3">
-                <div class="flex items-center gap-3">
-                    <button id="batchTagBtn" onclick="batchAutoTag()"
-                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm">
-                        🏷️ Tümünü Etiketle
-                    </button>
-                    <button id="cancelBatchBtn" onclick="cancelBatchJob()"
-                        class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition text-sm">
-                        ✖ İptal Et
-                    </button>
-                    <span class="text-xs text-gray-400">Auto-tag: tek kayıt | Batch: listedeki tüm kayıtlar</span>
-                </div>
-
-                <div id="tag-progress" class="hidden bg-gray-900 border border-gray-700 rounded-lg p-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span id="tag-status" class="text-sm text-gray-300">İş hazırlanıyor...</span>
-                        <span class="text-xs text-gray-500" id="tag-progress-text">%0</span>
-                    </div>
-                    <div class="w-full bg-gray-700 rounded-full h-2">
-                        <div id="tag-progress-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300"
-                            style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
-            {{end}}
-
+        <div class="bulkbar" id="bulkbar">
+            <strong id="bulk-count">0 seçili</strong>
+            <button class="kh-btn sm ghost" onclick="batchAutoTag(true)">🏷️ Seçilenleri Etiketle</button>
+            <button class="kh-btn sm subtle" onclick="bulkSetCriticality()">🔥 Kritiklik Ata</button>
+            <button class="kh-btn sm subtle" onclick="bulkCopyUrls()">📋 URL'leri Kopyala</button>
+            <button class="kh-btn sm danger" onclick="bulkDelete()">🗑 Sil</button>
+            <span class="spacer" style="flex:1"></span>
+            <button class="kh-btn sm subtle" onclick="clearSelection()">Seçimi kaldır</button>
         </div>
 
-        <!-- Analysis Table -->
-        <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
-            {{if .results}}
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead
-                        class="bg-gray-900/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b border-gray-700">
-                        <tr>
-                            <th class="px-4 py-4">BAŞLIK & KAYNAK</th>
-                            <th class="px-4 py-4">URL</th>
-                            <th class="px-4 py-4">OTOMATİK ETİKETLER</th>
-                            <th class="px-4 py-4 text-center">KRİTİKLİK</th>
-                            <th class="px-4 py-4">KATEGORİ</th>
-                            <th class="px-4 py-4 text-center" title="Arama kelimesinin sitede kaç kez geçtiği">SIKLIK
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-700/50">
-                        {{range .results}}
-                        <tr class="hover:bg-gray-700/30 transition group" data-id="{{.ID}}">
-                            <td class="px-4 py-4">
-                                <p class="text-white font-bold mb-0.5">{{truncate .Title 50}}</p>
-                                <div class="flex items-center gap-2">
-                                    <span
-                                        class="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-mono">{{.Source}}</span>
-                                    <span class="text-[10px] text-gray-500 italic">Sorgu: {{.Query}}</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-4">
-                                <a href="{{.URL}}" target="_blank"
-                                    class="text-blue-500 hover:underline font-mono text-xs">{{truncate .URL 35}}</a>
-                            </td>
-                            <td class="px-4 py-4" id="tags-{{.ID}}">
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="flex flex-wrap gap-1" id="tag-list-{{.ID}}">
-                                        {{if .AutoTags}}
-                                        {{range $i, $tag := (split .AutoTags ", ")}}
-                                        <span class="tag-pill">{{$tag}}</span>
-                                        {{end}}
-                                        {{else}}
-                                        <span class="text-gray-500 text-xs italic">Henüz etiketlenmedi</span>
-                                        {{end}}
-                                    </div>
-                                    <button onclick="autoTagResult('{{.ID}}', this)"
-                                        class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-2 py-1 text-xs font-bold transition"
-                                        title="Bu kaydı otomatik etiketle">
-                                        <span class="icon">🏷️</span>
-                                    </button>
-                                </div>
-                            </td>
-                            <td class="px-4 py-4 text-center">
-                                <select onchange="updateRow('{{.ID}}', this.value, '{{.Category}}')" class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none
-                                    {{if eq .Criticality 5}}text-red-500 font-bold
-                                    {{else if eq .Criticality 4}}text-orange-500
-                                    {{else if eq .Criticality 3}}text-yellow-500
-                                    {{else}}text-blue-400{{end}}">
-                                    {{$currentCrit := .Criticality}}
-                                    {{range $v := (seq 1 5)}}
-                                    <option value="{{$v}}" {{if eq $v $currentCrit}}selected{{end}}>{{$v}}</option>
-                                    {{end}}
-                                </select>
-                            </td>
-                            <td class="px-4 py-4">
-                                <input type="text" value="{{.Category}}"
-                                    onblur="updateRow('{{.ID}}', '{{.Criticality}}', this.value)"
-                                    class="bg-gray-900/50 border border-gray-700 rounded px-2 py-1 text-xs w-20 outline-none focus:border-blue-500 transition">
-                            </td>
-                            <td class="px-4 py-4 text-center">
-                                <div class="inline-flex items-center gap-2">
-                                    <span id="count-{{.ID}}"
-                                        class="font-mono font-bold text-lg {{if gt .KeywordCount 0}}text-green-500{{else}}text-gray-600{{end}}">
-                                        {{.KeywordCount}}
-                                    </span>
-                                    <button onclick="analyzeResult('{{.ID}}', this)"
-                                        class="bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded px-2 py-1 text-xs font-bold transition"
-                                        title="Keyword frekansını Tor üzerinden yeniden tara">
-                                        🔄
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
+        {{if .results}}
+        <section class="kh-card flush">
+            <div class="kh-toolbar" style="padding:12px 16px;border-bottom:1px solid var(--bg-card-border)">
+                <button id="batchTagBtn" class="kh-btn sm primary" onclick="batchAutoTag(false)">🏷️ Bu Sayfayı Etiketle ({{len .results}})</button>
+                <button id="cancelBatchBtn" class="kh-btn sm danger" style="display:none" onclick="cancelBatchJob()">✖ İptal</button>
+                <span class="kh-hint">Etiketleme her kaydı Tor üzerinden çeker (~5-40 sn/kayıt), içerikten etiket + IOC çıkarır ve kategoriyi günceller.</span>
+                <span class="spacer"></span>
+                <div id="tag-progress" style="display:none;min-width:260px">
+                    <div class="kh-inline" style="justify-content:space-between;font-size:.75rem"><span id="tag-status">Hazırlanıyor…</span><span id="tag-progress-text" class="kh-mono">%0</span></div>
+                    <div class="kh-progress"><div id="tag-progress-bar" style="width:0%"></div></div>
+                </div>
             </div>
-            {{else}}
-            <div class="text-center py-24 text-gray-500">
-                <p class="text-5xl mb-4">📭</p>
-                <p class="text-xl">Analiz edilecek veri bulunamadı.</p>
-                <a href="/search" class="text-blue-500 hover:text-blue-400 mt-4 inline-block font-bold">Yeni Arama
-                    Başlat →</a>
+            <div class="kh-table-wrap"><table class="kh-table" id="results-table" style="min-width:1180px">
+                <thead><tr>
+                    <th style="width:32px"><input type="checkbox" id="select-all" title="Tümünü seç" onchange="toggleAll(this)"></th>
+                    <th>Başlık &amp; Kaynak</th><th>URL</th><th>Etiketler / IOC</th><th class="center">Kritiklik</th><th>Kategori</th><th class="center" title="Arama kelimesinin sayfada geçme sayısı">Sıklık</th><th>Tarih</th><th></th>
+                </tr></thead>
+                <tbody>
+                {{range .results}}
+                <tr data-id="{{.ID}}" data-url="{{.URL}}">
+                    <td><input type="checkbox" class="row-check" value="{{.ID}}" onchange="updateSelection()"></td>
+                    <td><span class="title" title="{{.Title}}">{{truncate .Title 60}}</span><div class="meta"><span class="kh-badge neutral mono">{{.Source}}</span><span>sorgu: <a href="/results?q={{.Query}}" style="color:var(--text-secondary)">{{.Query}}</a></span></div></td>
+                    <td><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" title="{{.URL}}">{{truncate .URL 44}}</a> <span class="kh-copy" title="Kopyala" onclick="KH.copy(this.closest('tr').dataset.url,'URL kopyalandı')">📋</span></td>
+                    <td id="tags-{{.ID}}"><div id="tag-list-{{.ID}}">{{if .AutoTags}}{{range $t := (split .AutoTags ", ")}}<span class="kh-tag">{{$t}}</span>{{end}}{{else}}<span class="kh-hint">etiketlenmedi</span>{{end}}</div><div id="art-{{.ID}}" style="margin-top:4px"></div></td>
+                    <td class="center"><select data-field="criticality" onchange="updateRowFrom(this)" class="kh-select sm crit-select s{{.Criticality}}" style="width:76px">{{$cc := .Criticality}}{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $cc}}selected{{end}}>{{$v}}</option>{{end}}</select></td>
+                    <td><input type="text" data-field="category" value="{{.Category}}" maxlength="64" onchange="updateRowFrom(this)" class="kh-input sm" style="width:130px" list="category-list"></td>
+                    <td class="center"><span id="count-{{.ID}}" class="kh-mono" style="font-weight:700;{{if gt .KeywordCount 0}}color:#68d391{{else}}color:var(--text-muted){{end}}">{{.KeywordCount}}</span></td>
+                    <td class="muted kh-mono" style="font-size:.72rem;white-space:nowrap">{{formatTime .CreatedAt}}</td>
+                    <td><div class="kh-rowactions">
+                        <button class="kh-btn xs ghost" title="Etiketle + IOC çıkar" onclick="autoTagResult('{{.ID}}', this)"><span class="icon">🏷️</span></button>
+                        <button class="kh-btn xs subtle" title="Sıklığı Tor üzerinden yeniden say" onclick="analyzeResult('{{.ID}}', this)">🔄</button>
+                        <button class="kh-btn xs subtle" title="IOC listesi" onclick="showArtifacts('{{.ID}}')">🧬</button>
+                        <button class="kh-btn xs subtle" title="İzleme listesine ekle" onclick="addToWatchlist(this.closest('tr'))">📡</button>
+                    </div></td>
+                </tr>
+                {{end}}
+                </tbody></table></div>
+            <datalist id="category-list">{{range .categories}}<option value="{{.}}">{{end}}</datalist>
+            <div class="kh-pagination">
+                {{if .hasPrev}}<a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page=1">« İlk</a><a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page={{.prevPage}}">‹ Önceki</a>{{end}}
+                <span class="info">{{.page}} / {{.totalPages}} · {{.total}} kayıt</span>
+                {{if .hasNext}}<a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page={{.nextPage}}">Sonraki ›</a><a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page={{.totalPages}}">Son »</a>{{end}}
             </div>
-            {{end}}
-        </div>
-    </div>
+        </section>
+        {{else}}
+        <section class="kh-card"><div class="kh-empty"><div class="icon">📭</div><h3>{{if .total}}Bu sayfada kayıt yok{{else}}Filtreyle eşleşen bulgu yok{{end}}</h3><p>Filtreleri gevşetin ya da yeni bir arama başlatın.</p><div class="kh-inline" style="justify-content:center;margin-top:12px"><a href="/results" class="kh-btn subtle">Filtreleri temizle</a><a href="/search" class="kh-btn primary">Yeni Arama →</a></div></div></section>
+        {{end}}
+    </main>
 
-    <div id="toast"
-        class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl transition-all opacity-0 translate-y-10 z-[100]">
-        Güncellendi
-    </div>
+    <div class="kh-modal-overlay" id="artifact-modal"><div class="kh-modal lg"><h2>🧬 Çıkarılan IOC / Artifact'lar</h2><div id="artifact-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('artifact-modal')">Kapat</button></div></div></div>
 
     <script>
-        // ─── Tag Cloud ────────────────────────────────────────────────────────
-        let activeTag = null;
-        let originalTableHTML = null;
+        const currentQuery = {{.query}};
+        const pageIds = Array.from(document.querySelectorAll('tr[data-id]')).map(r => parseInt(r.dataset.id));
+        let activeBatchJobId = '', statusPollTimer = null;
 
-        function loadTagCloud() {
-            fetch('/api/tags')
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('tag-cloud-loading').textContent = '';
-                    const cloud = document.getElementById('tag-cloud');
-                    const tags = data.tags || [];
-                    if (tags.length === 0) {
-                        cloud.innerHTML = '<span class="text-xs text-gray-500 italic">Henüz etiket yok.</span>';
-                        return;
-                    }
-                    const maxCount = Math.max(...tags.map(t => t.count));
-                    cloud.innerHTML = tags.map(t => {
-                        const size = t.count >= maxCount * 0.6 ? 'text-sm' : t.count >= maxCount * 0.3 ? 'text-xs' : 'text-[10px]';
-                        return `<button onclick="filterByTag('${escapeAttr(t.tag)}')"
-                            data-tag="${escapeAttr(t.tag)}"
-                            class="tag-cloud-btn ${size} bg-gray-700 hover:bg-blue-600 text-gray-300 hover:text-white border border-gray-600 hover:border-blue-500 rounded-full px-3 py-1 transition font-medium">
-                            ${escapeHtml(t.tag)} <span class="opacity-50">${t.count}</span>
-                        </button>`;
-                    }).join('');
-                })
-                .catch(() => {
-                    document.getElementById('tag-cloud-loading').textContent = 'yüklenemedi';
-                });
+        // ── Etiket bulutu + sorgu listesi ──
+        KH.api('/api/tags').then(d => {
+            document.getElementById('tag-cloud-loading').textContent = '';
+            const tags = d.tags || []; const cloud = document.getElementById('tag-cloud');
+            if (!tags.length) { cloud.innerHTML = '<span class="kh-hint">Henüz etiket yok</span>'; return; }
+            const max = Math.max(...tags.map(t => t.count));
+            cloud.innerHTML = tags.slice(0, 40).map(t => `<a class="kh-chip ${t.tag === {{.filter.Tag}} ? 'active' : ''}" href="/results?tag=${encodeURIComponent(t.tag)}" style="font-size:${t.count >= max * .6 ? '.82' : t.count >= max * .3 ? '.76' : '.7'}rem">${KH.esc(t.tag)} <span class="count">${t.count}</span></a>`).join('');
+        }).catch(() => document.getElementById('tag-cloud-loading').textContent = 'yüklenemedi');
+        KH.api('/api/queries').then(d => { document.getElementById('query-list').innerHTML = (d.queries || []).map(q => `<option value="${KH.esc(q.query)}">`).join(''); }).catch(() => { });
+
+        // ── IOC rozetleri (tek toplu istek) ──
+        if (pageIds.length) KH.api('/api/artifacts/counts?ids=' + pageIds.join(',')).then(d => { Object.entries(d.counts || {}).forEach(([id, n]) => { const el = document.getElementById('art-' + id); if (el && n > 0) el.innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer">🧬 ${n} IOC</button>`; }); }).catch(() => { });
+
+        function showArtifacts(id) {
+            const body = document.getElementById('artifact-body'); body.innerHTML = '<div class="kh-skel"></div>'; KH.openModal('artifact-modal');
+            const names = { email: 'E-posta', bitcoin: 'Bitcoin', monero: 'Monero', ip: 'IP', onion: 'Onion', credit_card: 'Kart', phone: 'Telefon', ssh_key: 'SSH Key', api_key: 'API Key', username: 'Kullanıcı', hash: 'Hash' };
+            KH.api('/api/results/' + id + '/artifacts').then(d => {
+                if (!d.count) { body.innerHTML = '<p class="kh-hint">Bu kayıt için IOC yok. Önce <strong>🏷️ Etiketle</strong> çalıştırın (sayfa metni Tor üzerinden çekilir).</p>'; return; }
+                body.innerHTML = '<p class="kh-hint" style="margin-bottom:8px">' + d.count + ' artifact · güven skoruna göre sıralı</p>' + d.artifacts.map(a => `<div class="art-row"><span class="kh-badge neutral">${KH.esc(names[a.type] || a.type)}</span><div><div class="v">${KH.esc(a.value)}</div><div class="kh-hint">${KH.esc(a.context)}</div></div><div class="kh-inline"><span class="kh-badge ${a.confidence >= .8 ? 'ok' : a.confidence >= .6 ? 'info' : 'neutral'}">${Math.round(a.confidence * 100)}%</span><button class="kh-btn xs subtle" onclick="KH.copy(${JSON.stringify(a.value)})">📋</button></div></div>`).join('') + `<div style="margin-top:12px"><button class="kh-btn sm subtle" onclick="KH.copy(${JSON.stringify(d.artifacts.map(a => a.type + ',' + a.value).join('\n'))}, 'Tüm IOC\\'lar kopyalandı')">📋 Tümünü CSV olarak kopyala</button></div>`;
+            }).catch(e => body.innerHTML = '<p class="kh-alert err">' + KH.esc(e.message) + '</p>');
         }
 
-        function filterByTag(tag) {
-            if (activeTag === tag) return;
-            activeTag = tag;
-
-            // Highlight active tag
-            document.querySelectorAll('.tag-cloud-btn').forEach(btn => {
-                btn.classList.toggle('bg-blue-600', btn.dataset.tag === tag);
-                btn.classList.toggle('text-white', btn.dataset.tag === tag);
-                btn.classList.toggle('border-blue-500', btn.dataset.tag === tag);
-                btn.classList.toggle('bg-gray-700', btn.dataset.tag !== tag);
-            });
-            document.getElementById('tag-clear-btn').classList.remove('hidden');
-
-            const tbody = document.querySelector('table tbody');
-            if (tbody && !originalTableHTML) {
-                originalTableHTML = tbody.innerHTML;
-            }
-            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Yükleniyor...</td></tr>';
-
-            fetch(`/api/results-by-tag?tag=${encodeURIComponent(tag)}&limit=100`)
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.results || data.results.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500 italic">Bu etiketle eşleşen sonuç yok.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = data.results.map(r => `
-                        <tr class="hover:bg-gray-700/30 transition group" data-id="${r.ID}">
-                            <td class="px-4 py-4">
-                                <p class="text-white font-bold mb-0.5">${escapeHtml((r.Title || '').substring(0, 50))}</p>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-mono">${escapeHtml(r.Source || '')}</span>
-                                    <span class="text-[10px] text-gray-500 italic">Sorgu: ${escapeHtml(r.Query || '')}</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-4">
-                                <a href="${escapeHtml(r.URL || '')}" target="_blank" class="text-blue-500 hover:underline font-mono text-xs">${escapeHtml((r.URL || '').substring(0, 35))}</a>
-                            </td>
-                            <td class="px-4 py-4">
-                                <div class="flex flex-wrap gap-1">${renderTags(r.AutoTags)}</div>
-                            </td>
-                            <td class="px-4 py-4 text-center">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-black ${critClass(r.Criticality)}">${r.Criticality} / 5</span>
-                            </td>
-                            <td class="px-4 py-4">
-                                <span class="bg-gray-700 px-2 py-1 rounded text-[10px] uppercase font-bold">${escapeHtml(r.Category || '')}</span>
-                            </td>
-                            <td class="px-4 py-4 text-center">
-                                <span class="font-mono font-bold text-lg ${r.KeywordCount > 0 ? 'text-green-500' : 'text-gray-600'}">${r.KeywordCount || 0}</span>
-                            </td>
-                        </tr>`).join('');
-                })
-                .catch(() => {
-                    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-red-400">Filtre uygulanamadı.</td></tr>';
-                });
+        // ── Seçim ──
+        function selected() { return Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value)); }
+        function updateSelection() { const n = selected().length; document.getElementById('bulk-count').textContent = n + ' seçili'; document.getElementById('bulkbar').classList.toggle('show', n > 0); document.querySelectorAll('tr[data-id]').forEach(r => r.classList.toggle('selected', r.querySelector('.row-check').checked)); }
+        function toggleAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); updateSelection(); }
+        function clearSelection() { document.getElementById('select-all').checked = false; toggleAll(document.getElementById('select-all')); }
+        function bulkCopyUrls() { const urls = selected().map(id => document.querySelector(`tr[data-id="${id}"]`).dataset.url); KH.copy(urls.join('\n'), urls.length + ' URL kopyalandı'); }
+        async function bulkDelete() {
+            const ids = selected(); if (!ids.length) return;
+            if (!await KH.confirm({ title: 'Kayıtları sil', message: ids.length + ' bulgu ve bunlara bağlı etiket/IOC kayıtları kalıcı olarak silinecek.', okText: 'Sil', danger: true })) return;
+            try { const d = await KH.api('/api/results/delete', { method: 'POST', body: { ids } }); KH.toast(d.deleted + ' kayıt silindi', 'ok'); ids.forEach(id => document.querySelector(`tr[data-id="${id}"]`)?.remove()); updateSelection(); } catch (e) { KH.toast(e.message, 'err'); }
+        }
+        async function bulkSetCriticality() {
+            const ids = selected(); if (!ids.length) return;
+            const v = prompt('Seçili ' + ids.length + ' kayıt için kritiklik (1-5):', '4'); const crit = parseInt(v); if (!(crit >= 1 && crit <= 5)) return;
+            let ok = 0;
+            for (const id of ids) { const row = document.querySelector(`tr[data-id="${id}"]`); const cat = row.querySelector('input[data-field="category"]').value; try { await KH.api('/api/update-criticality', { method: 'POST', body: { id, type: 'result', criticality: crit, category: cat } }); row.querySelector('select[data-field="criticality"]').value = String(crit); ok++; } catch (_) { } }
+            KH.toast(ok + ' kayıt güncellendi', 'ok');
         }
 
-        function clearTagFilter() {
-            activeTag = null;
-            document.getElementById('tag-clear-btn').classList.add('hidden');
-            document.querySelectorAll('.tag-cloud-btn').forEach(btn => {
-                btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-500');
-                btn.classList.add('bg-gray-700');
-            });
-            const tbody = document.querySelector('table tbody');
-            if (tbody && originalTableHTML) {
-                tbody.innerHTML = originalTableHTML;
-                originalTableHTML = null;
-            }
+        // ── Satır güncelleme (DOM'daki güncel değerlerle) ──
+        function updateRowFrom(el) {
+            const row = el.closest('tr[data-id]'); if (!row) return;
+            const sel = row.querySelector('select[data-field="criticality"]'); const crit = parseInt(sel.value); const cat = row.querySelector('input[data-field="category"]').value.trim();
+            sel.className = 'kh-select sm crit-select s' + crit; sel.style.width = '76px';
+            KH.api('/api/update-criticality', { method: 'POST', body: { id: parseInt(row.dataset.id), type: 'result', criticality: crit, category: cat } }).then(() => KH.toast('Güncellendi', 'ok', 1500)).catch(e => KH.toast(e.message, 'err'));
         }
 
-        function renderTags(autoTags) {
-            if (!autoTags) return '<span class="text-gray-500 text-xs italic">—</span>';
-            return autoTags.split(', ').filter(Boolean).map(t =>
-                `<span class="tag-pill">${escapeHtml(t)}</span>`).join('');
+        async function addToWatchlist(row) {
+            const url = row.dataset.url; const name = row.querySelector('.title').textContent.trim().slice(0, 100) || url;
+            try { const host = new URL(url).hostname; await KH.api('/api/watchlist', { method: 'POST', body: { name, url: 'http://' + host, category: 'Bulgu', notes: 'Bulgulardan eklendi' } }); KH.toast('İzleme listesine eklendi: ' + host.slice(0, 20) + '…', 'ok'); } catch (e) { KH.toast(e.message, 'err'); }
         }
 
-        function critClass(c) {
-            if (c >= 5) return 'bg-red-500/20 text-red-500';
-            if (c >= 4) return 'bg-orange-500/20 text-orange-500';
-            if (c >= 3) return 'bg-yellow-500/20 text-yellow-500';
-            return 'bg-blue-500/20 text-blue-500';
-        }
-
-        function escapeHtml(str) {
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
-
-        function escapeAttr(str) {
-            return String(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
-        }
-
-        document.addEventListener('DOMContentLoaded', loadTagCloud);
-
-        // ─── Results Table ────────────────────────────────────────────────────
-        // Tüm sonuç ID'lerini topla
-        const allResultIds = [];
-        document.querySelectorAll('tr[data-id]').forEach(row => {
-            allResultIds.push(parseInt(row.dataset.id));
-        });
-        let activeBatchJobId = '';
-        let statusPollTimer = null;
-
-        function updateRow(id, crit, cat) {
-            fetch('/api/update-criticality', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: parseInt(id),
-                    type: 'result',
-                    criticality: parseInt(crit),
-                    category: cat
-                })
-            }).then(r => r.json()).then(data => {
-                if (data.success) {
-                    showToast('Güncellendi');
-                }
-            });
-        }
-
-        // Tek sonuç için otomatik etiketleme
+        // ── Tekil etiketleme ──
         function autoTagResult(id, btn) {
-            const icon = btn.querySelector('.icon');
-            const originalIcon = icon ? icon.innerText : '🏷️';
-            if (icon) icon.innerText = '⏳';
-            btn.disabled = true;
-            btn.classList.add('opacity-50');
-
-            // Etiket alanını loading göster
-            const tagsEl = document.getElementById('tag-list-' + id);
-            const originalTags = tagsEl.innerHTML;
-            tagsEl.innerHTML = '<span class="tag-pill loading">Etiketleniyor...</span>';
-
-            fetch('/api/auto-tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: parseInt(id) })
-            }).then(r => r.json()).then(data => {
-                if (icon) icon.innerText = originalIcon;
-                btn.disabled = false;
-                btn.classList.remove('opacity-50');
-
-                if (data.success && data.tags && data.tags.length > 0) {
-                    // Etiketleri göster
-                    let tagsHtml = '<div class="flex flex-wrap gap-1">';
-                    data.tags.forEach(tag => {
-                        tagsHtml += `<span class="tag-pill">${tag}</span>`;
-                    });
-                    tagsHtml += '</div>';
-                    tagsEl.innerHTML = tagsHtml;
-
-                    // Frekansı da güncelle
-                    if (data.keywordHits > 0) {
-                        const countEl = document.getElementById('count-' + id);
-                        countEl.innerText = data.keywordHits;
-                        countEl.classList.remove('text-gray-600');
-                        countEl.classList.add('text-green-500');
-                    }
-
-                    // Sınıflandırma alanlarını güncelle
-                    const row = document.querySelector(`tr[data-id="${id}"]`);
-                    if (row) {
-                        const critSelect = row.querySelector('td:nth-child(4) select');
-                        const catInput = row.querySelector('td:nth-child(5) input');
-                        if (critSelect && typeof data.criticality === 'number') {
-                            critSelect.value = String(data.criticality);
-                        }
-                        if (catInput && data.category) {
-                            catInput.value = data.category;
-                        }
-                    }
-
-                    showToast('Etiketlendi: ' + data.tagsStr);
-                } else {
-                    tagsEl.innerHTML = originalTags;
-                    showToast('Hata: ' + (data.error || 'Etiket bulunamadı'));
-                }
-            }).catch(err => {
-                if (icon) icon.innerText = originalIcon;
-                btn.disabled = false;
-                btn.classList.remove('opacity-50');
-                tagsEl.innerHTML = originalTags;
-                showToast('Hata oluştu');
-            });
+            const tagsEl = document.getElementById('tag-list-' + id); const orig = tagsEl.innerHTML;
+            KH.busy(btn, true, ''); tagsEl.innerHTML = '<span class="kh-tag" style="opacity:.6">Tor üzerinden çekiliyor…</span>';
+            KH.api('/api/auto-tag', { method: 'POST', body: { id: parseInt(id) } }).then(d => {
+                KH.busy(btn, false);
+                tagsEl.innerHTML = KH.tags(d.tagsStr);
+                if (d.artifacts > 0) document.getElementById('art-' + id).innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer">🧬 ${d.artifacts} IOC</button>`;
+                const row = document.querySelector(`tr[data-id="${id}"]`);
+                if (d.keywordHits > 0) { const c = document.getElementById('count-' + id); c.textContent = d.keywordHits; c.style.color = '#68d391'; }
+                const sel = row.querySelector('select[data-field="criticality"]'); if (typeof d.criticality === 'number') { sel.value = String(d.criticality); sel.className = 'kh-select sm crit-select s' + d.criticality; sel.style.width = '76px'; }
+                if (d.category) row.querySelector('input[data-field="category"]').value = d.category;
+                KH.toast('Etiketlendi: ' + d.tagsStr + (d.artifacts ? ' · ' + d.artifacts + ' IOC' : ''), 'ok');
+            }).catch(e => { KH.busy(btn, false); tagsEl.innerHTML = orig; KH.toast(e.message, 'err'); });
         }
 
-        // Toplu etiketleme
-        function batchAutoTag() {
-            if (allResultIds.length === 0) {
-                showToast('Etiketlenecek sonuç yok');
-                return;
-            }
-
-            const btn = document.getElementById('batchTagBtn');
-            const cancelBtn = document.getElementById('cancelBatchBtn');
-            btn.disabled = true;
-            btn.innerHTML = '⏳ Başlatılıyor...';
-            cancelBtn.classList.remove('hidden');
-
-            const progressDiv = document.getElementById('tag-progress');
-            progressDiv.classList.remove('hidden');
-            document.getElementById('tag-status').innerText = 'İş kuyruğa alınıyor...';
-            document.getElementById('tag-progress-bar').style.width = '0%';
-            document.getElementById('tag-progress-text').innerText = '%0';
-
-            // SSE bağlantısı aç
-            startTagEventStream();
-
-            // API'ye istek gönder
-            fetch('/api/batch-auto-tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    resultIds: allResultIds,
-                    query: '{{.query}}'
-                })
-            }).then(r => r.json()).then(data => {
-                if (data.success) {
-                    activeBatchJobId = data.jobId || '';
-                    btn.innerHTML = '🏷️ İşleniyor...';
-                    startBatchStatusPolling(activeBatchJobId, data.total || allResultIds.length);
-                } else {
-                    cleanupBatchUI();
-                    showToast('Hata: ' + data.error);
-                }
-            }).catch(err => {
-                cleanupBatchUI();
-                showToast('Bağlantı hatası');
-            });
-        }
-
-        // SSE ile etiketleme progress takibi
-        function startTagEventStream() {
-            if (window.tagEventSource) {
-                window.tagEventSource.close();
-            }
-
-            let completed = 0;
-            const total = allResultIds.length;
-
-            window.tagEventSource = new EventSource('/events');
-
-            window.tagEventSource.onmessage = function (event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    const statusEl = document.getElementById('tag-status');
-                    const progressBar = document.getElementById('tag-progress-bar');
-                    const progressText = document.getElementById('tag-progress-text');
-
-                    if (data.type === 'auto_tag' || data.type === 'auto_tag_error') {
-                        completed++;
-                        const percent = Math.round((completed / total) * 100);
-                        progressBar.style.width = percent + '%';
-                        progressText.innerText = '%' + percent;
-                        statusEl.innerText = data.message;
-                    }
-
-                    if (data.type === 'success' && data.message.includes('Etiketleme tamamlandı')) {
-                        stopBatchStatusPolling();
-                        // Tamamlandı - sayfayı yenile
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1500);
-                    }
-                } catch (e) {
-                    console.error('SSE parse error', e);
-                }
-            };
-
-            window.tagEventSource.onerror = function () {
-                window.tagEventSource.close();
-            };
-        }
-
-        function startBatchStatusPolling(jobId, total) {
-            if (!jobId) return;
-            stopBatchStatusPolling();
-
-            statusPollTimer = setInterval(() => {
-                fetch('/api/batch-auto-tag/' + encodeURIComponent(jobId))
-                    .then(r => r.json())
-                    .then(data => {
-                        if (!data.success) return;
-
-                        const processed = data.processed || 0;
-                        const max = data.total || total || 1;
-                        const percent = Math.min(100, Math.round((processed / Math.max(max, 1)) * 100));
-
-                        const progressBar = document.getElementById('tag-progress-bar');
-                        const progressText = document.getElementById('tag-progress-text');
-                        const statusEl = document.getElementById('tag-status');
-
-                        progressBar.style.width = percent + '%';
-                        progressText.innerText = '%' + percent;
-                        statusEl.innerText = `Durum: ${data.status} | ${processed}/${max}`;
-
-                        if (data.status === 'completed') {
-                            stopBatchStatusPolling();
-                            setTimeout(() => window.location.reload(), 1000);
-                        }
-                        if (data.status === 'failed' || data.status === 'cancelled') {
-                            stopBatchStatusPolling();
-                            cleanupBatchUI();
-                            showToast(data.error || 'İş tamamlanamadı');
-                        }
-                    })
-                    .catch(() => {
-                        // Polling hatasında sessiz devam et
-                    });
-            }, 2000);
-        }
-
-        function stopBatchStatusPolling() {
-            if (statusPollTimer) {
-                clearInterval(statusPollTimer);
-                statusPollTimer = null;
-            }
-        }
-
-        function cancelBatchJob() {
-            if (!activeBatchJobId) {
-                showToast('Aktif bir iş bulunamadı');
-                return;
-            }
-
-            fetch('/api/batch-auto-tag/' + encodeURIComponent(activeBatchJobId) + '/cancel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            }).then(r => r.json()).then(data => {
-                if (data.success) {
-                    stopBatchStatusPolling();
-                    cleanupBatchUI();
-                    showToast('Toplu etiketleme iptal edildi');
-                } else {
-                    showToast('İptal edilemedi: ' + (data.error || 'Bilinmeyen hata'));
-                }
-            }).catch(() => {
-                showToast('İptal isteği gönderilemedi');
-            });
-        }
-
-        function cleanupBatchUI() {
-            const btn = document.getElementById('batchTagBtn');
-            const cancelBtn = document.getElementById('cancelBatchBtn');
-            const progressDiv = document.getElementById('tag-progress');
-
-            activeBatchJobId = '';
-            stopBatchStatusPolling();
-
-            if (window.tagEventSource) {
-                window.tagEventSource.close();
-            }
-
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '🏷️ Tümünü Etiketle';
-            }
-            if (cancelBtn) {
-                cancelBtn.classList.add('hidden');
-            }
-            if (progressDiv) {
-                progressDiv.classList.add('hidden');
-            }
-        }
-
-        // Keyword frekansını yenile — /api/analyze-result
         function analyzeResult(id, btn) {
-            const original = btn.textContent;
-            btn.textContent = '⏳';
-            btn.disabled = true;
-
-            fetch('/api/analyze-result', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: parseInt(id) })
-            }).then(r => r.json()).then(data => {
-                btn.textContent = original;
-                btn.disabled = false;
-
-                if (data.success) {
-                    const el = document.getElementById('count-' + id);
-                    el.textContent = data.count;
-                    el.classList.remove('text-gray-600');
-                    if (parseInt(data.count) > 0) {
-                        el.classList.add('text-green-500');
-                    }
-                    showToast('Frekans güncellendi: ' + data.count);
-                } else {
-                    showToast('Hata: ' + (data.error || 'Tarama başarısız'));
-                }
-            }).catch(() => {
-                btn.textContent = original;
-                btn.disabled = false;
-                showToast('Bağlantı hatası');
-            });
+            KH.busy(btn, true, '');
+            KH.api('/api/analyze-result', { method: 'POST', body: { id: parseInt(id) } }).then(d => { KH.busy(btn, false); const c = document.getElementById('count-' + id); c.textContent = d.count; c.style.color = d.count > 0 ? '#68d391' : 'var(--text-muted)'; KH.toast('Sıklık: ' + d.count, 'ok'); }).catch(e => { KH.busy(btn, false); KH.toast(e.message, 'err'); });
         }
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.innerText = ' ' + msg;
-            t.classList.remove('opacity-0', 'translate-y-10');
-            setTimeout(() => t.classList.add('opacity-0', 'translate-y-10'), 2000);
+        // ── Toplu etiketleme ──
+        function batchAutoTag(onlySelected) {
+            const ids = onlySelected ? selected() : pageIds; if (!ids.length) { KH.toast('Etiketlenecek kayıt yok', 'warn'); return; }
+            const btn = document.getElementById('batchTagBtn'); KH.busy(btn, true, 'Kuyruğa alınıyor…'); document.getElementById('cancelBatchBtn').style.display = '';
+            const prog = document.getElementById('tag-progress'); prog.style.display = ''; setProgress(0, 'İş kuyruğa alınıyor…');
+            startTagEventStream(ids.length);
+            KH.api('/api/batch-auto-tag', { method: 'POST', body: { resultIds: ids, query: currentQuery || '' } }).then(d => { activeBatchJobId = d.jobId; btn.innerHTML = '🏷️ İşleniyor…'; startBatchStatusPolling(d.jobId, d.total || ids.length); }).catch(e => { cleanupBatchUI(); KH.toast(e.message, 'err'); });
         }
+        function setProgress(pct, text) { document.getElementById('tag-progress-bar').style.width = pct + '%'; document.getElementById('tag-progress-text').textContent = '%' + pct; if (text) document.getElementById('tag-status').textContent = text; }
+        function startTagEventStream(total) {
+            if (window.tagEventSource) window.tagEventSource.close();
+            let done = 0; window.tagEventSource = new EventSource('/events');
+            window.tagEventSource.onmessage = ev => { try { const d = JSON.parse(ev.data); if (d.type === 'auto_tag' || d.type === 'auto_tag_error') { done++; setProgress(Math.min(100, Math.round(done / total * 100)), d.message); } } catch (_) { } };
+            window.tagEventSource.onerror = () => window.tagEventSource.close();
+        }
+        function startBatchStatusPolling(jobId, total) {
+            stopBatchStatusPolling();
+            statusPollTimer = setInterval(() => KH.api('/api/batch-auto-tag/' + encodeURIComponent(jobId)).then(d => {
+                const pct = Math.min(100, Math.round((d.processed || 0) / Math.max(d.total || total, 1) * 100)); setProgress(pct, `Durum: ${d.status} · ${d.processed || 0}/${d.total || total} · ✓${d.successes || 0} ✗${d.failures || 0}`);
+                if (d.status === 'completed') { stopBatchStatusPolling(); KH.toast('Etiketleme tamamlandı, sayfa yenileniyor', 'ok'); setTimeout(() => location.reload(), 1200); }
+                else if (d.status === 'failed' || d.status === 'cancelled') { stopBatchStatusPolling(); cleanupBatchUI(); KH.toast(d.error || ('İş ' + d.status), d.status === 'failed' ? 'err' : 'warn'); }
+            }).catch(() => { }), 2000);
+        }
+        function stopBatchStatusPolling() { if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; } }
+        function cancelBatchJob() { if (!activeBatchJobId) return; KH.api('/api/batch-auto-tag/' + encodeURIComponent(activeBatchJobId) + '/cancel', { method: 'POST', body: {} }).then(() => { stopBatchStatusPolling(); cleanupBatchUI(); KH.toast('İptal edildi', 'warn'); }).catch(e => KH.toast(e.message, 'err')); }
+        function cleanupBatchUI() { activeBatchJobId = ''; stopBatchStatusPolling(); if (window.tagEventSource) window.tagEventSource.close(); KH.busy(document.getElementById('batchTagBtn'), false); document.getElementById('cancelBatchBtn').style.display = 'none'; document.getElementById('tag-progress').style.display = 'none'; }
     </script>
 </body>
-
 </html>

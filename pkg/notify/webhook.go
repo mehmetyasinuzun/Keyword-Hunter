@@ -6,9 +6,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
 	"time"
+
+	"keywordhunter-mvp/pkg/shared"
 )
+
+// webhookClient yönlendirme takip etmeyen, dahili hedefleri reddeden istemci
+// (SSRF koruması). Slack/Discord/Teams gibi genel servisler için yeterlidir.
+var webhookClient = shared.NewSafeClearnetClient(15 * time.Second)
 
 // AlertPayload bildirim verisi
 type AlertPayload struct {
@@ -42,18 +48,32 @@ func SendWebhook(webhookURL string, payload AlertPayload) error {
 		return fmt.Errorf("webhook marshal hatası: %w", err)
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(data))
+	if !shared.IsPublicWebURL(webhookURL, false) {
+		return fmt.Errorf("webhook adresi geçersiz veya dahili bir hedefe işaret ediyor")
+	}
+
+	resp, err := webhookClient.Post(webhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("webhook isteği başarısız: %w", err)
 	}
 	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook HTTP %d döndürdü", resp.StatusCode)
 	}
 
 	return nil
+}
+
+// SendTest webhook adresine kısa bir doğrulama mesajı gönderir (ayarlar ekranı için).
+func SendTest(webhookURL string) error {
+	return SendWebhook(webhookURL, AlertPayload{
+		Query:      "test",
+		NewCount:   0,
+		TotalCount: 0,
+		RunAt:      time.Now(),
+	})
 }
 
 // buildMessage Slack/Discord embed formatında mesaj oluşturur
@@ -159,8 +179,35 @@ func embedColor(p AlertPayload) int {
 }
 
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
-	return s[:max-3] + "..."
+	return string(r[:max-3]) + "..."
+}
+
+// FilterByThreshold eşik ve altındaki bulguları eler.
+func FilterByThreshold(findings []Finding, minCriticality int) []Finding {
+	out := make([]Finding, 0, len(findings))
+	for _, f := range findings {
+		if f.Criticality >= minCriticality {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// TopFindings kritikliğe göre azalan sıralı ilk n bulguyu döndürür (girdi değiştirilmez).
+func TopFindings(findings []Finding, n int) []Finding {
+	cp := make([]Finding, len(findings))
+	copy(cp, findings)
+	for i := 1; i < len(cp); i++ {
+		for j := i; j > 0 && cp[j].Criticality > cp[j-1].Criticality; j-- {
+			cp[j], cp[j-1] = cp[j-1], cp[j]
+		}
+	}
+	if len(cp) > n {
+		return cp[:n]
+	}
+	return cp
 }

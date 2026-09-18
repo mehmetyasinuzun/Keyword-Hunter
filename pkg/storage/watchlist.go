@@ -311,10 +311,34 @@ func (db *DB) GetWatchlistItem(id int64) (*WatchlistItem, error) {
 // + url UNIQUE sayesinde idempotenttir: her açılışta çalışır, mevcut kayıtları atlar,
 // yalnızca eksik hedefleri tamamlar.
 func (db *DB) SeedDefaultWatchlist() error {
-	defaults := loadWatchlistSeed()
-	if len(defaults) == 0 {
+	// WATCHLIST_SEED: "none" (varsayılan: hiçbir hedefe otomatik bağlanma),
+	// "turkey" (gömülü Türk onion listesi) veya bir JSON dosya yolu.
+	// Eski sürüm gömülü listeyi sormadan yüklüyor ve her 15 dakikada bu
+	// sitelere bağlanıyordu; artık analist /watchlist ekranından açıkça ister.
+	mode := strings.TrimSpace(strings.ToLower(os.Getenv("WATCHLIST_SEED")))
+	var defaults []watchlistSeed
+	switch mode {
+	case "", "none", "off", "0":
+		return nil
+	case "turkey", "tr", "builtin":
 		defaults = defaultWatchlistSeed()
+	default:
+		defaults = loadWatchlistSeedFile(os.Getenv("WATCHLIST_SEED"))
 	}
+	return db.seedWatchlist(defaults)
+}
+
+// SeedTurkishWatchlist gömülü Türk onion listesini ekler (UI'dan açık istek).
+func (db *DB) SeedTurkishWatchlist() (int, error) {
+	before, _ := db.GetWatchlistItems(false)
+	if err := db.seedWatchlist(defaultWatchlistSeed()); err != nil {
+		return 0, err
+	}
+	after, _ := db.GetWatchlistItems(false)
+	return len(after) - len(before), nil
+}
+
+func (db *DB) seedWatchlist(defaults []watchlistSeed) error {
 
 	tx, err := db.conn.Begin()
 	if err != nil {
@@ -348,12 +372,10 @@ type watchlistSeed struct {
 	Notes    string `json:"notes"`
 }
 
-// loadWatchlistSeed isteğe bağlı yerel seed dosyasını yükler (WATCHLIST_SEED_FILE
-// veya ./data/watchlist-seed.json). Dosya yoksa nil döner; gömülü varsayılan kullanılır.
-func loadWatchlistSeed() []watchlistSeed {
-	path := os.Getenv("WATCHLIST_SEED_FILE")
+// loadWatchlistSeedFile JSON seed dosyasını yükler; dosya yoksa nil döner.
+func loadWatchlistSeedFile(path string) []watchlistSeed {
 	if path == "" {
-		path = "data/watchlist-seed.json"
+		return nil
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {

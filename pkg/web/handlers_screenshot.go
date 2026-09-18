@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
 
@@ -37,7 +37,7 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 	}
 	req.TargetURL = strings.TrimSpace(req.TargetURL)
 	if !isCaptureURL(req.TargetURL) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Hedef yalnızca http(s) adresi olabilir"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hedef yalnızca genel bir http(s) veya .onion adresi olabilir"})
 		return
 	}
 	if req.Source == "" {
@@ -117,6 +117,10 @@ func (s *Server) handleServeScreenshot(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Görüntü bulunamadı"})
 		return
 	}
+	if s.capturer == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Görüntü bulunamadı"})
+		return
+	}
 	// Yalnız dizin içindeki dosya adına izin ver (traversal engeli)
 	safe := filepath.Base(shot.FilePath)
 	full := filepath.Join(s.capturer.OutDir(), safe)
@@ -124,21 +128,13 @@ func (s *Server) handleServeScreenshot(c *gin.Context) {
 	c.File(full)
 }
 
-// isCaptureURL hedef adresin geçerli bir http(s) URL'si olduğunu doğrular
+// isCaptureURL hedef adresin geçerli, genel (dahili olmayan) bir http(s) veya
+// .onion URL'si olduğunu doğrular. Chromium loopback için proxy'yi atladığından
+// 127.0.0.1/localhost hedefleri SSRF vektörüydü.
 func isCaptureURL(raw string) bool {
-	if len(raw) == 0 || len(raw) > 2048 {
-		return false
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return false
-	}
-	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+	return shared.IsPublicWebURL(raw, true)
 }
 
 func truncateErr(s string) string {
-	if len(s) > 200 {
-		return s[:200]
-	}
-	return s
+	return shared.TruncateRunes(s, 200)
 }

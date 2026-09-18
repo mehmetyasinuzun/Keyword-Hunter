@@ -1,6 +1,7 @@
 package web
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -26,10 +27,10 @@ type IPRateLimiter struct {
 
 func NewIPRateLimiter(rps float64, burst int) *IPRateLimiter {
 	if rps <= 0 {
-		rps = 12
+		rps = 25
 	}
 	if burst <= 0 {
-		burst = 30
+		burst = 80
 	}
 
 	return &IPRateLimiter{
@@ -41,9 +42,17 @@ func NewIPRateLimiter(rps float64, burst int) *IPRateLimiter {
 
 func (rl *IPRateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Statik varlıklar ve sağlık ucu limitten muaf: bir sayfa yüklemesi
+		// onlarca font/CSS/JS isteği üretir ve gerçek API bütçesini tüketmemeli.
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/static/") || path == "/healthz" {
+			c.Next()
+			return
+		}
 		ip := c.ClientIP()
 		limiter := rl.getLimiter(ip)
 		if !limiter.Allow() {
+			c.Header("Retry-After", "1")
 			c.AbortWithStatusJSON(429, gin.H{
 				"error": "Cok fazla istek gonderildi. Lutfen kisa sure sonra tekrar deneyin",
 			})

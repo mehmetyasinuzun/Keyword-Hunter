@@ -2,6 +2,7 @@ package web
 
 import (
 	"io"
+	"net/http"
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
@@ -16,7 +17,14 @@ func (s *Server) handleEvents(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Transfer-Encoding", "chunked")
+	c.Header("X-Accel-Buffering", "no")
+
+	// SSE uzun ömürlüdür: sunucu genel WriteTimeout'u bu bağlantı için kaldır.
+	if rc := http.NewResponseController(c.Writer); rc != nil {
+		if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+			logger.Debug("SSE write deadline kaldırılamadı: %v", err)
+		}
+	}
 
 	// Yeni bir client kanalı oluştur (tamponlu - yavaş istemcide mesaj düşmesini azaltır)
 	clientChan := make(chan string, 64)

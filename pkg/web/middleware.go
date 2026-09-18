@@ -12,11 +12,22 @@ import (
 	"keywordhunter-mvp/pkg/logger"
 )
 
+const (
+	// sessionAbsoluteMax kayan (sliding) sürenin ötesinde bir oturumun toplam
+	// yaşayabileceği üst sınır: sürekli aktif olsa bile yeniden giriş istenir.
+	sessionAbsoluteMax = 30 * 24 * time.Hour
+	// sessionTouchInterval her istekte DB'ye yazmamak için dokunma aralığı.
+	sessionTouchInterval = time.Minute
+)
+
 // authMiddleware oturum kontrolü
 func (s *Server) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Kimlik doğrulamalı sayfalar/yanıtlar tarayıcı ve ara önbelleklerde saklanmasın
+		c.Header("Cache-Control", "no-store")
+
 		sessionID, err := c.Cookie("session")
-		if err != nil {
+		if err != nil || sessionID == "" {
 			clearAuthCookies(c, s.cookieSecure)
 			unauthorized(c)
 			c.Abort()
@@ -35,7 +46,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		}
 
 		now := time.Now()
-		if now.After(session.ExpiresAt) {
+		if now.After(session.ExpiresAt) || (!session.CreatedAt.IsZero() && now.Sub(session.CreatedAt) > sessionAbsoluteMax) {
 			_ = s.db.DeleteSession(sessionID)
 			clearAuthCookies(c, s.cookieSecure)
 			unauthorized(c)
@@ -43,15 +54,17 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		newExpiry := now.Add(s.sessionTTL)
-		if err := s.db.TouchSession(sessionID, newExpiry); err != nil {
-			logger.Warn("Session touch hatasi: %v", err)
+		// Kayan süre: yalnızca son dokunuştan bu yana yeterli zaman geçtiyse yaz
+		if now.Sub(session.LastSeenAt) >= sessionTouchInterval {
+			newExpiry := now.Add(s.sessionTTL)
+			if err := s.db.TouchSession(sessionID, newExpiry); err != nil {
+				logger.Warn("Session touch hatasi: %v", err)
+			}
+			maxAge := int(s.sessionTTL.Seconds())
+			c.SetSameSite(http.SameSiteLaxMode)
+			c.SetCookie("session", session.ID, maxAge, "/", "", s.cookieSecure, true)
+			c.SetCookie("csrf_token", session.CSRFToken, maxAge, "/", "", s.cookieSecure, false)
 		}
-
-		maxAge := int(s.sessionTTL.Seconds())
-		c.SetSameSite(http.SameSiteLaxMode)
-		c.SetCookie("session", session.ID, maxAge, "/", "", s.cookieSecure, true)
-		c.SetCookie("csrf_token", session.CSRFToken, maxAge, "/", "", s.cookieSecure, false)
 
 		c.Set("sessionID", session.ID)
 		c.Set("csrfToken", session.CSRFToken)
@@ -68,26 +81,33 @@ func (s *Server) csrfMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-
-		expected, ok := c.Get("csrfToken")
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CSRF token bulunamadi"})
-			return
-		}
-
-		provided := strings.TrimSpace(c.GetHeader("X-CSRF-Token"))
-		if provided == "" {
-			provided = strings.TrimSpace(c.PostForm("_csrf"))
-		}
-
-		expectedToken := expected.(string)
-		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(expectedToken)) != 1 {
+		if !s.csrfValid(c) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CSRF dogrulamasi basarisiz"})
 			return
 		}
-
 		c.Next()
 	}
+}
+
+// csrfValid X-CSRF-Token başlığını veya _csrf form alanını oturumun token'ıyla karşılaştırır.
+func (s *Server) csrfValid(c *gin.Context) bool {
+	expected, ok := c.Get("csrfToken")
+	if !ok {
+		return false
+	}
+	provided := strings.TrimSpace(c.GetHeader("X-CSRF-Token"))
+	if provided == "" {
+		provided = strings.TrimSpace(c.PostForm("_csrf"))
+	}
+	expectedToken, _ := expected.(string)
+	return provided != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(expectedToken)) == 1
+}
+
+// isCrossSiteNavigation Fetch Metadata başlıklarıyla siteler-arası tetiklenen
+// istekleri tanır (GET /logout gibi durum değiştiren basit uç noktalar için).
+func isCrossSiteNavigation(c *gin.Context) bool {
+	site := strings.ToLower(strings.TrimSpace(c.GetHeader("Sec-Fetch-Site")))
+	return site == "cross-site"
 }
 
 func isSafeMethod(method string) bool {

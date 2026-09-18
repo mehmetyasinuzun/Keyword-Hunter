@@ -1,20 +1,29 @@
 package web
 
 import (
+	"context"
 	"database/sql"
+	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/notify"
+	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tagging"
 )
+
+// autoTagMaxWait tekil etiketleme için üst süre (Tor yavaş; ama sonsuz değil).
+const autoTagMaxWait = 100 * time.Second
 
 // respondInternalError istemciye generic mesaj döndürür, gerçek hatayı loglar (bilgi sızıntısı önlenir)
 func respondInternalError(c *gin.Context, op string, err error) {
@@ -104,10 +113,17 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 		return
 	}
 
+	if req.Category == "" {
+		req.Category = "Genel"
+	}
 	query := fmt.Sprintf("UPDATE %s SET criticality = ?, category = ? WHERE id = ?", table)
-	_, err := s.db.GetDBConn().Exec(query, req.Criticality, req.Category, req.ID)
+	res, err := s.db.GetDBConn().Exec(query, req.Criticality, req.Category, req.ID)
 	if err != nil {
 		respondInternalError(c, "UpdateCriticality", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Kayıt bulunamadı"})
 		return
 	}
 
@@ -123,7 +139,11 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 		return
 	}
 
-	result, err := s.tagEngine.TagResultByID(c.Request.Context(), req.ID)
+	// Ölü bir .onion 3 deneme × 60 sn ile handler'ı dakikalarca tutuyordu; üst sınır koy.
+	ctx, cancel := context.WithTimeout(c.Request.Context(), autoTagMaxWait)
+	defer cancel()
+
+	result, err := s.tagEngine.TagResultByID(ctx, req.ID)
 	if err != nil {
 		logger.Warn("AUTO TAG FAILED: ID=%d, Error=%v", req.ID, err)
 		switch {
@@ -131,6 +151,10 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Sonuç bulunamadı"})
 		case errors.Is(err, tagging.ErrNoTaggableSignal):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"success": false, "error": "Etiket çıkarılamadı"})
+		case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
+			c.JSON(http.StatusGatewayTimeout, gin.H{"success": false, "error": "Site yanıt vermedi (zaman aşımı); daha sonra tekrar deneyin"})
+		case errors.Is(err, tagging.ErrFetchFailed):
+			c.JSON(http.StatusBadGateway, gin.H{"success": false, "error": truncateErr(err.Error())})
 		default:
 			logger.Error("AutoTag hatası: ID=%d, err=%v", req.ID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Etiketleme başarısız oldu"})
@@ -148,6 +172,7 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 		"category":    result.Category,
 		"criticality": result.Criticality,
 		"confidence":  result.Confidence,
+		"artifacts":   result.Artifacts,
 	})
 }
 
@@ -169,6 +194,8 @@ func (s *Server) handleBatchAutoTag(c *gin.Context) {
 		logger.Warn("BATCH AUTO TAG SUBMIT FAILED: %v", err)
 		if errors.Is(err, tagging.ErrNoValidResultIDs) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli result ID bulunamadı"})
+		} else if errors.Is(err, tagging.ErrQueueFull) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": err.Error()})
 		} else {
 			logger.Error("BatchAutoTag submit hatası: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Toplu etiketleme başlatılamadı"})
@@ -235,12 +262,25 @@ func (s *Server) handleBatchAutoTagCancel(c *gin.Context) {
 		return
 	}
 
-	_ = s.db.MarkTaggingJobFinished(jobID, tagging.StatusCancelled, "Kullanıcı tarafından iptal edildi")
+	status := tagging.StatusCancelled
+	if job, err := s.db.GetTaggingJob(jobID); err == nil && job != nil {
+		switch job.Status {
+		case tagging.StatusPending:
+			// Kuyrukta bekleyen iş hemen iptal edilir (worker hiç almadan).
+			_ = s.db.MarkTaggingJobFinished(jobID, tagging.StatusCancelled, "Kullanıcı tarafından iptal edildi")
+		case tagging.StatusRunning:
+			// Worker mevcut kaydı bitirince "cancelled" yazar.
+			status = "cancelling"
+		default:
+			// Tamamlanmış/başarısız iş iptalle geçersiz kılınmaz.
+			status = job.Status
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"jobId":   jobID,
-		"status":  tagging.StatusCancelled,
+		"status":  status,
 	})
 }
 
@@ -267,8 +307,10 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 	}
 
 	logger.Info("ANALYZE START: ID=%d, URL=%s, Query=%s", result.ID, result.URL, result.Query)
-	// Kelime sayısını bul
-	count, err := s.scraper.CountKeywords(c.Request.Context(), result.URL, result.Query)
+	// Kelime sayısını bul (süre sınırlı)
+	actx, acancel := context.WithTimeout(c.Request.Context(), autoTagMaxWait)
+	defer acancel()
+	count, err := s.scraper.CountKeywords(actx, result.URL, result.Query)
 	if err != nil {
 		logger.Warn("ANALYZE FAILED: ID=%d, Error=%v", req.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Tarama hatası: %v", err)})
@@ -555,17 +597,27 @@ func (s *Server) handleEnvSettingsGet(c *gin.Context) {
 		return v
 	}
 
+	passwordStorage := "bcrypt"
+	if strings.TrimSpace(values["ADMIN_PASS_HASH"]) == "" && strings.TrimSpace(values["ADMIN_PASS"]) != "" {
+		passwordStorage = "plaintext"
+	}
+	adminUser := ""
+	if s.creds != nil {
+		adminUser = s.creds.Username()
+	}
 	payload := gin.H{
-		"adminUser":       firstNonEmpty(values["ADMIN_USER"], s.username),
+		"adminUser":       firstNonEmpty(values["ADMIN_USER"], adminUser),
 		"adminPassMasked": "********",
+		"passwordStorage": passwordStorage,
+		"version":         Version,
 		"torProxy":        firstNonEmpty(values["TOR_PROXY"], "127.0.0.1:9150"),
 		"dbPath":          firstNonEmpty(values["DB_PATH"], "keywordhunter.db"),
 		"webAddr":         firstNonEmpty(values["WEB_ADDR"], ":8080"),
 		"logDir":          firstNonEmpty(values["LOG_DIR"], "logs"),
 		"secureCookies":   strings.EqualFold(values["WEB_SECURE_COOKIES"], "true") || values["WEB_SECURE_COOKIES"] == "1",
 		"sessionTtlHours": toInt(values["SESSION_TTL_HOURS"], int(s.sessionTTL.Hours())),
-		"rateLimitRps":    toFloat(values["RATE_LIMIT_RPS"], 12),
-		"rateLimitBurst":  toInt(values["RATE_LIMIT_BURST"], 30),
+		"rateLimitRps":    toFloat(values["RATE_LIMIT_RPS"], 25),
+		"rateLimitBurst":  toInt(values["RATE_LIMIT_BURST"], 80),
 		"envFilePath":     s.envStore.Path(),
 	}
 
@@ -619,9 +671,17 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 		return
 	}
 
-	newPass := strings.TrimSpace(req.AdminPass)
-	if newPass != "" && len(newPass) < 4 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin parolasi en az 4 karakter olmalidir"})
+	newPass := req.AdminPass
+	if newPass != "" && (len([]rune(newPass)) < 8 || len(newPass) > 256) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin parolasi 8-256 karakter olmalidir"})
+		return
+	}
+	if strings.ContainsAny(req.AdminUser, " \t\r\n") || len(req.AdminUser) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kullanici adi bosluk iceremez ve 64 karakteri asamaz"})
+		return
+	}
+	if _, _, err := netSplitHostPort(req.TorProxy); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "TOR_PROXY host:port biciminde olmalidir (orn. 127.0.0.1:9150)"})
 		return
 	}
 
@@ -637,8 +697,20 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 		"RATE_LIMIT_BURST":   strconv.Itoa(req.RateLimitBurst),
 	}
 
-	if newPass != "" {
-		updates["ADMIN_PASS"] = newPass
+	// Kimlik bilgileri anında uygulanır ve parola yalnızca bcrypt hash olarak saklanır
+	// (düz metin ADMIN_PASS dosyadan kaldırılır).
+	applied := []string{"RATE_LIMIT_RPS", "RATE_LIMIT_BURST", "SESSION_TTL_HOURS", "ADMIN_USER"}
+	if s.creds != nil {
+		hash, err := s.creds.Update(req.AdminUser, newPass)
+		if err != nil {
+			respondInternalError(c, "CredentialUpdate", err)
+			return
+		}
+		if newPass != "" {
+			updates["ADMIN_PASS_HASH"] = hash
+			updates["ADMIN_PASS"] = "" // sil
+			applied = append(applied, "ADMIN_PASS")
+		}
 	}
 
 	if err := s.envStore.Update(updates); err != nil {
@@ -649,13 +721,28 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 	if s.rateLimiter != nil {
 		s.rateLimiter.UpdatePolicy(req.RateLimitRPS, req.RateLimitBurst)
 	}
+	s.sessionTTL = time.Duration(req.SessionTTL) * time.Hour
+
+	// Parola değiştiyse diğer tüm oturumları düşür
+	if newPass != "" {
+		if sid, ok := c.Get("sessionID"); ok {
+			if n, err := s.db.DeleteOtherSessions(sid.(string)); err == nil && n > 0 {
+				logger.Info("Parola değişti: %d diğer oturum sonlandırıldı", n)
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":         true,
 		"message":         "Ayarlar kaydedildi",
-		"appliedRuntime":  []string{"RATE_LIMIT_RPS", "RATE_LIMIT_BURST"},
-		"requiresRestart": true,
+		"appliedRuntime":  applied,
+		"requiresRestart": []string{"TOR_PROXY", "DB_PATH", "WEB_ADDR", "LOG_DIR", "WEB_SECURE_COOKIES"},
 	})
+}
+
+// netSplitHostPort net.SplitHostPort sarmalayıcısı (test edilebilirlik için).
+func netSplitHostPort(v string) (string, string, error) {
+	return shared.SplitHostPort(v)
 }
 
 func firstNonEmpty(primary string, fallback string) string {
@@ -943,10 +1030,173 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 		MinCriticality: req.MinCriticality,
 		Enabled:        req.Enabled,
 	}
+	if cfg.WebhookURL != "" && !shared.IsPublicWebURL(cfg.WebhookURL, false) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Webhook yalnızca http(s) ve genel (dahili olmayan) bir adres olabilir"})
+		return
+	}
+	if cfg.Enabled && cfg.WebhookURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Bildirimleri etkinleştirmek için webhook adresi gerekli"})
+		return
+	}
 	if err := s.db.SaveAlertConfig(cfg); err != nil {
 		logger.Error("SaveAlertConfig hatası: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Ayar kaydedilemedi"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// handleAlertConfigTest kayıtlı veya gönderilen webhook adresine test mesajı yollar.
+func (s *Server) handleAlertConfigTest(c *gin.Context) {
+	var req struct {
+		WebhookURL string `json:"webhookUrl"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	target := strings.TrimSpace(req.WebhookURL)
+	if target == "" {
+		if cfg, err := s.db.GetAlertConfig(); err == nil {
+			target = cfg.WebhookURL
+		}
+	}
+	if !shared.IsPublicWebURL(target, false) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli bir webhook adresi gerekli"})
+		return
+	}
+	if err := notify.SendTest(target); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "error": "Webhook yanıt vermedi: " + truncateErr(err.Error())})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Test bildirimi gönderildi"})
+}
+
+// handleExportResults bulguları CSV veya JSON olarak dışa aktarır
+// (SIEM/SOAR/rapor akışları için). ?format=csv|json&q=&limit=&minCriticality=
+func (s *Server) handleExportResults(c *gin.Context) {
+	format := strings.ToLower(strings.TrimSpace(c.DefaultQuery("format", "csv")))
+	f := parseResultFilter(c)
+	f.Offset = 0
+	f.Limit, _ = strconv.Atoi(c.DefaultQuery("limit", "5000"))
+	if f.Limit <= 0 || f.Limit > 50000 {
+		f.Limit = 5000
+	}
+	query := f.Query
+
+	filtered, _, err := s.db.GetResultsFiltered(storage.ResultFilter{
+		Query: f.Query, Text: f.Text, Source: f.Source, Category: f.Category,
+		MinCriticality: f.MinCriticality, Tag: f.Tag, Sort: f.Sort, Limit: 500, Offset: 0,
+	})
+	if err != nil {
+		respondInternalError(c, "ExportResults", err)
+		return
+	}
+	// 500'lük sayfalarla istenen limite kadar topla (tek büyük LIMIT yerine)
+	for len(filtered) < f.Limit {
+		more, _, err := s.db.GetResultsFiltered(storage.ResultFilter{
+			Query: f.Query, Text: f.Text, Source: f.Source, Category: f.Category,
+			MinCriticality: f.MinCriticality, Tag: f.Tag, Sort: f.Sort, Limit: 500, Offset: len(filtered),
+		})
+		if err != nil || len(more) == 0 {
+			break
+		}
+		filtered = append(filtered, more...)
+	}
+	if len(filtered) > f.Limit {
+		filtered = filtered[:f.Limit]
+	}
+
+	stamp := time.Now().Format("20060102-1504")
+	switch format {
+	case "json":
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"keywordhunter-results-%s.json\"", stamp))
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		type row struct {
+			ID           int64     `json:"id"`
+			Title        string    `json:"title"`
+			URL          string    `json:"url"`
+			Source       string    `json:"source"`
+			Query        string    `json:"query"`
+			Criticality  int       `json:"criticality"`
+			Category     string    `json:"category"`
+			KeywordCount int       `json:"keywordCount"`
+			Tags         []string  `json:"tags"`
+			CreatedAt    time.Time `json:"createdAt"`
+		}
+		out := make([]row, 0, len(filtered))
+		for _, r := range filtered {
+			out = append(out, row{r.ID, r.Title, r.URL, r.Source, r.Query, r.Criticality, r.Category, r.KeywordCount, splitTagList(r.AutoTags), r.CreatedAt})
+		}
+		enc := json.NewEncoder(c.Writer)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(gin.H{"exportedAt": time.Now().UTC(), "count": len(out), "query": query, "results": out})
+	default:
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"keywordhunter-results-%s.csv\"", stamp))
+		c.Header("Content-Type", "text/csv; charset=utf-8")
+		_, _ = c.Writer.Write([]byte("\xEF\xBB\xBF")) // Excel için BOM
+		w := csv.NewWriter(c.Writer)
+		_ = w.Write([]string{"id", "title", "url", "source", "query", "criticality", "category", "keyword_count", "tags", "created_at"})
+		for _, r := range filtered {
+			_ = w.Write([]string{
+				strconv.FormatInt(r.ID, 10), csvSafe(r.Title), csvSafe(r.URL), r.Source, csvSafe(r.Query),
+				strconv.Itoa(r.Criticality), csvSafe(r.Category), strconv.Itoa(r.KeywordCount), r.AutoTags,
+				r.CreatedAt.UTC().Format(time.RFC3339),
+			})
+		}
+		w.Flush()
+	}
+}
+
+// csvSafe formül enjeksiyonuna (=, +, -, @ ile başlayan hücreler) karşı önek ekler.
+func csvSafe(v string) string {
+	if v == "" {
+		return v
+	}
+	switch v[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + v
+	}
+	return v
+}
+
+func splitTagList(tags string) []string {
+	out := []string{}
+	for _, t := range strings.Split(tags, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// handleResultsAPI filtrelenmiş/sayfalanmış bulguları JSON döndürür.
+func (s *Server) handleResultsAPI(c *gin.Context) {
+	f := parseResultFilter(c)
+	results, total, err := s.db.GetResultsFiltered(f)
+	if err != nil {
+		respondInternalError(c, "ResultsAPI", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"total":   total,
+		"limit":   f.Limit,
+		"offset":  f.Offset,
+		"results": results,
+	})
+}
+
+// handleDeleteResults seçilen bulguları siler (analist ilgisiz kayıtları ayıklayabilir).
+func (s *Server) handleDeleteResults(c *gin.Context) {
+	var req struct {
+		IDs []int64 `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 || len(req.IDs) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "1-500 arası ID listesi gerekli"})
+		return
+	}
+	n, err := s.db.DeleteResults(req.IDs)
+	if err != nil {
+		respondInternalError(c, "DeleteResults", err)
+		return
+	}
+	logger.Info("RESULTS DELETED: %d kayıt", n)
+	c.JSON(http.StatusOK, gin.H{"success": true, "deleted": n})
 }

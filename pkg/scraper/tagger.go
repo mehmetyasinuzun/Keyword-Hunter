@@ -22,8 +22,28 @@ func countKeyword(haystack, keyword string) int {
 type TagResult struct {
 	Tags        []string // Bulunan etiketler (en önemli 5)
 	KeywordHits int      // Aranan kelime kaç kez bulundu
+	Text        string   // Sayfanın düz metni (IOC/artifact çıkarımı için; en fazla maxTextForArtifacts)
+	Title       string   // <title> içeriği
 	Success     bool
 	Error       string
+}
+
+// maxTextForArtifacts artifact çıkarımına verilen düz metin üst sınırı (bayt).
+const maxTextForArtifacts = 200000
+
+// wordRegex Unicode harflerden oluşan kelimeler (Türkçe karakterler dahil).
+var wordRegex = regexp.MustCompile(`[\p{L}]+`)
+
+// turkishStopWords Türkçe durdurma kelimeleri.
+var turkishStopWords = map[string]bool{
+	"ve": true, "ile": true, "bir": true, "bu": true, "şu": true, "o": true, "için": true, "gibi": true,
+	"daha": true, "çok": true, "en": true, "de": true, "da": true, "ki": true, "mi": true, "mı": true,
+	"ama": true, "veya": true, "ya": true, "her": true, "hiç": true, "ben": true, "sen": true, "biz": true,
+	"siz": true, "onlar": true, "var": true, "yok": true, "olan": true, "olarak": true, "sonra": true,
+	"önce": true, "kadar": true, "üzere": true, "ancak": true, "fakat": true, "yani": true, "ise": true,
+	"değil": true, "tüm": true, "bütün": true, "başka": true, "aynı": true, "şey": true, "burada": true,
+	"anasayfa": true, "giriş": true, "kayıt": true, "ol": true, "ara": true, "devamı": true, "oku": true,
+	"tıkla": true, "sayfa": true, "menü": true, "iletişim": true, "hakkında": true, "gizlilik": true,
 }
 
 // stopWords - İngilizce ve genel durdurma kelimeleri (filtrelenecek)
@@ -121,25 +141,28 @@ func (s *Scraper) ExtractTopKeywords(ctx context.Context, urlStr, searchQuery st
 	// HTML'i temiz metne çevir
 	text := s.htmlToText(content.RawContent)
 	textLower := strings.ToLower(text)
+	result.Title = extractHTMLTitle(content.RawContent)
+	if len(text) > maxTextForArtifacts {
+		result.Text = text[:maxTextForArtifacts]
+	} else {
+		result.Text = text
+	}
 
 	// Aranan kelime kaç kez geçiyor?
 	result.KeywordHits = countKeyword(textLower, strings.ToLower(searchQuery))
 
-	// Kelimeleri say
+	// Kelimeleri say (Unicode; Türkçe karakterler korunur)
 	wordCounts := make(map[string]int)
-
-	// Sadece harflerden oluşan kelimeleri al
-	wordRegex := regexp.MustCompile(`[a-zA-Z]+`)
 	words := wordRegex.FindAllString(textLower, -1)
 
 	for _, word := range words {
 		// Çok kısa veya çok uzun kelimeleri atla
-		if len(word) < 3 || len(word) > 20 {
+		if n := len([]rune(word)); n < 3 || n > 24 {
 			continue
 		}
 
 		// Stop words'leri atla
-		if stopWords[word] {
+		if stopWords[word] || turkishStopWords[word] {
 			continue
 		}
 
@@ -245,14 +268,13 @@ func (s *Scraper) ExtractTopKeywordsFromHTML(htmlContent, searchQuery string, ma
 
 	// Kelimeleri say
 	wordCounts := make(map[string]int)
-	wordRegex := regexp.MustCompile(`[a-zA-Z]+`)
 	words := wordRegex.FindAllString(textLower, -1)
 
 	for _, word := range words {
-		if len(word) < 3 || len(word) > 20 {
+		if n := len([]rune(word)); n < 3 || n > 24 {
 			continue
 		}
-		if stopWords[word] {
+		if stopWords[word] || turkishStopWords[word] {
 			continue
 		}
 		wordCounts[word]++
@@ -318,4 +340,16 @@ func (s *Scraper) ExtractTopKeywordsFromHTML(htmlContent, searchQuery string, ma
 
 	result.Success = true
 	return result
+}
+
+var titleRegex = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+
+// extractHTMLTitle <title> içeriğini döndürür (boşluk sadeleştirilmiş, 200 rune).
+func extractHTMLTitle(htmlContent string) string {
+	m := titleRegex.FindStringSubmatch(htmlContent)
+	if len(m) < 2 {
+		return ""
+	}
+	t := strings.Join(strings.Fields(HTMLToText(m[1])), " ")
+	return shared.TruncateRunes(t, 200)
 }

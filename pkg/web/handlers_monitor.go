@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/search"
 )
 
 // ───────────────────────────────────────────────────────
@@ -37,8 +38,16 @@ func (s *Server) handleEnginesAPI(c *gin.Context) {
 		totalFail += e.FailCount
 	}
 
+	notes := map[string]string{}
+	for _, e := range search.SearchEngines {
+		if e.Note != "" {
+			notes[e.Name] = e.Note
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"engines":      stats,
+		"notes":        notes,
 		"total":        len(stats),
 		"upCount":      upCount,
 		"downCount":    downCount,
@@ -77,7 +86,9 @@ func (s *Server) handleEngineToggle(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "güncelleme başarısız"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	s.invalidateEngineCache()
+	logger.Info("ENGINE TOGGLE: %s → active=%v", name, req.Active)
+	c.JSON(http.StatusOK, gin.H{"success": true, "active": req.Active})
 }
 
 // handleMonitorSummary dashboard/izleme merkezi özeti
@@ -87,10 +98,16 @@ func (s *Server) handleMonitorSummary(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "özet alınamadı"})
 		return
 	}
-	upCount := 0
+	upCount, activeCount, activeUp := 0, 0, 0
 	for _, e := range stats {
 		if e.LastStatus == "up" {
 			upCount++
+		}
+		if e.IsActive {
+			activeCount++
+			if e.LastStatus == "up" {
+				activeUp++
+			}
 		}
 	}
 	searches, _ := s.db.GetAllScheduledSearches()
@@ -103,6 +120,9 @@ func (s *Server) handleMonitorSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enginesUp":       upCount,
 		"enginesTotal":    len(stats),
+		"enginesActive":   activeCount,
+		"enginesActiveUp": activeUp,
+		"schedulerBusy":   s.scheduler != nil && s.scheduler.Busy(),
 		"scheduledActive": activeScheduled,
 		"scheduledTotal":  len(searches),
 	})
@@ -215,7 +235,14 @@ func (s *Server) handleRunScheduledNow(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Scheduler aktif değil"})
 		return
 	}
-	s.scheduler.RunNow(id)
+	if _, err := s.db.GetScheduledSearch(id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Planlı tarama bulunamadı"})
+		return
+	}
+	if !s.scheduler.RunNow(id) {
+		c.JSON(http.StatusConflict, gin.H{"error": "Başka bir planlı tarama şu an çalışıyor; bitince tekrar deneyin"})
+		return
+	}
 	logger.Info("SCHEDULED SEARCH RUN NOW: ID=%d", id)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Tarama başlatıldı"})
 }

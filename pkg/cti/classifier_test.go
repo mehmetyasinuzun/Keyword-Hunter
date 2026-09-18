@@ -96,3 +96,24 @@ func TestMergeTags_PrioritizesSignalsAndDeduplicates(t *testing.T) {
 		seen[tag] = true
 	}
 }
+
+func TestAnalyze_TurkishSignals(t *testing.T) {
+	cases := []struct {
+		title, url, wantCat string
+		minCrit             int
+	}{
+		{"TC Kimlik ve MERNIS vatandaş sorgu paneli veri sızıntısı", "http://x.onion/sorgu", "Veri Sızıntısı", 5},
+		{"Kredi kartı bilgisi satılık - banka hesabı havale", "http://x.onion/kart", "Finansal Dolandırıcılık", 5},
+		{"Kiralık katil hizmeti - güvenilir satıcı", "http://x.onion/market", "Illegal Market", 4},
+		{"Türk hacker forumu yeni konu", "http://x.onion/forum", "Siber Forum", 3},
+	}
+	for _, tc := range cases {
+		got := Analyze(tc.title, tc.url, "", nil, 0)
+		if got.Category != tc.wantCat {
+			t.Errorf("%q: category = %q, want %q (score=%d signals=%v)", tc.title, got.Category, tc.wantCat, got.Score, got.MatchedSignals)
+		}
+		if got.Criticality < tc.minCrit {
+			t.Errorf("%q: criticality = %d, want >= %d", tc.title, got.Criticality, tc.minCrit)
+		}
+	}
+}

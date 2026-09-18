@@ -6,12 +6,11 @@
     <title>KeywordHunter - CTI Analytics</title>
     <meta name="description" content="Dark Web Cyber Threat Intelligence Analytics Dashboard">
 
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- Chart.js (self-hosted; no CDN dependency) -->
+    <script src="/static/js/vendor/chart.umd.min.js?v={{version}}"></script>
 
     <!-- Analytics Page Styles -->
-    <link rel="stylesheet" href="/static/css/analytics.css">
+    <link rel="stylesheet" href="/static/css/analytics.css?v={{version}}">
 </head>
 
 <body>
@@ -169,7 +168,7 @@
     </main>
 
     <!-- Analytics Page JavaScript -->
-    <script src="/static/js/analytics.js"></script>
+    <script src="/static/js/analytics.js?v={{version}}"></script>
 </body>
 
 </html>

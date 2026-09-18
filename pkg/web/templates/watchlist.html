@@ -1,302 +1,103 @@
 <!DOCTYPE html>
 <html lang="tr">
-
 <head>
     {{template "head" .}}
     <title>KeywordHunter - İzleme Listesi</title>
+    <style>
+        .add-grid { display: grid; grid-template-columns: 1.2fr 1fr 2fr 1.5fr auto; gap: 10px; align-items: end; }
+        @media (max-width: 1000px) { .add-grid { grid-template-columns: 1fr 1fr; } } @media (max-width: 600px) { .add-grid { grid-template-columns: 1fr; } }
+        .timeline { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+        .timeline a { display: block; border: 1px solid var(--bg-card-border); border-radius: 8px; overflow: hidden; background: #000; }
+        .timeline img { width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: top; }
+        .timeline .cap { font-size: .66rem; padding: 4px 6px; color: var(--text-secondary); font-family: var(--font-mono); }
+    </style>
 </head>
-
 <body>
     {{template "navbar" .}}
-
-    <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-
-        <!-- Header -->
-        <div>
-            <h1 class="text-2xl font-black text-white flex items-center gap-3">
-                <span>📡</span> İzleme Listesi
-            </h1>
-            <p class="text-gray-400 text-sm mt-1">
-                Bilinen onion sitelerini periyodik olarak izleyin: ayakta mı, içerik değişti mi, uptime nedir.
-                İzleme periyodik olarak otomatik çalışır.
-            </p>
+    <main class="kh-page wide">
+        <div class="kh-header">
+            <div><h1 class="kh-title">İzleme Listesi</h1><p class="kh-subtitle">Bilinen onion sitelerini periyodik izle: ayakta mı, içerik değişti mi, engel/captcha var mı, görsel kanıt</p></div>
+            <div class="kh-actions"><button class="kh-btn subtle" onclick="loadList()">↻ Yenile</button><button class="kh-btn ghost" onclick="seedTR()" title="Gömülü Türk onion tohum listesi (forum, market, sorgu paneli)">🇹🇷 Türk Tohum Listesini Yükle</button></div>
         </div>
-
-        <!-- Add Form -->
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
-            <h2 class="text-lg font-bold mb-5 flex items-center gap-2 border-b border-gray-700 pb-3">
-                <span>➕</span> Yeni Site Ekle
-            </h2>
-
-            <div id="add-status" class="hidden mb-4 px-4 py-2 rounded-lg text-sm font-medium"></div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-semibold text-gray-300 mb-1.5">Site Adı</label>
-                    <input type="text" id="wl-name" maxlength="128" placeholder="Örn. Shadow Forum"
-                        class="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm
-                               focus:outline-none focus:border-blue-500 placeholder-gray-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-300 mb-1.5">Kategori</label>
-                    <input type="text" id="wl-category" maxlength="64" placeholder="Forum / Market / Dizin..."
-                        class="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm
-                               focus:outline-none focus:border-blue-500 placeholder-gray-500">
-                </div>
-                <div class="md:col-span-2">
-                    <label class="block text-sm font-semibold text-gray-300 mb-1.5">Onion URL</label>
-                    <input type="text" id="wl-url" placeholder="http://...onion"
-                        class="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm
-                               focus:outline-none focus:border-blue-500 placeholder-gray-500 font-mono">
-                </div>
-                <div class="md:col-span-2">
-                    <label class="block text-sm font-semibold text-gray-300 mb-1.5">Notlar (opsiyonel)</label>
-                    <input type="text" id="wl-notes" placeholder="Login duvarı var, sadece geceleri aktif..."
-                        class="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm
-                               focus:outline-none focus:border-blue-500 placeholder-gray-500">
-                </div>
+        <section class="kh-grid cols-4" style="margin-bottom:16px" id="wl-kpi">
+            <div class="kh-stat green"><div class="label">Ayakta</div><div class="value" id="k-up">—</div></div>
+            <div class="kh-stat red"><div class="label">Kapalı</div><div class="value" id="k-down">—</div></div>
+            <div class="kh-stat amber"><div class="label">Engel / Captcha</div><div class="value" id="k-blocked">—</div></div>
+            <div class="kh-stat blue"><div class="label">Değişen</div><div class="value" id="k-changed">—</div><div class="sub">son kontrolde içerik değişti</div></div>
+        </section>
+        <section class="kh-card" style="margin-bottom:16px">
+            <div class="kh-card-title">➕ Yeni Site Ekle</div>
+            <div class="add-grid">
+                <div class="kh-field"><label class="kh-label">Site adı <span class="req">*</span></label><input class="kh-input sm" id="wl-name" maxlength="128" placeholder="Örn. Shadow Forum"></div>
+                <div class="kh-field"><label class="kh-label">Kategori</label><input class="kh-input sm" id="wl-category" maxlength="64" placeholder="Forum / Market / Dizin" list="cat-list"><datalist id="cat-list"><option>Forum</option><option>Market</option><option>Dizin</option><option>Sorgu Paneli</option><option>Chat</option><option>Haber</option><option>Arşiv</option></datalist></div>
+                <div class="kh-field"><label class="kh-label">Onion URL <span class="req">*</span></label><input class="kh-input sm mono" id="wl-url" placeholder="http://xxxx…xxxx.onion/"></div>
+                <div class="kh-field"><label class="kh-label">Not</label><input class="kh-input sm" id="wl-notes" maxlength="500" placeholder="Login duvarı var, gece aktif…"></div>
+                <button class="kh-btn primary sm" onclick="addItem(this)">Ekle</button>
             </div>
-
-            <button onclick="addItem()"
-                class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition text-sm">
-                Ekle
-            </button>
-        </div>
-
-        <!-- Watchlist Table -->
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-lg font-bold flex items-center gap-2">
-                    <span>🛰️</span> İzlenen Siteler
-                    <span id="wl-count" class="text-xs font-normal text-gray-400"></span>
-                </h2>
-                <button onclick="loadList()"
-                    class="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded px-3 py-1.5 text-gray-300 transition">
-                    Yenile
-                </button>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="text-left text-xs text-gray-500 border-b border-gray-700">
-                            <th class="py-2 pr-3 font-semibold">Durum</th>
-                            <th class="py-2 pr-3 font-semibold">Site</th>
-                            <th class="py-2 pr-3 font-semibold">Kategori</th>
-                            <th class="py-2 pr-3 font-semibold">URL</th>
-                            <th class="py-2 pr-3 font-semibold">Son Kontrol</th>
-                            <th class="py-2 pr-3 font-semibold">Uptime</th>
-                            <th class="py-2 pr-3 font-semibold text-right">Aksiyonlar</th>
-                        </tr>
-                    </thead>
-                    <tbody id="wl-body">
-                        <tr><td colspan="7" class="text-gray-500 text-center py-6">Yükleniyor...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-    </div>
-
-    <div id="toast"
-        class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl transition-all opacity-0 translate-y-10 z-50">
-    </div>
-
+            <p class="kh-hint" style="margin-top:8px">Yalnızca v3 .onion adresleri (56 karakter) kabul edilir. Kontroller her {{.interval}} dakikada Tor üzerinden yapılır; içerik değiştiğinde otomatik ekran görüntüsü alınır (Docker imajında).</p>
+        </section>
+        <section class="kh-card flush">
+            <div class="kh-card-title">🛰️ İzlenen Siteler <span class="hint" id="wl-count"></span><input class="kh-input sm" id="wl-filter" placeholder="filtrele…" style="width:200px;margin-left:auto" oninput="renderList()"></div>
+            <div class="kh-table-wrap"><table class="kh-table"><thead><tr><th>Durum</th><th>Site</th><th>Kategori</th><th>URL</th><th>Son Kontrol</th><th>Yanıt</th><th>Uptime</th><th style="text-align:right">Aksiyonlar</th></tr></thead><tbody id="wl-body"><tr><td colspan="8"><div class="kh-skel"></div></td></tr></tbody></table></div>
+        </section>
+    </main>
+    <div class="kh-modal-overlay" id="shotModal"><div class="kh-modal lg"><h2>📸 Ekran Görüntüsü Geçmişi <span class="hint" id="shot-title" style="font-weight:400;font-size:.8rem"></span></h2><div id="shot-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('shotModal')">Kapat</button></div></div></div>
     <script>
-        function esc(s) {
-            return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        let items = [];
+        function statusCell(i) {
+            if (!i.lastChecked) return '<span class="kh-badge neutral">bekliyor</span>';
+            if (i.status === 'up') return '<span class="kh-badge ok"><span class="kh-dot up pulse"></span> ayakta</span>';
+            if (i.status === 'engel') return '<span class="kh-badge warn" title="Doğrulama/captcha ekranı">⚠ engel</span>';
+            return '<span class="kh-badge err">kapalı</span>';
         }
-
-        function showToast(msg, ok) {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.className = 'fixed bottom-8 left-1/2 -translate-x-1/2 text-white px-6 py-3 rounded-full shadow-2xl transition-all z-50 ' +
-                (ok ? 'bg-green-600' : 'bg-red-600');
-            requestAnimationFrame(() => {
-                t.classList.remove('opacity-0', 'translate-y-10');
-            });
-            setTimeout(() => t.classList.add('opacity-0', 'translate-y-10'), 2500);
+        function row(i) {
+            const has = !!i.lastChecked; const up = i.uptimePct; const upCls = up < 50 ? '#fc8181' : up < 85 ? '#f6e05e' : '#68d391';
+            return `<tr data-id="${i.id}" style="${i.enabled ? '' : 'opacity:.5'}">
+                <td data-cell="status">${statusCell(i)}${i.status === 'up' && i.changed ? ' <span class="kh-badge info" title="İçerik değişti">değişti</span>' : ''}</td>
+                <td><span class="title">${KH.esc(i.name)}</span><div class="meta">${i.title ? KH.esc(KH.short(i.title, 60)) : ''}${i.notes ? ' <span title="' + KH.esc(i.notes) + '">📝</span>' : ''}</div></td>
+                <td><span class="kh-badge neutral">${KH.esc(i.category)}</span></td>
+                <td><a class="link" href="${KH.esc(i.url)}" target="_blank" rel="noopener noreferrer" title="${KH.esc(i.url)}">${KH.esc(KH.short(i.url.replace(/^https?:\/\//, ''), 26))}</a> <span class="kh-copy" onclick="KH.copy('${KH.esc(i.url)}','URL kopyalandı')">📋</span></td>
+                <td class="muted kh-mono" style="font-size:.72rem" title="${KH.esc(KH.fmtTime(i.lastChecked, true))}">${has ? KH.ago(i.lastChecked) : '—'}</td>
+                <td class="kh-mono" style="font-size:.76rem">${has && i.responseMs ? (i.responseMs / 1000).toFixed(1) + 's' : '—'}${has && i.httpCode ? ' <span class="kh-muted">(' + i.httpCode + ')</span>' : ''}</td>
+                <td>${has ? '<span class="kh-mono" style="font-weight:700;color:' + upCls + '">%' + up + '</span>' : '<span class="kh-muted">—</span>'}</td>
+                <td style="text-align:right;white-space:nowrap"><div class="kh-rowactions" style="opacity:1">
+                    <button class="kh-btn xs ghost" onclick="checkNow(${i.id}, this)">Kontrol</button>
+                    <button class="kh-btn xs subtle" onclick="captureSite(${i.id}, this)" data-url="${KH.esc(i.url)}">📸</button>
+                    <button class="kh-btn xs subtle" onclick="showHistory('${KH.esc(i.url)}')" title="Görüntü geçmişi">🕘</button>
+                    <button class="kh-btn xs subtle" onclick="toggleItem(${i.id})">${i.enabled ? '⏸' : '▶'}</button>
+                    <button class="kh-btn xs danger" onclick="deleteItem(${i.id}, ${JSON.stringify(i.name)})">🗑</button>
+                </div></td></tr>`;
         }
-
-        function showAddStatus(msg, ok) {
-            const s = document.getElementById('add-status');
-            s.textContent = msg;
-            s.className = ok
-                ? 'mb-4 px-4 py-2 rounded-lg text-sm font-medium bg-green-500/10 text-green-400 border border-green-500/30'
-                : 'mb-4 px-4 py-2 rounded-lg text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/30';
-            s.classList.remove('hidden');
-            setTimeout(() => s.classList.add('hidden'), 3000);
+        function renderList() {
+            const f = document.getElementById('wl-filter').value.toLowerCase(); const body = document.getElementById('wl-body');
+            const list = items.filter(i => !f || (i.name + ' ' + i.url + ' ' + i.category + ' ' + (i.title || '')).toLowerCase().includes(f));
+            document.getElementById('wl-count').textContent = '(' + list.length + '/' + items.length + ')';
+            body.innerHTML = list.length ? list.map(row).join('') : '<tr><td colspan="8"><div class="kh-empty"><div class="icon">📡</div><h3>İzlenen site yok</h3><p>Yukarıdan ekleyin ya da tohum listesini yükleyin.</p></div></td></tr>';
+            document.getElementById('k-up').textContent = items.filter(i => i.status === 'up').length; document.getElementById('k-down').textContent = items.filter(i => i.status === 'down').length;
+            document.getElementById('k-blocked').textContent = items.filter(i => i.status === 'engel').length; document.getElementById('k-changed').textContent = items.filter(i => i.changed).length;
         }
-
-        function fmtTime(iso) {
-            if (!iso) return '<span class="text-gray-600">—</span>';
-            const d = new Date(iso);
-            if (isNaN(d.getTime())) return '<span class="text-gray-600">—</span>';
-            const pad = n => String(n).padStart(2, '0');
-            return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        async function loadList() { try { const d = await KH.api('/api/watchlist'); items = d.items || []; renderList(); } catch (e) { document.getElementById('wl-body').innerHTML = '<tr><td colspan="8" class="kh-alert err">' + KH.esc(e.message) + '</td></tr>'; } }
+        async function addItem(btn) {
+            const payload = { name: document.getElementById('wl-name').value.trim(), url: document.getElementById('wl-url').value.trim(), category: document.getElementById('wl-category').value.trim(), notes: document.getElementById('wl-notes').value.trim() };
+            KH.busy(btn, true, 'Ekleniyor…');
+            try { await KH.api('/api/watchlist', { method: 'POST', body: payload }); KH.toast('Site eklendi', 'ok'); ['wl-name', 'wl-url', 'wl-category', 'wl-notes'].forEach(id => document.getElementById(id).value = ''); loadList(); } catch (e) { KH.toast(e.message, 'err'); } finally { KH.busy(btn, false); }
         }
-
-        function statusDot(item) {
-            if (!item.lastChecked) {
-                return '<span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-500" title="Henüz kontrol edilmedi"></span>';
-            }
-            if (item.status === 'up') {
-                return '<span class="relative inline-flex w-2.5 h-2.5">' +
-                    '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-60"></span>' +
-                    '<span class="relative inline-flex w-2.5 h-2.5 rounded-full bg-green-500" title="Ayakta"></span></span>';
-            }
-            if (item.status === 'engel') {
-                return '<span class="inline-flex items-center gap-1 text-amber-300" title="Doğrulama/captcha ekranı — elle müdahale gerekebilir">' +
-                    '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>' +
-                    '<span class="text-xs">engel</span></span>';
-            }
-            return '<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Çevrimdışı"></span>';
+        async function toggleItem(id) { try { await KH.api('/api/watchlist/' + id + '/toggle', { method: 'POST', body: {} }); loadList(); } catch (e) { KH.toast(e.message, 'err'); } }
+        async function deleteItem(id, name) { if (!await KH.confirm({ title: 'Siteyi sil', message: '"' + name + '" ve kontrol geçmişi silinecek.', okText: 'Sil', danger: true })) return; try { await KH.api('/api/watchlist/' + id + '/delete', { method: 'POST', body: {} }); KH.toast('Silindi', 'ok'); loadList(); } catch (e) { KH.toast(e.message, 'err'); } }
+        async function checkNow(id, btn) { KH.busy(btn, true, ''); try { const d = await KH.api('/api/watchlist/' + id + '/check', { method: 'POST', body: {} }); KH.toast(d.status === 'up' ? 'Ayakta (' + (d.responseMs / 1000).toFixed(1) + 's)' + (d.changed ? ' — içerik değişti' : '') : d.status === 'engel' ? 'Engel/captcha ekranı' : 'Çevrimdışı', d.status === 'up' ? 'ok' : 'warn'); } catch (e) { KH.toast(e.message, 'err'); } finally { KH.busy(btn, false); loadList(); } }
+        async function captureSite(id, btn) {
+            KH.busy(btn, true, ''); KH.toast('Ekran görüntüsü Tor üzerinden alınıyor (30-70 sn)…', 'info');
+            try { const d = await KH.api('/api/screenshot', { method: 'POST', body: { targetUrl: btn.dataset.url, source: 'manual', refId: id } }); KH.toast(d.challenge ? 'Engel ekranı (' + (d.challengeKind || 'doğrulama') + ') — elle müdahale gerekebilir' : 'Görüntü alındı (' + Math.round(d.bytes / 1024) + ' KB)', d.challenge ? 'warn' : 'ok'); showHistory(btn.dataset.url); }
+            catch (e) { KH.toast(e.message, 'err'); } finally { KH.busy(btn, false); }
         }
-
-        function uptimeBadge(pct, hasChecks) {
-            if (!hasChecks) return '<span class="text-gray-600">—</span>';
-            let cls = 'text-green-400';
-            if (pct < 50) cls = 'text-red-400';
-            else if (pct < 85) cls = 'text-yellow-400';
-            return `<span class="font-mono font-semibold ${cls}">%${pct}</span>`;
+        async function showHistory(url) {
+            document.getElementById('shot-title').textContent = url; const body = document.getElementById('shot-body'); body.innerHTML = '<div class="kh-skel"></div>'; KH.openModal('shotModal');
+            try { const d = await KH.api('/api/screenshots?target=' + encodeURIComponent(url) + '&limit=30'); const s = d.screenshots || [];
+                body.innerHTML = s.length ? '<div class="timeline">' + s.map(x => `<a href="/screenshot/file/${x.id}" target="_blank" rel="noopener"><img loading="lazy" src="/screenshot/file/${x.id}" alt=""><div class="cap">${KH.fmtTime(x.takenAt)}${x.challenge ? ' ⚠️' : ''} · ${Math.round(x.bytes / 1024)}KB</div></a>`).join('') + '</div>' : '<p class="kh-hint">' + (d.available ? 'Bu hedef için görüntü yok. 📸 ile alın.' : 'Ekran görüntüsü bu ortamda kapalı (yalnızca Docker imajında chromium var).') + '</p>'; }
+            catch (e) { body.innerHTML = '<p class="kh-alert err">' + KH.esc(e.message) + '</p>'; }
         }
-
-        function changedBadge(item) {
-            if (item.status === 'up' && item.changed) {
-                return '<span class="ml-2 text-[10px] font-black px-1.5 py-0.5 rounded border text-orange-400 bg-orange-500/10 border-orange-500/30">DEĞİŞTİ</span>';
-            }
-            return '';
-        }
-
-        function renderRow(item) {
-            const hasChecks = !!item.lastChecked;
-            return `<tr class="border-b border-gray-700/50 hover:bg-gray-700/20 ${item.enabled ? '' : 'opacity-50'}" data-id="${item.id}">
-                <td class="py-3 pr-3" data-cell="status">${statusDot(item)}</td>
-                <td class="py-3 pr-3">
-                    <div class="text-white font-medium flex items-center">${esc(item.name)}<span data-cell="changed">${changedBadge(item)}</span></div>
-                    <div class="text-xs text-gray-500" data-cell="title">${esc(item.title || '')}</div>
-                </td>
-                <td class="py-3 pr-3"><span class="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">${esc(item.category)}</span></td>
-                <td class="py-3 pr-3"><span class="text-xs text-blue-400 font-mono" title="${esc(item.url)}">${esc((item.url || '').slice(0, 28))}…</span></td>
-                <td class="py-3 pr-3 text-xs text-gray-400 font-mono" data-cell="time">${fmtTime(item.lastChecked)}</td>
-                <td class="py-3 pr-3" data-cell="uptime">${uptimeBadge(item.uptimePct, hasChecks)}</td>
-                <td class="py-3 pr-3 text-right whitespace-nowrap">
-                    <button onclick="checkNow(${item.id})" class="text-xs bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-600/30 rounded px-2 py-1 transition">Kontrol</button>
-                    <button onclick="captureSite(${item.id}, this)" data-url="${esc(item.url)}" class="text-xs bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-600/30 rounded px-2 py-1 transition ml-1">Görüntü</button>
-                    <button onclick="toggleItem(${item.id})" class="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600 rounded px-2 py-1 transition ml-1">${item.enabled ? 'Durdur' : 'Başlat'}</button>
-                    <button onclick="deleteItem(${item.id}, '${esc(item.name).replace(/'/g, "")}')" class="text-xs bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-600/30 rounded px-2 py-1 transition ml-1">Sil</button>
-                </td>
-            </tr>`;
-        }
-
-        function loadList() {
-            const body = document.getElementById('wl-body');
-            fetch('/api/watchlist')
-                .then(r => r.json())
-                .then(data => {
-                    const items = data.items || [];
-                    document.getElementById('wl-count').textContent = '(' + items.length + ' site)';
-                    if (items.length === 0) {
-                        body.innerHTML = '<tr><td colspan="7" class="text-gray-500 text-center py-6">Henüz izlenen site yok.</td></tr>';
-                        return;
-                    }
-                    body.innerHTML = items.map(renderRow).join('');
-                })
-                .catch(() => {
-                    body.innerHTML = '<tr><td colspan="7" class="text-red-400 text-center py-6">Liste yüklenemedi.</td></tr>';
-                });
-        }
-
-        function addItem() {
-            const payload = {
-                name: document.getElementById('wl-name').value.trim(),
-                url: document.getElementById('wl-url').value.trim(),
-                category: document.getElementById('wl-category').value.trim(),
-                notes: document.getElementById('wl-notes').value.trim()
-            };
-            fetch('/api/watchlist', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }).then(r => r.json()).then(data => {
-                if (data.success) {
-                    showAddStatus('✅ Site eklendi.', true);
-                    document.getElementById('wl-name').value = '';
-                    document.getElementById('wl-url').value = '';
-                    document.getElementById('wl-category').value = '';
-                    document.getElementById('wl-notes').value = '';
-                    loadList();
-                } else {
-                    showAddStatus('❌ ' + (data.error || 'Eklenemedi'), false);
-                }
-            }).catch(() => showAddStatus('❌ Bağlantı hatası', false));
-        }
-
-        function toggleItem(id) {
-            fetch('/api/watchlist/' + id + '/toggle', { method: 'POST' })
-                .then(r => r.json()).then(data => {
-                    if (data.success) { showToast('Durum güncellendi', true); loadList(); }
-                    else showToast(data.error || 'İşlem başarısız', false);
-                }).catch(() => showToast('Bağlantı hatası', false));
-        }
-
-        function deleteItem(id, name) {
-            if (!confirm('"' + name + '" silinsin mi?')) return;
-            fetch('/api/watchlist/' + id + '/delete', { method: 'POST' })
-                .then(r => r.json()).then(data => {
-                    if (data.success) { showToast('Site silindi', true); loadList(); }
-                    else showToast(data.error || 'Silinemedi', false);
-                }).catch(() => showToast('Bağlantı hatası', false));
-        }
-
-        function checkNow(id) {
-            const row = document.querySelector('tr[data-id="' + id + '"]');
-            if (row) row.querySelector('[data-cell="status"]').innerHTML =
-                '<span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse"></span>';
-
-            fetch('/api/watchlist/' + id + '/check', { method: 'POST' })
-                .then(r => r.json()).then(data => {
-                    if (!data.success) { showToast(data.error || 'Kontrol başarısız', false); loadList(); return; }
-                    showToast(data.status === 'up' ? 'Site ayakta (' + data.responseMs + 'ms)' : 'Site çevrimdışı', data.status === 'up');
-                    loadList();
-                }).catch(() => { showToast('Bağlantı hatası', false); loadList(); });
-        }
-
-        function captureSite(id, btn) {
-            const url = btn.getAttribute('data-url');
-            const original = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = 'Alınıyor…';
-            showToast('Ekran görüntüsü Tor üzerinden alınıyor (30-70sn)…', true);
-            fetch('/api/screenshot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetUrl: url, source: 'manual', refId: id })
-            }).then(r => r.json()).then(data => {
-                btn.disabled = false; btn.textContent = original;
-                if (data.success) {
-                    if (data.challenge) { showToast('Engel ekranı (' + (data.challengeKind || 'doğrulama') + ') — site insan doğrulaması istiyor, elle açman gerekebilir', false); }
-                    else { showToast('Görüntü alındı (' + Math.round(data.bytes / 1024) + ' KB)', true); }
-                    openShot(data.id);
-                }
-                else { showToast(data.error || 'Görüntü alınamadı', false); }
-            }).catch(() => { btn.disabled = false; btn.textContent = original; showToast('Bağlantı hatası', false); });
-        }
-
-        function openShot(id) {
-            let m = document.getElementById('shotModal');
-            if (!m) {
-                m = document.createElement('div');
-                m.id = 'shotModal';
-                m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:50;padding:24px;';
-                m.onclick = () => m.remove();
-                document.body.appendChild(m);
-            }
-            m.innerHTML = '<img src="/screenshot/file/' + id + '" alt="Ekran görüntüsü" style="max-width:100%;max-height:90vh;border:1px solid #4a5568;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);">';
-        }
-
+        async function seedTR() { if (!await KH.confirm({ title: 'Tohum listesini yükle', message: 'Gömülü Türk onion listesindeki (forum, market, sorgu paneli, chat) hedefler izleme listesine eklenir ve periyodik olarak Tor üzerinden kontrol edilmeye başlanır.', okText: 'Yükle' })) return; try { const d = await KH.api('/api/watchlist/seed', { method: 'POST', body: {} }); KH.toast(d.added + ' hedef eklendi', 'ok'); loadList(); } catch (e) { KH.toast(e.message, 'err'); } }
         document.addEventListener('DOMContentLoaded', loadList);
     </script>
 </body>
-
 </html>

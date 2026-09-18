@@ -59,6 +59,11 @@ ozellik.txt
 SKILL.md
 ultrathink.md
 
+# Secrets / local env (never commit)
+.env
+.env.*
+!.env.example
+
 # Yerel çalışma verisi (DB, .env, watchlist seed, geçici) — public repoya girmez
 data/
 

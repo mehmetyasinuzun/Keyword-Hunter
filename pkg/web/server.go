@@ -3,12 +3,14 @@ package web
 import (
 	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,9 +22,13 @@ import (
 	"keywordhunter-mvp/pkg/scheduler"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
+	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tagging"
 )
+
+// Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
+var Version = "0.10.0"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -46,8 +52,9 @@ type Server struct {
 	db            *storage.DB
 	searcher      *search.Searcher
 	scraper       *scraper.Scraper
-	username      string
-	password      string
+	creds         *credentialStore
+	loginGuard    *loginGuard
+	startedAt     time.Time
 	cookieSecure  bool
 	sessionTTL    time.Duration
 	envStore      *config.EnvStore
@@ -62,6 +69,10 @@ type Server struct {
 	scheduler     *scheduler.Scheduler
 	engineMonitor *monitor.EngineMonitor
 	capturer      *capture.Capturer
+
+	engineCacheMu sync.Mutex
+	engineCache   map[string]bool
+	engineCacheAt time.Time
 }
 
 // Config sunucu yapılandırması
@@ -70,7 +81,8 @@ type Config struct {
 	Searcher       *search.Searcher
 	Scraper        *scraper.Scraper
 	Username       string
-	Password       string
+	Password       string // düz metin (boş olabilir)
+	PasswordHash   string // bcrypt (tercih edilen)
 	CookieSecure   bool
 	SessionTTL     time.Duration
 	RateLimitRPS   float64
@@ -80,7 +92,12 @@ type Config struct {
 }
 
 // New yeni web sunucusu oluşturur
-func New(cfg Config) *Server {
+func New(cfg Config) (*Server, error) {
+	creds, err := newCredentialStore(cfg.Username, cfg.Password, cfg.PasswordHash)
+	if err != nil {
+		return nil, fmt.Errorf("kimlik deposu oluşturulamadı: %w", err)
+	}
+
 	sessionTTL := cfg.SessionTTL
 	if sessionTTL <= 0 {
 		sessionTTL = 24 * time.Hour
@@ -88,12 +105,12 @@ func New(cfg Config) *Server {
 
 	rateLimitRPS := cfg.RateLimitRPS
 	if rateLimitRPS <= 0 {
-		rateLimitRPS = 12
+		rateLimitRPS = 25
 	}
 
 	rateLimitBurst := cfg.RateLimitBurst
 	if rateLimitBurst <= 0 {
-		rateLimitBurst = 30
+		rateLimitBurst = 80
 	}
 
 	gin.SetMode(gin.ReleaseMode)
@@ -104,13 +121,15 @@ func New(cfg Config) *Server {
 	router.Use(gin.Recovery())
 	router.Use(securityHeaders(cfg.CookieSecure))
 	router.Use(bodyLimit(1 << 20))
+	router.Use(requestLogger())
 
 	s := &Server{
 		db:            cfg.DB,
 		searcher:      cfg.Searcher,
 		scraper:       cfg.Scraper,
-		username:      cfg.Username,
-		password:      cfg.Password,
+		creds:         creds,
+		loginGuard:    newLoginGuard(),
+		startedAt:     time.Now(),
 		cookieSecure:  cfg.CookieSecure,
 		sessionTTL:    sessionTTL,
 		envStore:      cfg.EnvStore,
@@ -139,11 +158,64 @@ func New(cfg Config) *Server {
 		logger.Warn("Ekran görüntüsü devre dışı: chromium bulunamadı (yalnız Docker imajında mevcut)")
 	}
 
+	// Motor aktif/pasif durumu DB'den okunur ve aramayı gerçekten etkiler
+	if s.searcher != nil {
+		s.searcher.SetEngineFilter(s.engineEnabled)
+	}
+
 	s.setupRoutes()
 	s.startSessionCleanup()
 	s.startWatchlistMonitor()
 	s.startScheduler()
-	return s
+	return s, nil
+}
+
+// engineEnabled engine_stats tablosundaki is_active bayrağını (kısa süreli önbellekle) döndürür.
+func (s *Server) engineEnabled(name string) bool {
+	s.engineCacheMu.Lock()
+	defer s.engineCacheMu.Unlock()
+	if time.Since(s.engineCacheAt) > 30*time.Second || s.engineCache == nil {
+		stats, err := s.db.GetAllEngineStats()
+		if err == nil {
+			cache := make(map[string]bool, len(stats))
+			for _, st := range stats {
+				cache[st.Name] = st.IsActive
+			}
+			s.engineCache = cache
+			s.engineCacheAt = time.Now()
+		}
+	}
+	if s.engineCache == nil {
+		return true
+	}
+	active, known := s.engineCache[name]
+	if !known {
+		return true
+	}
+	return active
+}
+
+// invalidateEngineCache motor aktiflik önbelleğini düşürür (toggle sonrası).
+func (s *Server) invalidateEngineCache() {
+	s.engineCacheMu.Lock()
+	s.engineCache = nil
+	s.engineCacheMu.Unlock()
+}
+
+// requestLogger yavaş veya hatalı istekleri loglar (her isteği değil: gürültü).
+func requestLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		status := c.Writer.Status()
+		elapsed := time.Since(start)
+		if status >= 500 || (status >= 400 && status != 401 && status != 404) || elapsed > 5*time.Second {
+			if strings.HasPrefix(c.Request.URL.Path, "/events") {
+				return
+			}
+			logger.WebRequest(c.Request.Method, c.Request.URL.Path, status, elapsed)
+		}
+	}
 }
 
 // startScheduler planlı arama motorunu ve arama motoru sağlık izleyicisini başlatır.
@@ -162,12 +234,23 @@ func (s *Server) startScheduler() {
 	s.engineMonitor = em
 }
 
+// contentSecurityPolicy tüm kaynakları aynı origin'e kilitler. Şablonlar
+// satır içi script/stil kullandığı için 'unsafe-inline' gerekir; buna rağmen
+// harici script/bağlantı/iframe tamamen engellenir (CDN bağımlılığı yok).
+const contentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; " +
+	"base-uri 'self'; form-action 'self'; object-src 'none'"
+
 // securityHeaders temel güvenlik başlıklarını ekler
 func securityHeaders(secure bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("Content-Security-Policy", contentSecurityPolicy)
+		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		c.Header("Cross-Origin-Opener-Policy", "same-origin")
+		c.Header("Cross-Origin-Resource-Policy", "same-origin")
 		if secure {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
@@ -195,6 +278,9 @@ func (s *Server) startSessionCleanup() {
 					logger.Warn("Session cleanup başarısız: %v", err)
 				}
 				s.rateLimiter.Cleanup(30 * time.Minute)
+				if s.loginGuard != nil {
+					s.loginGuard.Cleanup()
+				}
 			case <-s.cleanupStop:
 				return
 			}
@@ -220,6 +306,9 @@ func (s *Server) startWatchlistMonitor() {
 		}
 	}()
 }
+
+// screenshotCooldown tetiklenen görüntüler için aynı hedefe uygulanan bekleme süresi.
+const screenshotCooldown = 6 * time.Hour
 
 // watchlistInterval kontrol aralığını döndürür (env WATCHLIST_INTERVAL_MIN, varsayılan 15dk)
 func watchlistInterval() time.Duration {
@@ -255,10 +344,16 @@ func (s *Server) runWatchlistChecks() {
 		}
 
 		// Tetikleyici: izlenen sitede içerik değiştiyse otomatik ekran görüntüsü al
-		// (görsel kanıt). Asenkron — kontrol döngüsünü bloklamaz.
+		// (görsel kanıt). Asenkron — kontrol döngüsünü bloklamaz. Aynı hedef için
+		// en fazla 6 saatte bir (dinamik sayfalar her kontrolde "değişti" üretebilir).
 		if result.Changed && s.capturer != nil && s.capturer.Available() {
-			logger.Info("WATCHLIST DEĞİŞİKLİK: %s — ekran görüntüsü tetiklendi", item.Name)
-			go s.captureAndStore("watchlist", item.ID, item.URL)
+			last, _ := s.db.LastScreenshotAt(item.URL)
+			if last.IsZero() || time.Since(last) > screenshotCooldown {
+				logger.Info("WATCHLIST DEĞİŞİKLİK: %s — ekran görüntüsü tetiklendi", item.Name)
+				go s.captureAndStore("watchlist", item.ID, item.URL)
+			} else {
+				logger.Debug("WATCHLIST DEĞİŞİKLİK: %s — görüntü bekleme süresinde, atlandı", item.Name)
+			}
 		}
 	}
 }
@@ -301,14 +396,15 @@ func (s *Server) setupRoutes() {
 	// Template'leri yükle (ana sayfalar + partials)
 	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
 		"truncate": func(str string, length int) string {
-			if len(str) <= length {
-				return str
-			}
-			return str[:length] + "..."
+			return shared.Truncate(str, length)
 		},
 		"formatTime": func(t time.Time) string {
-			return t.Format("02.01.2006 15:04")
+			if t.IsZero() {
+				return "—"
+			}
+			return t.Local().Format("02.01.2006 15:04")
 		},
+		"version": func() string { return Version },
 		"seq": func(start, end int) []int {
 			var res []int
 			for i := start; i <= end; i++ {
@@ -333,13 +429,19 @@ func (s *Server) setupRoutes() {
 	if err != nil {
 		logger.Error("Static dosya sistemi oluşturulamadı: %v", err)
 	}
-	s.router.StaticFS("/static", http.FS(staticSubFS))
+	static := s.router.Group("/static", func(c *gin.Context) {
+		c.Header("Cache-Control", "public, max-age=86400, immutable")
+		c.Next()
+	})
+	static.StaticFS("/", http.FS(staticSubFS))
 
 	// Public routes
 	s.router.GET("/", s.handleIndex)
 	s.router.GET("/login", s.handleLoginPage)
 	s.router.POST("/login", s.handleLogin)
 	s.router.GET("/logout", s.handleLogout)
+	s.router.POST("/logout", s.handleLogout)
+	s.router.GET("/healthz", s.handleHealthz)
 
 	// Protected routes
 	protected := s.router.Group("/")
@@ -384,6 +486,14 @@ func (s *Server) setupRoutes() {
 			api.GET("/new-results", s.handleNewResults)
 			api.GET("/alert-config", s.handleAlertConfigGet)
 			api.POST("/alert-config", s.handleAlertConfigSave)
+			api.POST("/alert-config/test", s.handleAlertConfigTest)
+			api.GET("/export/results", s.handleExportResults)
+			api.GET("/results", s.handleResultsAPI)
+			api.POST("/results/delete", s.handleDeleteResults)
+			api.GET("/results/:id/artifacts", s.handleArtifactsForResult)
+			api.GET("/artifacts", s.handleArtifactSearch)
+			api.GET("/artifacts/counts", s.handleArtifactCounts)
+			api.GET("/artifacts/stats", s.handleArtifactStats)
 			api.GET("/settings/env", s.handleEnvSettingsGet)
 			api.POST("/settings/env", s.handleEnvSettingsUpdate)
 			api.GET("/watchlist", s.handleWatchlistList)
@@ -391,6 +501,7 @@ func (s *Server) setupRoutes() {
 			api.POST("/watchlist/:id/toggle", s.handleWatchlistToggle)
 			api.POST("/watchlist/:id/delete", s.handleWatchlistDelete)
 			api.POST("/watchlist/:id/check", s.handleWatchlistCheck)
+			api.POST("/watchlist/seed", s.handleWatchlistSeed)
 
 			// Planlı arama (scheduler)
 			api.GET("/scheduled", s.handleGetScheduledSearches)
@@ -415,11 +526,15 @@ func (s *Server) setupRoutes() {
 // Run sunucuyu başlatır
 func (s *Server) Run(addr string) error {
 	s.httpServer = &http.Server{
-		Addr:         addr,
-		Handler:      s.router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              addr,
+		Handler:           s.router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// Uzun süren işlemler (Tor araması ~90sn, ekran görüntüsü ~90sn) için geniş;
+		// SSE akışı kendi yazma süresini handler içinde sıfırlar.
+		WriteTimeout:   5 * time.Minute,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 64 << 10,
 	}
 
 	err := s.httpServer.ListenAndServe()
