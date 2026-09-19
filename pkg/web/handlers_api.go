@@ -876,7 +876,7 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 		return
 	}
 
-	logger.Info("🔍 Derinleştirme başlatıldı: %s", req.URL)
+	logger.Info("Derinleştirme başlatıldı: %s", req.URL)
 
 	// URL'yi scrape et ve linkleri çıkar
 	links, err := s.scraper.ExtractLinksFromURL(c.Request.Context(), req.URL)

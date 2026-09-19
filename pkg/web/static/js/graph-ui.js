@@ -1,3 +1,4 @@
+function gi(name){return '<svg class="ico" aria-hidden="true"><use href="#i-'+name+'"/></svg>';}
 /**
  * KeywordHunter - Graph Visualization JavaScript (UI)
  * UI Interactions, Event Handlers, Controls
@@ -155,17 +156,17 @@ function showTooltip(event, d) {
     if (d.data.url) {
         content += `<div class="url">${escapeHTML(d.data.url)}</div>`;
         if (d.data.url.includes('.onion')) {
-            content += `<div class="onion-warning">🧅 Tor Browser gerektirir</div>`;
+            content += `<div class="onion-warning">${gi('onion')} Tor Browser gerektirir</div>`;
         }
     }
 
     if (d.data.count > 1) {
-        content += `<div class="badge">🔥 ${d.data.count} motorda bulundu</div>`;
+        content += `<div class="badge">${gi('fire')} ${d.data.count} motorda bulundu</div>`;
     }
 
     const childCount = (d._children || d.children || []).length;
     if (childCount > 0) {
-        content += `<div style="margin-top: 8px; color: #a0aec0; font-size: 11px;">📂 ${childCount} alt öğe</div>`;
+        content += `<div style="margin-top: 8px; color: var(--text-muted); font-size: 11px;">${gi('folder')} ${childCount} alt öğe</div>`;
     }
 
     tooltip.innerHTML = content;
@@ -188,13 +189,13 @@ function showContextMenu(x, y) {
     if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
         const isOnion = GraphState.selectedNode.data.url.includes('.onion');
         if (GraphState.selectedNode.data.isExpanded) {
-            expandItem.innerHTML = '✅ Derinleştirildi';
+            expandItem.innerHTML = gi('check') + ' Derinleştirildi';
             expandItem.style.opacity = '0.5';
         } else if (!isOnion) {
-            expandItem.innerHTML = '⚠️ Sadece .onion';
+            expandItem.innerHTML = gi('warn') + ' Sadece .onion';
             expandItem.style.opacity = '0.5';
         } else {
-            expandItem.innerHTML = '🔍 Derinleştir';
+            expandItem.innerHTML = gi('search') + ' Derinleştir';
             expandItem.style.opacity = '1';
         }
         expandItem.style.display = 'flex';
@@ -216,7 +217,7 @@ function copyLink() {
     closeContextMenu();
     if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
         navigator.clipboard.writeText(GraphState.selectedNode.data.url).then(() => {
-            showToast('✅ Link kopyalandı!');
+            showToast('Link kopyalandı!');
         }).catch(() => fallbackCopy(GraphState.selectedNode.data.url));
     }
 }
@@ -244,9 +245,9 @@ function fallbackCopy(text) {
 
     try {
         document.execCommand('copy');
-        showToast('✅ Kopyalandı', 'success');
+        showToast('Kopyalandı', 'success');
     } catch (e) {
-        showToast('❌ Kopyalanamadı', 'error');
+        showToast('Kopyalanamadı', 'error');
     }
 
     document.body.removeChild(textarea);
@@ -260,7 +261,7 @@ function copyTitle() {
     if (!title) return;
 
     navigator.clipboard.writeText(title)
-        .then(() => showToast('✅ Başlık kopyalandı', 'success'))
+        .then(() => showToast('Başlık kopyalandı', 'success'))
         .catch(() => fallbackCopy(title));
 }
 
@@ -275,12 +276,12 @@ function expandNode() {
 
     const node = GraphState.selectedNode;
     if (!node || !node.data || !node.data.url) {
-        showToast('⚠️ Derinleştirilecek node seçilmedi', 'warning');
+        showToast('️ Derinleştirilecek node seçilmedi', 'warning');
         return;
     }
 
     if (!node.data.url.includes('.onion')) {
-        showToast('⚠️ Derinleştirme yalnızca .onion adreslerinde çalışır', 'warning');
+        showToast('️ Derinleştirme yalnızca .onion adreslerinde çalışır', 'warning');
         return;
     }
 
@@ -307,7 +308,7 @@ function expandNode() {
             if (!data.success) {
                 throw new Error(data.error || 'Derinleştirme başarısız');
             }
-            showToast(`✅ Derinleştirildi: ${data.savedLinks || 0} kayıt`, 'success');
+            showToast(`Derinleştirildi: ${data.savedLinks || 0} kayıt`, 'success');
             node.data.isExpanded = true;
 
             const graphNodeId = Number(data.graphNodeId) || 0;
@@ -334,7 +335,7 @@ function expandNode() {
             }
         })
         .catch(err => {
-            showToast('❌ ' + err.message, 'error');
+            showToast('' + err.message, 'error');
         })
         .finally(() => {
             _expandInProgress = false;
@@ -346,13 +347,13 @@ function expandNode() {
 function watchNode() {
     closeContextMenu();
     const node = GraphState.selectedNode;
-    if (!node || !node.data || !node.data.url) { showToast('⚠️ Önce bir sonuç düğümü seçin', 'warning'); return; }
+    if (!node || !node.data || !node.data.url) { showToast('️ Önce bir sonuç düğümü seçin', 'warning'); return; }
     let host = '';
-    try { host = new URL(node.data.url).hostname; } catch (_) { showToast('⚠️ Geçersiz URL', 'warning'); return; }
-    if (!host.endsWith('.onion')) { showToast('⚠️ Yalnızca .onion siteleri izlenebilir', 'warning'); return; }
+    try { host = new URL(node.data.url).hostname; } catch (_) { showToast('️ Geçersiz URL', 'warning'); return; }
+    if (!host.endsWith('.onion')) { showToast('️ Yalnızca .onion siteleri izlenebilir', 'warning'); return; }
     fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: (node.data.name || host).slice(0, 100), url: 'http://' + host, category: 'Harita', notes: 'Haritadan eklendi' }) })
-        .then(r => r.json()).then(d => { if (d.success) showToast('📡 İzleme listesine eklendi', 'success'); else throw new Error(d.error || 'Eklenemedi'); })
-        .catch(e => showToast('❌ ' + e.message, 'error'));
+        .then(r => r.json()).then(d => { if (d.success) showToast('İzleme listesine eklendi', 'success'); else throw new Error(d.error || 'Eklenemedi'); })
+        .catch(e => showToast('' + e.message, 'error'));
 }
 
 function showLinkInfo() {
@@ -388,12 +389,12 @@ function closeLinkModal() {
 function copyLinkFromModal() {
     const node = GraphState.selectedNode;
     if (!node || !node.data || !node.data.url) {
-        showToast('⚠️ Kopyalanacak link yok', 'warning');
+        showToast('️ Kopyalanacak link yok', 'warning');
         return;
     }
 
     navigator.clipboard.writeText(node.data.url)
-        .then(() => showToast('✅ Link kopyalandı', 'success'))
+        .then(() => showToast('Link kopyalandı', 'success'))
         .catch(() => fallbackCopy(node.data.url));
 }
 

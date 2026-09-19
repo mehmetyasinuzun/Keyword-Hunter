@@ -85,3 +85,30 @@ func TestCleanTitle(t *testing.T) {
 		t.Errorf("uzun başlık rune-güvenli kısaltılmalı: %d", len([]rune(got)))
 	}
 }
+
+func TestEnginePageURL(t *testing.T) {
+	e := Engine{Name: "X", URL: "http://x.onion/search?q={query}", PageParam: "page"}
+	if got := e.PageURL("leak", 1); got != "http://x.onion/search?q=leak" {
+		t.Errorf("page1 = %q", got)
+	}
+	if got := e.PageURL("leak", 3); got != "http://x.onion/search?q=leak&page=3" {
+		t.Errorf("page3 = %q", got)
+	}
+	single := Engine{Name: "Y", URL: "http://y.onion/?q={query}"}
+	if got := single.PageURL("leak", 2); got != "" {
+		t.Errorf("tek sayfalı motor page2 = %q, boş olmalı", got)
+	}
+	noq := Engine{Name: "Z", URL: "http://z.onion/s/{query}", PageParam: "p"}
+	if got := noq.PageURL("leak", 2); got != "http://z.onion/s/leak?p=2" {
+		t.Errorf("? olmayan URL page2 = %q", got)
+	}
+	paged := 0
+	for _, e := range SearchEngines {
+		if e.PageParam != "" {
+			paged++
+		}
+	}
+	if paged != 6 {
+		t.Errorf("sayfalama destekleyen motor sayısı = %d, want 6", paged)
+	}
+}

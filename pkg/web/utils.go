@@ -53,7 +53,7 @@ func buildChildrenNodes(links []scraper.ExtractedLink) []*storage.GraphNode {
 
 	if len(internalNodes) > 0 {
 		children = append(children, &storage.GraphNode{
-			Name:     fmt.Sprintf("🔗 İç Linkler (%d)", len(internalNodes)),
+			Name:     fmt.Sprintf("İç Linkler (%d)", len(internalNodes)),
 			Type:     "internal-group",
 			Children: internalNodes,
 			Count:    len(internalNodes),
@@ -62,7 +62,7 @@ func buildChildrenNodes(links []scraper.ExtractedLink) []*storage.GraphNode {
 
 	if len(externalNodes) > 0 {
 		children = append(children, &storage.GraphNode{
-			Name:     fmt.Sprintf("🌐 Dış Linkler (%d)", len(externalNodes)),
+			Name:     fmt.Sprintf("Dış Linkler (%d)", len(externalNodes)),
 			Type:     "external-group",
 			Children: externalNodes,
 			Count:    len(externalNodes),

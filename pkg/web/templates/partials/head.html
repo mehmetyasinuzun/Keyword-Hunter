@@ -9,9 +9,7 @@
 <meta name="theme-color" content="#07080d">
 <meta name="robots" content="noindex, nofollow">
 
-<!-- Favicon (inline, no external request) -->
-<link rel="icon"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307080d'/%3E%3Ccircle cx='14' cy='14' r='7' fill='none' stroke='%2363b3ed' stroke-width='2.5'/%3E%3Cline x1='19' y1='19' x2='26' y2='26' stroke='%23805ad5' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
 <!-- Self-hosted assets (no CDN dependency — works offline / behind Tor) -->
 <link rel="stylesheet" href="/static/css/tailwind.css?v={{version}}">
@@ -151,17 +149,24 @@
     .nav-links {
         display: flex;
         align-items: center;
-        gap: var(--space-lg);
+        gap: 2px;
     }
 
     .nav-link {
         color: var(--text-secondary);
         text-decoration: none;
-        font-size: 0.875rem;
+        font-size: 0.82rem;
         font-weight: 500;
-        transition: all 0.2s ease;
+        transition: all 0.18s ease;
         position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        border-radius: 8px;
     }
+    .nav-link .ico { width: 16px; height: 16px; opacity: .85; }
+    .nav-link:hover { background: rgba(99,179,237,.07); }
 
     .nav-link:hover {
         color: var(--text-primary);
@@ -171,16 +176,8 @@
         color: var(--accent-primary);
     }
 
-    .nav-link.active::after {
-        content: '';
-        position: absolute;
-        bottom: -8px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
-        border-radius: 1px;
-    }
+    .nav-link.active { background: rgba(99,179,237,.12); }
+    .nav-link.active .ico { opacity: 1; }
 
     .nav-link.danger {
         color: var(--accent-danger);
@@ -265,6 +262,15 @@
     .animate-in {
         animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     }
+
+    /* ── Özgün ikon sistemi ──────────────────────────────────────────── */
+    .ico { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.18em; flex: none; stroke-width: 1.7; }
+    .ico.sm { width: 1em; height: 1em; }
+    .ico.lg { width: 1.5em; height: 1.5em; }
+    .ico.xl { width: 2rem; height: 2rem; }
+    .nav-logo-svg { width: 30px; height: 30px; filter: drop-shadow(0 0 10px var(--glow-primary)); }
+    .kh-btn .ico, .kh-badge .ico, .nav-link .ico { vertical-align: -0.2em; }
+    button .ico { pointer-events: none; }
 
     /* ── Polish: scrollbar, focus, selection, motion ─────────────────── */
     html {

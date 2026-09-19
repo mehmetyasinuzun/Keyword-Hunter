@@ -164,25 +164,8 @@ func (c *Capturer) Capture(ctx context.Context, targetURL string) (*Shot, error)
 		return nil, ctx.Err()
 	}
 
-	resolverRules := fmt.Sprintf("MAP * ~NOTFOUND , EXCLUDE %s", c.proxyHost())
-
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.ExecPath(c.chromePath),
-		chromedp.NoSandbox,
-		chromedp.DisableGPU,
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("hide-scrollbars", true),
-		chromedp.Flag("mute-audio", true),
-		chromedp.Flag("no-first-run", true),
-		// Gerçek Chrome UA — chromedp varsayılanı "HeadlessChrome" sızdırır ve engellenir.
-		chromedp.UserAgent(shared.ChromeUserAgent),
-		// navigator.webdriver izini gizle (bot tespitini azaltır).
-		chromedp.Flag("disable-blink-features", "AutomationControlled"),
-		chromedp.Flag("proxy-server", "socks5://"+c.torProxy),
-		chromedp.Flag("host-resolver-rules", resolverRules),
-		chromedp.WindowSize(1280, 900),
-	)
+	opts := c.chromeOptions()
+	opts = append(opts, chromedp.UserAgent(shared.ChromeUserAgent))
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancelAlloc()

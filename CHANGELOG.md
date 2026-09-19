@@ -1,5 +1,43 @@
 # Değişiklik Günlüğü
 
+## v0.11.0 — 2026-09-19
+
+Kapsam genişletme + özgün tasarım turu.
+
+### Scraper "her senaryoya" yaklaştı
+- **JS render**: headless Chromium ile JavaScript çalıştıran sayfalar da çekilebilir.
+  JS-only sayfa sezildiğinde veya 403/503 alındığında otomatik tarayıcıya düşülür.
+- **Site profilleri**: host bazlı Cookie başlığı + User-Agent + "JS render" bayrağı
+  (giriş duvarı/captcha olan siteler için). Ayarlar ekranından yönetilir; çerezler
+  yalnızca sunucuda saklanır, listede maskelenir.
+- **Motor sayfalama**: Tordex/Tor66/Onionway/OnionLand/Excavator/Danex için 2-5.
+  sayfa (canlı doğrulandı: tek sayfa ~299 → 3 sayfa 505 sonuç). Aramada sayfa seçimi.
+- **Örümcek (crawler)**: bir tohum .onion'dan BFS ile derinlik (≤3) ve sayfa (≤300)
+  sınırlı, nazik (istekler arası gecikme), iptal edilebilir site tarama; keşfedilen
+  sayfalar bulgu olarak kaydedilir. Yeni "Örümcek" sayfası.
+
+### Tor devre yönetimi
+- **NEWNYM**: Tor kontrol portu üzerinden yeni devre isteği (bekleme süreli).
+  Tüm aktif motorlar iki tur üst üste düşerse otomatik tetiklenir. Ayarlar'dan elle
+  de istenebilir. `TOR_CONTROL` / `TOR_CONTROL_PASSWORD` ile açılır.
+
+### STIX 2.1 export
+- Bulgular ve IOC'ler STIX 2.1 paketi olarak indirilebilir (MISP/OpenCTI/Sentinel/
+  Splunk uyumlu): url/email/ip/domain/hash/cryptocurrency/card indicator'ları,
+  deterministik kimlikler (yeniden export'ta çift kayıt yok), related-to ilişkileri.
+  Bulgular ekranında STIX butonu; `GET /api/export/stix`.
+
+### Özgün tasarım
+- **61 parçalık el çizimi SVG ikon seti** (stroke tabanlı, tema renkli, currentColor);
+  tüm arayüzdeki ~177 emoji kaldırıldı. Yeni marka logosu (hedef halkası + tarama +
+  düğüm izi) ve eşleşen SVG favicon (/favicon.ico 404'ü giderildi).
+- Navbar, KPI kartları, butonlar, IOC rozetleri, tablo aksiyonları, toast/onay,
+  grafik tooltip'leri ve boş durumlar yeni ikonlarla yeniden çizildi.
+
+### Testler
+Yeni: tor (NEWNYM/cooldown/auth), export (STIX şekli/determinizm), site profil ve
+crawl storage. `go test -race ./...` 12 paket yeşil, `govulncheck` 0.
+
 ## v0.10.1 — 2026-09-19
 
 - Analiz ve Harita sayfaları ortak bileşen setine taşındı (kategori grafiği, IOC özeti,

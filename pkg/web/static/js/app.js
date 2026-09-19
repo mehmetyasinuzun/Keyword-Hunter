@@ -9,6 +9,11 @@
 
     const KH = window.KH = window.KH || {};
 
+    // ── Özgün ikon (JS ile üretilen içerik için) ─────────────────────────
+    KH.icon = function (name, cls) {
+        return '<svg class="ico' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + String(name).replace(/[^a-z0-9-]/gi, '') + '"/></svg>';
+    };
+
     // ── Güvenlik: metin → HTML ───────────────────────────────────────────
     KH.esc = function (v) {
         return String(v == null ? '' : v)
@@ -29,11 +34,11 @@
     }
     KH.toast = function (message, type, ms) {
         type = type || 'info';
-        const icons = { ok: '✅', err: '⛔', warn: '⚠️', info: 'ℹ️' };
+        const icons = { ok: 'check', err: 'offline', warn: 'warn', info: 'info' };
         const el = document.createElement('div');
         el.className = 'kh-toast ' + type;
         el.setAttribute('role', type === 'err' ? 'alert' : 'status');
-        el.innerHTML = '<span>' + (icons[type] || '') + '</span><span>' + KH.esc(message) + '</span><button class="close" aria-label="Kapat">✕</button>';
+        el.innerHTML = '<span>' + KH.icon(icons[type] || 'info') + '</span><span>' + KH.esc(message) + '</span><button class="close" aria-label="Kapat">' + KH.icon('close') + '</button>';
         el.querySelector('.close').onclick = () => el.remove();
         toastHost().appendChild(el);
         setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 320); }, ms || (type === 'err' ? 6000 : 3500));
@@ -164,7 +169,7 @@
             if (e.key === '/') { e.preventDefault(); location.href = '/search'; return; }
             if (e.key === 'g') { g = true; setTimeout(() => g = false, 900); return; }
             if (g) {
-                const map = { d: '/dashboard', r: '/results', h: '/results/graph', a: '/analytics', s: '/search', p: '/scheduled', i: '/watchlist', m: '/monitor', y: '/settings' };
+                const map = { d: '/dashboard', r: '/results', h: '/results/graph', a: '/analytics', s: '/search', p: '/scheduled', i: '/watchlist', m: '/monitor', c: '/crawl', y: '/settings' };
                 if (map[e.key]) { g = false; location.href = map[e.key]; }
             }
         });

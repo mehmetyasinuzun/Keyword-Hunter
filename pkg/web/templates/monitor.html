@@ -21,7 +21,7 @@
     <main class="kh-page wide">
         <div class="kh-header">
             <div><h1 class="kh-title">Arama Motorları</h1><p class="kh-subtitle">Gerçek zamanlı sağlık durumu · her 5 dakikada otomatik kontrol · pasif motorlar aramaya dahil edilmez</p></div>
-            <div class="kh-actions"><span class="kh-hint" id="lastUpdated">Yükleniyor…</span><button class="kh-btn primary" onclick="checkNow()" id="checkBtn">🔄 Şimdi Kontrol Et</button></div>
+            <div class="kh-actions"><span class="kh-hint" id="lastUpdated">Yükleniyor…</span><button class="kh-btn primary" onclick="checkNow()" id="checkBtn">{{icon "refresh"}} Şimdi Kontrol Et</button></div>
         </div>
         <section class="kh-grid cols-4" style="margin-bottom:18px">
             <div class="kh-stat green"><div class="label">Çevrimiçi</div><div class="value" id="sumUp">—</div><div class="sub">son kontrolde yanıt verdi</div></div>
@@ -33,7 +33,7 @@
             <div class="engine-row header"><div>Motor</div><div>Durum</div><div>Yanıt</div><div>Başarı</div><div>Hata</div><div>Ardışık</div><div>Son Kontrol</div><div>Aramada</div></div>
             <div id="enginesBody"><div class="kh-empty"><div class="kh-skel" style="width:40%;margin:0 auto"></div></div></div>
         </section>
-        <div class="kh-alert info" style="margin-top:14px"><span>💡</span><div>Motor listesi Tor üzerinden canlı doğrulanır; captcha isteyen, JavaScript gerektiren veya erişilemeyen motorlar varsayılan olarak <strong>pasif</strong> gelir. Bir motoru <strong>Aramada</strong> anahtarıyla açıp kapatabilirsiniz; değişiklik bir sonraki aramada geçerlidir. Ardışık 3+ hata alan motorları kapatmanız aramayı hızlandırır.</div></div>
+        <div class="kh-alert info" style="margin-top:14px"><span></span><div>Motor listesi Tor üzerinden canlı doğrulanır; captcha isteyen, JavaScript gerektiren veya erişilemeyen motorlar varsayılan olarak <strong>pasif</strong> gelir. Bir motoru <strong>Aramada</strong> anahtarıyla açıp kapatabilirsiniz; değişiklik bir sonraki aramada geçerlidir. Ardışık 3+ hata alan motorları kapatmanız aramayı hızlandırır.</div></div>
     </main>
     <script>
         let notes = {};

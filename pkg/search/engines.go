@@ -2,6 +2,7 @@ package search
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +16,28 @@ type Engine struct {
 	DefaultActive bool
 	// Note motorun durumu hakkında kısa açıklama (UI'da gösterilir).
 	Note string
+	// PageParam sayfalama parametresi (örn. "page"); boşsa motor tek sayfalıdır.
+	// URL'ye "&<PageParam>=N" eklenir (N ≥ 2). 2026-09-19 canlı doğrulama:
+	// Tordex/Tor66/Onionway/Danex/Excavator/OnionLand "page" ile yeni sonuç
+	// döndürdü; Amnesia/TorNet/Torland/Submarine sayfalama desteklemiyor.
+	PageParam string
+}
+
+// PageURL motorun N. sayfa URL'sini döndürür (1 → temel URL). Sayfalama
+// desteklenmiyorsa ve N>1 ise "" döner.
+func (e Engine) PageURL(encodedQuery string, page int) string {
+	base := strings.Replace(e.URL, "{query}", encodedQuery, 1)
+	if page <= 1 {
+		return base
+	}
+	if e.PageParam == "" {
+		return ""
+	}
+	sep := "&"
+	if !strings.Contains(base, "?") {
+		sep = "?"
+	}
+	return base + sep + e.PageParam + "=" + strconv.Itoa(page)
 }
 
 // SearchEngines dark web arama motorları.
@@ -40,16 +63,16 @@ type Engine struct {
 // olarak .onion bağlantıları üreten adresleri ekleyin; DefaultActive'i canlı
 // doğrulamadan sonra true yapın.
 var SearchEngines = []Engine{
-	{Name: "Tordex", URL: "http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/search?query={query}", DefaultActive: true, Note: "En yüksek kapsam"},
+	{Name: "Tordex", PageParam: "page", URL: "http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/search?query={query}", DefaultActive: true, Note: "En yüksek kapsam"},
 	{Name: "Amnesia", URL: "http://amnesia7u5odx5xbwtpnqk3edybgud5bmiagu75bnqx2crntw5kry7ad.onion/search?query={query}", DefaultActive: true},
-	{Name: "Tor66", URL: "http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}", DefaultActive: true},
-	{Name: "Onionway", URL: "http://oniwayzz74cv2puhsgx4dpjwieww4wdphsydqvf5q7eyz4myjvyw26ad.onion/search.php?s={query}", DefaultActive: true},
-	{Name: "OnionLand", URL: "http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}", DefaultActive: true},
+	{Name: "Tor66", PageParam: "page", URL: "http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}", DefaultActive: true},
+	{Name: "Onionway", PageParam: "page", URL: "http://oniwayzz74cv2puhsgx4dpjwieww4wdphsydqvf5q7eyz4myjvyw26ad.onion/search.php?s={query}", DefaultActive: true},
+	{Name: "OnionLand", PageParam: "page", URL: "http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}", DefaultActive: true},
 	{Name: "Torland", URL: "http://torlbmqwtudkorme6prgfpmsnile7ug2zm4u3ejpcncxuhpu4k2j4kyd.onion/index.php?a=search&q={query}", DefaultActive: true},
-	{Name: "Excavator", URL: "http://2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion/search?query={query}", DefaultActive: true},
+	{Name: "Excavator", PageParam: "page", URL: "http://2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion/search?query={query}", DefaultActive: true},
 	{Name: "TorNet", URL: "http://tornetupfu7gcgidt33ftnungxzyfq2pygui5qdoyss34xbgx2qruzid.onion/search?q={query}", DefaultActive: true},
 	{Name: "Submarine", URL: "http://submariwvjhyg7acbrw3thxjxxsatwpieoioenyd4lde6y2rrnzkcwad.onion/?q={query}", DefaultActive: true, Note: "Yeni adres (eski no6m4… yönlendiriyor)"},
-	{Name: "Danex", URL: "http://danexio627wiswvlpt6ejyhpxl5gla5nt2tgvgm2apj2ofrgm44vbeyd.onion/search?q={query}", DefaultActive: true},
+	{Name: "Danex", PageParam: "page", URL: "http://danexio627wiswvlpt6ejyhpxl5gla5nt2tgvgm2apj2ofrgm44vbeyd.onion/search?q={query}", DefaultActive: true},
 	{Name: "Torch", URL: "http://torchdeedp3i2jigzjdmfpn5ttjhthh5wbmda2rr3jvqjg5p77c54dqd.onion/search?query={query}", DefaultActive: false, Note: "Kararsız: doğrulamada zaman aşımı"},
 	{Name: "Ahmia", URL: "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={query}", DefaultActive: false, Note: "Onion aynası arama sonucu döndürmüyor"},
 	{Name: "Torgle", URL: "http://iy3544gmoeclh5de6gez2256v6pjh4omhpqdh2wpeeppjtvqmjhkfwad.onion/torgle/?query={query}", DefaultActive: false, Note: "Captcha"},

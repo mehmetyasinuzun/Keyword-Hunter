@@ -21,18 +21,18 @@
     <main class="kh-page">
         <div class="kh-header">
             <div><h1 class="kh-title">Planlı Taramalar &amp; Bildirimler</h1><p class="kh-subtitle">Sorguları periyodik tara, yalnızca <em>yeni</em> bulguları tespit et, eşik üstünü webhook ile bildir</p></div>
-            <div class="kh-actions"><button class="kh-btn primary" onclick="KH.openModal('newModal')">+ Yeni Tarama Planla</button></div>
+            <div class="kh-actions"><button class="kh-btn primary" onclick="KH.openModal('newModal')">{{icon "plus"}} Yeni Tarama Planla</button></div>
         </div>
 
         <section class="kh-card accent" style="margin-bottom:18px" id="alert-card">
-            <div class="kh-card-title">🔔 Genel Bildirim Merkezi <span class="hint">tüm manuel ve planlı aramalar için tek webhook</span></div>
+            <div class="kh-card-title">{{icon "bell"}} Genel Bildirim Merkezi <span class="hint">tüm manuel ve planlı aramalar için tek webhook</span></div>
             <div class="kh-grid cols-3" style="align-items:end">
                 <div class="kh-field" style="grid-column: span 2"><label class="kh-label">Webhook URL (Slack / Discord / Teams / özel)</label><input class="kh-input mono" id="alert-url" placeholder="https://discord.com/api/webhooks/…" value="{{if .alertConfig}}{{.alertConfig.WebhookURL}}{{end}}"></div>
                 <div class="kh-field"><label class="kh-label">Minimum kritiklik</label><select class="kh-select" id="alert-min">{{$m := 3}}{{if .alertConfig}}{{$m = .alertConfig.MinCriticality}}{{end}}{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $m}}selected{{end}}>Seviye {{$v}}+</option>{{end}}</select></div>
             </div>
             <div class="kh-inline" style="margin-top:12px;justify-content:space-between">
                 <label class="kh-inline" style="cursor:pointer"><span class="kh-switch {{if and .alertConfig .alertConfig.Enabled}}on{{end}}" id="alert-enabled" role="switch" onclick="this.classList.toggle('on')"></span><span style="font-size:.86rem">Bildirimleri etkinleştir</span></label>
-                <div class="kh-inline"><button class="kh-btn subtle" onclick="testAlert()">📨 Test Gönder</button><button class="kh-btn primary" onclick="saveAlert(this)">Kaydet</button></div>
+                <div class="kh-inline"><button class="kh-btn subtle" onclick="testAlert()">{{icon "webhook"}} Test Gönder</button><button class="kh-btn primary" onclick="saveAlert(this)">Kaydet</button></div>
             </div>
             <p class="kh-hint" style="margin-top:8px">Yalnızca genel (dahili olmayan) http(s) adresleri kabul edilir; yönlendirme takip edilmez. Bildirimler eşik üstü <strong>yeni</strong> bulgular varsa gönderilir.</p>
         </section>
@@ -43,7 +43,7 @@
                 {{range .searches}}
                 <div class="kh-card sc-card {{if not .Enabled}}disabled{{end}}" id="sc-{{.ID}}">
                     <div class="kh-inline" style="justify-content:space-between;align-items:flex-start">
-                        <div><div class="sc-query">{{.Query}}</div><div class="kh-inline" style="margin-top:6px">{{if .Enabled}}<span class="kh-badge ok">● aktif</span>{{else}}<span class="kh-badge neutral">⏸ durduruldu</span>{{end}}{{if .WebhookURL}}<span class="kh-badge info" title="Tarama-özel webhook">🔔 webhook</span>{{end}}<span class="kh-badge sev-{{.AlertThreshold}}">eşik {{.AlertThreshold}}+</span></div></div>
+                        <div><div class="sc-query">{{.Query}}</div><div class="kh-inline" style="margin-top:6px">{{if .Enabled}}<span class="kh-badge ok">● aktif</span>{{else}}<span class="kh-badge neutral">⏸ durduruldu</span>{{end}}{{if .WebhookURL}}<span class="kh-badge info" title="Tarama-özel webhook"></span>{{end}}<span class="kh-badge sev-{{.AlertThreshold}}">eşik {{.AlertThreshold}}+</span></div></div>
                         <div style="text-align:right;font-size:.78rem;color:var(--text-muted)">her <strong style="color:var(--accent-primary)">{{.IntervalMinutes}} dk</strong></div>
                     </div>
                     <div class="sc-stats">
@@ -56,8 +56,8 @@
                         {{if .NextRunAt}}<span>⏭ Sonraki: <span class="kh-mono" style="color:var(--accent-primary)">{{formatTime .NextRunAt}}</span></span>{{end}}
                     </div>
                     <div class="sc-actions">
-                        <button class="kh-btn sm ghost" onclick="runNow({{.ID}}, this)">▶ Şimdi</button>
-                        <button class="kh-btn sm {{if .Enabled}}warn{{else}}success{{end}}" onclick="toggleSchedule({{.ID}})">{{if .Enabled}}⏸ Durdur{{else}}▶ Aktif Et{{end}}</button>
+                        <button class="kh-btn sm ghost" onclick="runNow({{.ID}}, this)">{{icon "play"}} Şimdi</button>
+                        <button class="kh-btn sm {{if .Enabled}}warn{{else}}success{{end}}" onclick="toggleSchedule({{.ID}})">{{if .Enabled}}{{icon "pause"}} Durdur{{else}}{{icon "play"}} Aktif Et{{end}}</button>
                         <a class="kh-btn sm subtle" href="/results?q={{.Query}}">Bulgular</a>
                         <button class="kh-btn sm danger" style="margin-left:auto" onclick="deleteSchedule({{.ID}}, {{.Query}})">Sil</button>
                     </div>
@@ -65,10 +65,10 @@
                 {{end}}
             </div>
             {{else}}
-            <section class="kh-card"><div class="kh-empty"><div class="icon">⏰</div><h3>Henüz planlı tarama yok</h3><p>Bir sorguyu düzenli aralıklarla taratın; yeni bulgular diff ile tespit edilir ve eşik üstü olanlar bildirilir.</p><button class="kh-btn primary" style="margin-top:12px" onclick="KH.openModal('newModal')">+ İlk Taramayı Planla</button></div></section>
+            <section class="kh-card"><div class="kh-empty"><div class="icon">{{icon "scheduled"}}</div><h3>Henüz planlı tarama yok</h3><p>Bir sorguyu düzenli aralıklarla taratın; yeni bulgular diff ile tespit edilir ve eşik üstü olanlar bildirilir.</p><button class="kh-btn primary" style="margin-top:12px" onclick="KH.openModal('newModal')">{{icon "plus"}} İlk Taramayı Planla</button></div></section>
             {{end}}
         </div>
-        <div class="kh-alert info" style="margin-top:16px"><span>💡</span><div>Zamanlayıcı her dakika süresi gelen taramaları kontrol eder; aynı anda <strong>tek</strong> tarama çalışır (Tor kaynak koruması). "Şimdi" çalıştırma da bu kuyruğa uyar. Sonuçlar Bulgular ekranına eklenir, yalnızca daha önce görülmemiş URL'ler "yeni" sayılır.</div></div>
+        <div class="kh-alert info" style="margin-top:16px"><span></span><div>Zamanlayıcı her dakika süresi gelen taramaları kontrol eder; aynı anda <strong>tek</strong> tarama çalışır (Tor kaynak koruması). "Şimdi" çalıştırma da bu kuyruğa uyar. Sonuçlar Bulgular ekranına eklenir, yalnızca daha önce görülmemiş URL'ler "yeni" sayılır.</div></div>
     </main>
 
     <div class="kh-modal-overlay" id="newModal"><div class="kh-modal">

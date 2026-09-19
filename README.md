@@ -9,7 +9,7 @@ bulguları **webhook** ile bildiren, tek ikili dosyadan oluşan bir CTI aracıd�
 Tüm dış trafik Tor üzerinden çıkar; arayüz ve varlıklar tamamen yerel (CDN yok), veri
 yalnızca sizin makinenizde SQLite'ta tutulur.
 
-**Sürüm:** v0.10 · Go 1.26 · SQLite (modernc, saf Go, CGO yok) · Gin · D3.js · Chart.js
+**Sürüm:** v0.11 · Go 1.26 · SQLite (modernc, saf Go, CGO yok) · Gin · D3.js · Chart.js
 
 ---
 
@@ -24,7 +24,10 @@ yalnızca sizin makinenizde SQLite'ta tutulur.
 | **Analiz** | Zaman serisi, kaynak/sorgu/kritiklik/kategori dağılımı, domain haritası, sıklık istatistikleri |
 | **Planlı Tarama** | Dakika bazlı periyot, yalnızca *yeni* URL'leri diff'leyen çalışma, tarama-özel + genel webhook (Slack/Discord/Teams), test gönderimi |
 | **İzleme Listesi** | Onion siteleri için periyodik erişilebilirlik, görünür-metin hash'i ile değişiklik tespiti, Cloudflare/captcha/doğrulama ekranı sezimi, uptime %, tetiklenen ve manuel ekran görüntüsü (Docker) + zaman çizelgesi |
-| **Motorlar** | Canlı sağlık, yanıt süresi, başarı oranı, motoru aramaya dahil et / çıkar (gerçekten etkiler) |
+| **Motorlar** | Canlı sağlık, yanıt süresi, başarı oranı, motoru aramaya dahil et / çıkar (gerçekten etkiler); tüm motorlar düşerse otomatik Tor devre yenileme |
+| **Örümcek** | Bir tohum .onion'dan derinlik/sayfa sınırlı, nazik BFS site tarama; keşfedilen sayfalar bulgu olur |
+| **Site Profilleri** | Host bazlı Cookie + User-Agent + JS render (giriş duvarı/captcha aşımı) |
+| **Export** | CSV, JSON ve **STIX 2.1** (MISP/OpenCTI/Sentinel) — IOC'ler ve ilişkiler dahil |
 | **Ayarlar** | Kimlik (bcrypt), oturum süresi, hız limiti anında uygulanır; altyapı ayarları .env'ye yazılır |
 
 ---
@@ -59,7 +62,8 @@ Uygulama saf Go'dur (CGO yok, SQLite gömülü); altı hedefte derlenir ve çal�
 | Platform | Başlat | Not |
 |---|---|---|
 | macOS / Linux | `./run.sh` (veya `make run`) | `.env` yoksa şablondan oluşturur, Tor portunu kontrol eder |
-| Windows (PowerShell) | `.un.ps1` | `winget install GoLang.Go` ile Go kurun |
+| Windows (PowerShell) | `.
+un.ps1` | `winget install GoLang.Go` ile Go kurun |
 | Windows (cmd) | `build_and_run.bat` | `run.ps1`'i çağıran ince sarmalayıcı |
 | Her platform | `./run.sh release` | `dist/` altına 6 platform için ikili üretir |
 

@@ -40,35 +40,35 @@
                 <p class="kh-subtitle">Bulgu hacmi, sınıflandırma kalitesi, motor sağlığı ve son 24 saatin özeti</p>
             </div>
             <div class="kh-actions">
-                <a href="/search" class="kh-btn primary">🔍 Yeni Arama</a>
-                <a href="/scheduled#new" class="kh-btn ghost">⏰ Tarama Planla</a>
-                <a href="/api/export/results?format=csv" class="kh-btn subtle" title="Tüm bulguları CSV indir">⬇ CSV</a>
+                <a href="/search" class="kh-btn primary">{{icon "search"}} Yeni Arama</a>
+                <a href="/scheduled#new" class="kh-btn ghost">{{icon "scheduled"}} Tarama Planla</a>
+                <a href="/api/export/results?format=csv" class="kh-btn subtle" title="Tüm bulguları CSV indir">{{icon "download"}} CSV</a>
             </div>
         </div>
 
         <!-- KPI -->
         <section class="kh-grid cols-4" style="margin-bottom:18px">
-            <div class="kh-stat blue"><div class="label">Toplam Bulgu</div><div class="value">{{.totalResults}}</div><div class="sub">{{.totalURLs}} benzersiz kayıt</div><div class="icon">📊</div></div>
-            <div class="kh-stat purple"><div class="label">Toplam Arama</div><div class="value">{{.totalSearches}}</div><div class="sub">manuel + planlı çalışma</div><div class="icon">🔍</div></div>
-            <div class="kh-stat red"><div class="label">Acil (Sev 5)</div><div class="value">{{index .criticalityStats 5}}</div><div class="sub">{{.highRiskCount}} yüksek risk (Sev 3+)</div><div class="icon">🚨</div></div>
-            <div class="kh-stat green" id="engine-stat"><div class="label">Motor Sağlığı</div><div class="value" id="engine-up">—</div><div class="sub" id="engine-sub">yükleniyor…</div><div class="icon">🛰️</div></div>
+            <div class="kh-stat blue"><div class="label">Toplam Bulgu</div><div class="value">{{.totalResults}}</div><div class="sub">{{.totalURLs}} benzersiz kayıt</div><div class="icon">{{icon "database"}}</div></div>
+            <div class="kh-stat purple"><div class="label">Toplam Arama</div><div class="value">{{.totalSearches}}</div><div class="sub">manuel + planlı çalışma</div><div class="icon">{{icon "search"}}</div></div>
+            <div class="kh-stat red"><div class="label">Acil (Sev 5)</div><div class="value">{{index .criticalityStats 5}}</div><div class="sub">{{.highRiskCount}} yüksek risk (Sev 3+)</div><div class="icon">{{icon "siren"}}</div></div>
+            <div class="kh-stat green" id="engine-stat"><div class="label">Motor Sağlığı</div><div class="value" id="engine-up">—</div><div class="sub" id="engine-sub">yükleniyor…</div><div class="icon">{{icon "monitor"}}</div></div>
         </section>
 
         <!-- Quick actions + health -->
         <section class="kh-grid cols-3" style="margin-bottom:18px">
             <div class="kh-card" style="grid-column: span 2">
-                <div class="kh-card-title">⚡ Hızlı Erişim <span class="hint">klavye: <span class="kh-kbd">/</span> arama · <span class="kh-kbd">g</span>+<span class="kh-kbd">r</span> bulgular</span></div>
+                <div class="kh-card-title">{{icon "lightning"}} Hızlı Erişim <span class="hint">klavye: <span class="kh-kbd">/</span> arama · <span class="kh-kbd">g</span>+<span class="kh-kbd">r</span> bulgular</span></div>
                 <div class="quick">
-                    <a href="/search"><span>🔍 Arama</span><span class="k">Aktif motorlarda eşzamanlı tarama</span></a>
-                    <a href="/results?minCriticality=4"><span>🚨 Kritik Bulgular</span><span class="k">Sev 4-5 filtresiyle</span></a>
-                    <a href="/results?sort=hits"><span>⌖ En Yüksek Sıklık</span><span class="k">Anahtar kelime yoğunluğu</span></a>
-                    <a href="/watchlist"><span>📡 İzleme Listesi</span><span class="k">Uptime, değişiklik, görüntü</span></a>
-                    <a href="/monitor"><span>🛰️ Motorlar</span><span class="k">Sağlık ve aç/kapat</span></a>
-                    <a href="/analytics"><span>📈 Analiz</span><span class="k">Zaman serisi ve dağılımlar</span></a>
+                    <a href="/search"><span>{{icon "search"}} Arama</span><span class="k">Aktif motorlarda eşzamanlı tarama</span></a>
+                    <a href="/results?minCriticality=4"><span>{{icon "siren"}} Kritik Bulgular</span><span class="k">Sev 4-5 filtresiyle</span></a>
+                    <a href="/results?sort=hits"><span>{{icon "target"}} En Yüksek Sıklık</span><span class="k">Anahtar kelime yoğunluğu</span></a>
+                    <a href="/watchlist"><span>{{icon "radar"}} İzleme Listesi</span><span class="k">Uptime, değişiklik, görüntü</span></a>
+                    <a href="/monitor"><span>{{icon "monitor"}} Motorlar</span><span class="k">Sağlık ve aç/kapat</span></a>
+                    <a href="/analytics"><span>{{icon "analytics"}} Analiz</span><span class="k">Zaman serisi ve dağılımlar</span></a>
                 </div>
             </div>
             <div class="kh-card">
-                <div class="kh-card-title">🔬 Sınıflandırma Sağlığı</div>
+                <div class="kh-card-title">{{icon "lab"}} Sınıflandırma Sağlığı</div>
                 <div class="kh-inline" style="gap:16px">
                     <div class="health-ring" style="--p: {{.healthScore}}; --ring: {{if eq .healthColor "green"}}#48bb78{{else if eq .healthColor "yellow"}}#ecc94b{{else}}#f56565{{end}}"><div>%{{.healthScore}}</div></div>
                     <div style="font-size:.8rem;line-height:1.7;color:var(--text-secondary)">
@@ -84,7 +84,7 @@
 
         <section class="kh-grid cols-2" style="margin-bottom:18px">
             <div class="kh-card">
-                <div class="kh-card-title">🔥 Kritiklik Dağılımı <span class="hint">tıkla → filtrele</span></div>
+                <div class="kh-card-title">{{icon "fire"}} Kritiklik Dağılımı <span class="hint">tıkla → filtrele</span></div>
                 <div class="crit-grid">
                     {{range $i := (seq 1 5)}}
                     <a class="crit-cell c{{$i}}" href="/results?minCriticality={{$i}}" title="{{index $.critDescs $i}}">
@@ -94,7 +94,7 @@
                     {{end}}
                 </div>
                 <div class="kh-divider"></div>
-                <div class="kh-card-title" style="margin-bottom:6px">🗂️ Kategori Dağılımı</div>
+                <div class="kh-card-title" style="margin-bottom:6px">{{icon "folder"}} Kategori Dağılımı</div>
                 <div id="cat-bars">
                     {{range $cat, $count := .categoryStats}}
                     <div class="bar-row"><span class="name" title="{{$cat}}">{{$cat}}</span><div class="kh-progress thin"><div data-count="{{$count}}" style="width:0%"></div></div><span class="num">{{$count}}</span></div>
@@ -104,10 +104,10 @@
                 </div>
             </div>
             <div class="kh-card">
-                <div class="kh-card-title">🧬 IOC / Artifact Özeti <span class="hint">etiketleme sırasında çıkarılır</span></div>
+                <div class="kh-card-title">{{icon "dna"}} IOC / Artifact Özeti <span class="hint">etiketleme sırasında çıkarılır</span></div>
                 <div id="artifact-stats"><div class="kh-skel" style="width:60%"></div></div>
                 <div class="kh-divider"></div>
-                <div class="kh-card-title" style="margin-bottom:6px">📡 İzleme Listesi</div>
+                <div class="kh-card-title" style="margin-bottom:6px">{{icon "radar"}} İzleme Listesi</div>
                 <div id="watch-summary"><div class="kh-skel" style="width:40%"></div></div>
             </div>
         </section>
@@ -125,7 +125,7 @@
                 <div id="new-results-feed"><div class="kh-skel"></div><div class="kh-skel" style="width:80%;margin-top:8px"></div></div>
             </div>
             <div class="kh-card">
-                <div class="kh-card-title">🕘 Son Aramalar</div>
+                <div class="kh-card-title">{{icon "clock"}} Son Aramalar</div>
                 {{if .searchHistory}}
                 <div class="kh-table-wrap"><table class="kh-table">
                     <thead><tr><th>Sorgu</th><th class="num">Sonuç</th><th>Zaman</th><th></th></tr></thead>
@@ -136,18 +136,18 @@
                     {{end}}
                     </tbody></table></div>
                 {{else}}
-                <div class="kh-empty"><div class="icon">🔍</div><h3>Henüz arama yapılmadı</h3><a href="/search" class="kh-btn primary" style="margin-top:8px">İlk aramayı başlat</a></div>
+                <div class="kh-empty"><div class="icon">{{icon "search"}}</div><h3>Henüz arama yapılmadı</h3><a href="/search" class="kh-btn primary" style="margin-top:8px">İlk aramayı başlat</a></div>
                 {{end}}
             </div>
         </section>
 
         <section class="kh-card" style="margin-bottom:18px">
-            <div class="kh-card-title">📸 Son Ekran Görüntüleri <span class="hint" id="shots-hint"></span></div>
+            <div class="kh-card-title">{{icon "camera"}} Son Ekran Görüntüleri <span class="hint" id="shots-hint"></span></div>
             <div class="shots" id="shots"></div>
         </section>
 
         <section class="kh-card flush">
-            <div class="kh-card-title">🧾 Son Bulgular <a href="/results" class="kh-btn xs ghost" style="margin-left:auto">Tümünü gör →</a></div>
+            <div class="kh-card-title">{{icon "results"}} Son Bulgular <a href="/results" class="kh-btn xs ghost" style="margin-left:auto">Tümünü gör →</a></div>
             <div class="kh-table-wrap"><table class="kh-table">
                 <thead><tr><th>Başlık / URL</th><th>Kategori</th><th class="center">Kritiklik</th><th class="center">Sıklık</th><th>Tarih</th></tr></thead>
                 <tbody>
@@ -160,7 +160,7 @@
                     <td class="muted kh-mono">{{formatTime .CreatedAt}}</td>
                 </tr>
                 {{else}}
-                <tr><td colspan="5"><div class="kh-empty"><div class="icon">📭</div><h3>Henüz bulgu yok</h3><p>Arama yaparak başlayın.</p></div></td></tr>
+                <tr><td colspan="5"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>Henüz bulgu yok</h3><p>Arama yaparak başlayın.</p></div></td></tr>
                 {{end}}
                 </tbody></table></div>
         </section>
@@ -189,10 +189,10 @@
 
         function loadArtifactStats() {
             var box = document.getElementById('artifact-stats');
-            var names = { email: '✉️ E-posta', bitcoin: '₿ Bitcoin', monero: 'ɱ Monero', ip: '🌐 IP', onion: '🧅 Onion', credit_card: '💳 Kart', phone: '📞 Telefon', ssh_key: '🔑 SSH', api_key: '🗝️ API Key', username: '👤 Kullanıcı', hash: '#️⃣ Hash' };
+            var names = { email: 'mail|E-posta', bitcoin: 'coin|Bitcoin', monero: 'coin|Monero', ip: 'globe|IP', onion: 'onion|Onion', credit_card: 'card|Kart', phone: 'phone|Telefon', ssh_key: 'key|SSH', api_key: 'key|API Key', username: 'user|Kullanıcı', hash: 'hash|Hash' };
             KH.api('/api/artifacts/stats').then(function (d) {
                 if (!d.types || d.types.length === 0) { box.innerHTML = '<p class="kh-hint">Henüz IOC çıkarılmadı. Bulgular sayfasında <strong>Etiketle</strong> çalıştırdığınızda sayfa metninden e-posta, cüzdan, IP, hash ve onion adresleri otomatik toplanır.</p>'; return; }
-                box.innerHTML = '<div class="kh-inline">' + d.types.map(function (t) { return '<a class="kh-chip" href="/results" title="' + KH.esc(t.type) + '">' + KH.esc(names[t.type] || t.type) + ' <span class="count">' + t.count + '</span></a>'; }).join('') + '</div><p class="kh-hint" style="margin-top:8px">Toplam ' + KH.num(d.total) + ' artifact</p>';
+                box.innerHTML = '<div class="kh-inline">' + d.types.map(function (t) { var nm = (names[t.type]||('info|'+t.type)).split('|'); return '<a class="kh-chip" href="/results" title="' + KH.esc(t.type) + '">' + KH.icon(nm[0]) + ' ' + KH.esc(nm[1]) + ' <span class="count">' + t.count + '</span></a>'; }).join('') + '</div><p class="kh-hint" style="margin-top:8px">Toplam ' + KH.num(d.total) + ' artifact</p>';
             }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
         }
 
@@ -215,7 +215,7 @@
                 var s = d.screenshots || [];
                 if (!d.available) hint.textContent = 'ekran görüntüsü yalnızca Docker imajında (chromium) etkin';
                 if (s.length === 0) { box.innerHTML = '<p class="kh-hint">Henüz görüntü yok.</p>'; return; }
-                box.innerHTML = s.map(function (x) { return '<a href="/screenshot/file/' + x.id + '" target="_blank" rel="noopener" title="' + KH.esc(x.targetUrl) + '"><img loading="lazy" src="/screenshot/file/' + x.id + '" alt=""><span class="cap">' + (x.challenge ? '⚠️ ' : '') + KH.esc(KH.short(x.targetUrl.replace(/^https?:\/\//, ''), 30)) + '</span></a>'; }).join('');
+                box.innerHTML = s.map(function (x) { return '<a href="/screenshot/file/' + x.id + '" target="_blank" rel="noopener" title="' + KH.esc(x.targetUrl) + '"><img loading="lazy" src="/screenshot/file/' + x.id + '" alt=""><span class="cap">' + (x.challenge ? KH.icon('warn') + ' ' : '') + KH.esc(KH.short(x.targetUrl.replace(/^https?:\/\//, ''), 30)) + '</span></a>'; }).join('');
             }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
         }
 

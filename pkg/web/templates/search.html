@@ -26,14 +26,20 @@
     <main class="kh-page">
         <div class="kh-header">
             <div><h1 class="kh-title">Dark Web Arama</h1><p class="kh-subtitle">Aktif arama motorlarında eşzamanlı tarama; sonuçlar otomatik sınıflandırılır ve kaydedilir</p></div>
-            <div class="kh-actions"><a href="/monitor" class="kh-btn subtle sm" id="engine-summary">🛰️ motorlar…</a></div>
+            <div class="kh-actions"><a href="/monitor" class="kh-btn subtle sm" id="engine-summary">{{icon "monitor"}} motorlar…</a></div>
         </div>
 
         <section class="kh-card accent" style="margin-bottom:16px">
-            {{if .error}}<div class="kh-alert err" style="margin-bottom:12px">⚠️ {{.error}}</div>{{end}}
+            {{if .error}}<div class="kh-alert err" style="margin-bottom:12px">{{icon "warn"}} {{.error}}</div>{{end}}
             <form method="POST" action="/search" id="searchForm">
                 <div class="search-box">
                     <input class="kh-input" type="text" name="query" id="query" value="{{.query}}" placeholder="ransomware, leak, tc kimlik, şirket adı, e-posta alanı…" required autofocus maxlength="200" autocomplete="off">
+                    <select class="kh-select" name="pages" id="pages" title="Sayfalama destekleyen motorlarda kaç sayfa taransın" style="width:130px;flex:none">
+                        <option value="1"{{if not .pages}} selected{{end}}>1 sayfa</option>
+                        <option value="2"{{if eq .pages 2}} selected{{end}}>2 sayfa</option>
+                        <option value="3"{{if eq .pages 3}} selected{{end}}>3 sayfa</option>
+                        <option value="5"{{if eq .pages 5}} selected{{end}}>5 sayfa</option>
+                    </select>
                     <button type="submit" id="searchBtn" class="kh-btn primary" style="padding:0 26px">Ara</button>
                 </div>
             </form>
@@ -63,7 +69,7 @@
             </div>
             <section class="kh-card">
                 <div class="kh-card-title">Sonuçlar <span class="hint">ilk 20 · kritikliğe göre rozetli</span>
-                    <span style="margin-left:auto" class="kh-inline"><a class="kh-btn xs ghost" href="/results?q={{.query}}">Tümü ({{.totalFound}}) →</a><a class="kh-btn xs subtle" href="/results/graph?q={{.query}}">🗺️ Harita</a><a class="kh-btn xs subtle" href="/scheduled#new" title="Bu sorguyu periyodik tara">⏰ Planla</a></span></div>
+                    <span style="margin-left:auto" class="kh-inline"><a class="kh-btn xs ghost" href="/results?q={{.query}}">Tümü ({{.totalFound}}) →</a><a class="kh-btn xs subtle" href="/results/graph?q={{.query}}">{{icon "map"}} Harita</a><a class="kh-btn xs subtle" href="/scheduled#new" title="Bu sorguyu periyodik tara">{{icon "scheduled"}} Planla</a></span></div>
                 <div style="display:grid;gap:10px">
                     {{range .results}}
                     <div class="result-card">
@@ -72,13 +78,13 @@
                             <a class="u" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{truncate .URL 110}}</a>
                             <div class="meta"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span>{{if .Category}}<span class="kh-badge neutral">{{.Category}}</span>{{end}}<span class="kh-badge neutral mono">{{.Source}}</span>{{if gt .KeywordHits 0}}<span class="kh-badge ok">⌖ {{.KeywordHits}} hit</span>{{end}}</div>
                         </div>
-                        <div><button class="kh-btn xs subtle" onclick="KH.copy('{{.URL}}','URL kopyalandı')" title="Kopyala">📋</button></div>
+                        <div><button class="kh-btn xs subtle" onclick="KH.copy('{{.URL}}','URL kopyalandı')" title="Kopyala">{{icon "copy"}}</button></div>
                     </div>
                     {{end}}
                 </div>
             </section>
             {{else if .query}}
-            <section class="kh-card"><div class="kh-empty"><div class="icon">🕳️</div><h3>Sonuç bulunamadı</h3><p>Motorlar yanıt vermemiş ya da sorgu eşleşmemiş olabilir. <a href="/monitor" style="color:var(--accent-primary)">Motor sağlığını</a> kontrol edin ve daha genel bir terim deneyin.</p></div></section>
+            <section class="kh-card"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>Sonuç bulunamadı</h3><p>Motorlar yanıt vermemiş ya da sorgu eşleşmemiş olabilir. <a href="/monitor" style="color:var(--accent-primary)">Motor sağlığını</a> kontrol edin ve daha genel bir terim deneyin.</p></div></section>
             {{end}}
         </div>
     </main>
@@ -91,13 +97,13 @@
         KH.api('/api/engines').then(d => {
             engines = (d.engines || []).filter(e => e.isActive).map(e => e.name);
             const up = (d.engines || []).filter(e => e.isActive && e.lastStatus === 'up').length;
-            document.getElementById('engine-summary').innerHTML = '🛰️ ' + engines.length + ' aktif motor · ' + up + ' çevrimiçi';
+            document.getElementById('engine-summary').innerHTML = KH.icon('monitor') + ' ' + engines.length + ' aktif motor · ' + up + ' çevrimiçi';
         }).catch(() => { });
 
-        function renderChips() { chipsEl.innerHTML = engines.map(n => { const s = engineState[n] || {}; return `<span class="kh-engine-chip ${s.cls || ''}" title="${KH.esc(s.msg || 'bekliyor')}">${s.cls === 'running' ? '⏳' : s.cls === 'done' ? '✓' : s.cls === 'fail' ? '✗' : s.cls === 'zero' ? '·' : '○'} ${KH.esc(n)}${s.count != null ? ' <b>' + s.count + '</b>' : ''}</span>`; }).join(''); }
+        function renderChips() { chipsEl.innerHTML = engines.map(n => { const s = engineState[n] || {}; return `<span class="kh-engine-chip ${s.cls || ''}" title="${KH.esc(s.msg || 'bekliyor')}">${s.cls === 'running' ? KH.icon('refresh') : s.cls === 'done' ? KH.icon('check') : s.cls === 'fail' ? KH.icon('close') : s.cls === 'zero' ? '·' : '○'} ${KH.esc(n)}${s.count != null ? ' <b>' + s.count + '</b>' : ''}</span>`; }).join(''); }
         function addLog(d) {
             const t = new Date().toLocaleTimeString('tr-TR', { hour12: false });
-            const map = { engine_start: ['SCAN', '#63b3ed'], engine_end: ['DONE', '#76e4f7'], info: ['INFO', '#8b9dc3'], error: ['ERR', '#fc8181'], success: ['OK', '#68d391'], auto_tag: ['TAG', '#b794f4'], auto_tag_error: ['TAG!', '#f6ad55'] };
+            const map = { engine_start: ['SCAN', '#63b3ed'], engine_end: ['DONE', '#76e4f7'], engine_page: ['PAGE', '#805ad5'], info: ['INFO', '#8b9dc3'], error: ['ERR', '#fc8181'], success: ['OK', '#68d391'], auto_tag: ['TAG', '#b794f4'], auto_tag_error: ['TAG!', '#f6ad55'] };
             let [st, col] = map[d.type] || ['LOG', '#5a6a8a'];
             if (d.type === 'engine_end' && /ERROR|FAILED/.test(d.message)) { st = 'FAIL'; col = '#fc8181'; }
             const div = document.createElement('div'); div.className = 'ln';

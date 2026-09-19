@@ -128,11 +128,11 @@ async function quickSearch() {
     const query = input.value.trim();
 
     if (!query) {
-        showToast('⚠️ Sorgu girin', 'warning');
+        showToast('️ Sorgu girin', 'warning');
         return;
     }
 
-    showToast('🔍 Aranıyor...', 'info');
+    showToast('Aranıyor...', 'info');
 
     try {
         const response = await fetch('/search', {
@@ -148,12 +148,12 @@ async function quickSearch() {
             updateQueryLabel(query);
             initGraph(query);
             input.value = '';
-            showToast('✅ Arama tamamlandı', 'success');
+            showToast('Arama tamamlandı', 'success');
         } else {
-            showToast('❌ Arama başarısız', 'error');
+            showToast('Arama başarısız', 'error');
         }
     } catch (error) {
-        showToast('❌ Bağlantı hatası', 'error');
+        showToast('Bağlantı hatası', 'error');
     }
 }
 
@@ -229,7 +229,7 @@ async function initGraph(queryParam = '') {
         finalizeLoadSession(session.requestId);
 
         if (typeof showToast === 'function') {
-            showToast(`❌ Grafik yukleme hatasi: ${message}`, 'error');
+            showToast(`Grafik yukleme hatasi: ${message}`, 'error');
         }
     }
 }
@@ -284,7 +284,7 @@ function finalizeLoadSession(requestId) {
 
 function createGraphRoot() {
     return {
-        name: '🕵️ KeywordHunter',
+        name: 'KeywordHunter',
         type: 'root',
         children: []
     };
@@ -662,11 +662,11 @@ function showEmptyState() {
     emptyDiv.className = 'graph-empty-state flex items-center justify-center h-full absolute inset-0 pointer-events-none';
     emptyDiv.innerHTML = `
         <div class="text-center text-gray-400 pointer-events-auto">
-            <p class="text-6xl mb-4">📭</p>
+            <svg class="ico xl" style="width:52px;height:52px;opacity:.4" aria-hidden="true"><use href="#i-empty"/></svg>
             <p class="text-xl mb-2">Henüz sonuç bulunamadı</p>
             <p class="mb-4">Arama yaparak başlayın</p>
             <a href="/search" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg inline-block">
-                🔍 Arama Yap
+                Arama Yap
             </a>
         </div>
     `;

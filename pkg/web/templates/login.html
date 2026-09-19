@@ -172,29 +172,30 @@
 </head>
 
 <body>
+    {{template "icons" .}}
     <div class="auth-shell">
         <main class="auth-card">
             <div class="auth-brand">
-                <div class="auth-logo">🕵️</div>
+                <div class="auth-logo"><svg style="width:34px;height:34px" aria-hidden="true"><use href="#i-brand"/></svg></div>
                 <h1 class="auth-title">KeywordHunter</h1>
                 <p class="auth-subtitle">Dark Web Tehdit İstihbarat Platformu</p>
             </div>
 
             {{if eq .error "locked"}}
             <div class="auth-alert error" role="alert">
-                <span aria-hidden="true">🔒</span>
+                <span aria-hidden="true">{{icon "shield"}}</span>
                 <span>Çok fazla başarısız deneme. <span id="lock-wait">{{.wait}}</span> saniye sonra tekrar deneyin.</span>
             </div>
             {{else if .error}}
             <div class="auth-alert error" role="alert">
-                <span aria-hidden="true">⚠️</span>
+                <span aria-hidden="true">{{icon "warn"}}</span>
                 <span>Kullanıcı adı veya şifre hatalı.</span>
             </div>
             {{end}}
 
             {{if .message}}
             <div class="auth-alert info" role="status">
-                <span aria-hidden="true">ℹ️</span>
+                <span aria-hidden="true">{{icon "info"}}</span>
                 <span>{{if eq .message "session"}}Oturum başlatılamadı. Lütfen tekrar deneyin.{{else}}{{.message}}{{end}}</span>
             </div>
             {{end}}
@@ -214,7 +215,7 @@
                         <input class="field-input" id="password" name="password" type="password"
                             autocomplete="current-password" required placeholder="••••••••" style="padding-right: 2.5rem;">
                         <button type="button" class="pw-toggle" id="pwToggle" aria-label="Şifreyi göster/gizle"
-                            onclick="togglePw()">👁️</button>
+                            onclick="togglePw()">{{icon "eye"}}</button>
                     </div>
                 </div>
 
@@ -222,7 +223,7 @@
             </form>
 
             <p class="auth-footer">
-                <span class="dot">●</span> Yetkili analistlere özel · CTI Operasyon Konsolu · v{{version}}
+<span class="dot">●</span> Yetkili analistlere özel · CTI Operasyon Konsolu · v{{version}}
             </p>
             <p class="auth-footer" id="caps-warn" style="display:none;color:#f6e05e">⇪ Caps Lock açık</p>
         </main>
@@ -238,13 +239,7 @@
         function togglePw() {
             var input = document.getElementById('password');
             var btn = document.getElementById('pwToggle');
-            if (input.type === 'password') {
-                input.type = 'text';
-                btn.textContent = '🙈';
-            } else {
-                input.type = 'password';
-                btn.textContent = '👁️';
-            }
+            input.type = input.type === 'password' ? 'text' : 'password';
         }
     </script>
 </body>

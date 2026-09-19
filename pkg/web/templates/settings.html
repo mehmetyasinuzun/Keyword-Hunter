@@ -40,19 +40,38 @@
                     <div class="kh-field"><label class="kh-label">Log dizini</label><input id="log-dir" class="kh-input mono" required></div>
                 </div>
             </section>
-            <div class="kh-inline"><button type="submit" id="save-btn" class="kh-btn primary">Kaydet</button><button type="button" id="reload-btn" class="kh-btn subtle">Yeniden Yükle</button><span class="spacer" style="flex:1"></span><a class="kh-btn subtle" href="/healthz" target="_blank">🩺 /healthz</a></div>
+            <div class="kh-inline"><button type="submit" id="save-btn" class="kh-btn primary">Kaydet</button><button type="button" id="reload-btn" class="kh-btn subtle">Yeniden Yükle</button><span class="spacer" style="flex:1"></span><a class="kh-btn subtle" href="/healthz" target="_blank">{{icon "pulse"}} /healthz</a></div>
         </form>
+
+        <section class="kh-card" style="margin-top:18px">
+            <div class="sec-title">Tor Devresi <span class="hint" id="tor-hint" style="font-weight:400;color:var(--text-muted)"></span></div>
+            <div class="kh-inline"><button class="kh-btn ghost" id="newnym-btn" onclick="newNym(false)">{{icon "refresh"}} Yeni Devre İste (NEWNYM)</button><span class="kh-hint" id="tor-status">durum yükleniyor…</span></div>
+            <p class="kh-hint" style="margin-top:8px">Çıkış düğümleri engellendiğinde yeni bir Tor devresi ister. Etkinleştirmek için <code>.env</code>: <code>TOR_CONTROL=127.0.0.1:9051</code> ve <code>TOR_CONTROL_PASSWORD=…</code> (Tor Browser: 9151).</p>
+        </section>
+
+        <section class="kh-card" style="margin-top:18px">
+            <div class="sec-title">Site Profilleri <span class="hint" id="render-hint" style="font-weight:400;color:var(--text-muted)"></span></div>
+            <p class="kh-hint" style="margin-bottom:12px">Giriş duvarı / captcha olan siteler için tarayıcınızdan kopyaladığınız <strong>Cookie</strong> başlığını ve gerekiyorsa <strong>JS render</strong>'ı ayarlayın. Etiketleme/derinleştirme bu profili kullanır. Çerezler yalnızca bu sunucuda saklanır.</p>
+            <div class="kh-grid cols-2" style="align-items:end;margin-bottom:12px">
+                <div class="kh-field"><label class="kh-label">Host (.onion)</label><input class="kh-input sm mono" id="sp-host" placeholder="abcd…xyz.onion"></div>
+                <div class="kh-field"><label class="kh-label">User-Agent (opsiyonel)</label><input class="kh-input sm" id="sp-ua" placeholder="Mozilla/5.0 …"></div>
+                <div class="kh-field" style="grid-column:span 2"><label class="kh-label">Cookie başlığı</label><input class="kh-input sm mono" id="sp-cookies" placeholder="session=abc; token=xyz"></div>
+                <label class="kh-inline" style="cursor:pointer"><input type="checkbox" id="sp-render"><span style="font-size:.86rem">JS render (headless tarayıcı ile yükle)</span></label>
+                <div class="kh-inline" style="justify-content:flex-end"><button class="kh-btn primary sm" onclick="saveProfile(this)">Profili Kaydet</button></div>
+            </div>
+            <div class="kh-table-wrap"><table class="kh-table"><thead><tr><th>Host</th><th>Çerez</th><th>JS</th><th>UA</th><th>Güncelleme</th><th></th></tr></thead><tbody id="sp-body"><tr><td colspan="6" class="kh-hint">yükleniyor…</td></tr></tbody></table></div>
+        </section>
     </main>
     <script>
         const form = document.getElementById('settings-form'), saveBtn = document.getElementById('save-btn');
-        function showAlert(msg, type) { const a = document.getElementById('settings-alert'); a.style.display = ''; a.className = 'kh-alert ' + type; a.textContent = msg; }
+        function showAlert(msg, type) { const a = document.getElementById('settings-alert'); a.style.display = ''; a.className = 'kh-alert ' + (type === 'error' ? 'err' : type === 'success' ? 'ok' : type); a.textContent = msg; }
         function fill(s) {
             document.getElementById('admin-user').value = s.adminUser || ''; document.getElementById('admin-pass').value = '';
             document.getElementById('tor-proxy').value = s.torProxy || ''; document.getElementById('db-path').value = s.dbPath || ''; document.getElementById('web-addr').value = s.webAddr || ''; document.getElementById('log-dir').value = s.logDir || '';
             document.getElementById('session-ttl').value = s.sessionTtlHours || 24; document.getElementById('rate-rps').value = s.rateLimitRps || 25; document.getElementById('rate-burst').value = s.rateLimitBurst || 80;
             document.getElementById('secure-cookies').checked = !!s.secureCookies; document.getElementById('env-path').textContent = s.envFilePath || '.env';
             document.getElementById('ver').textContent = 'v' + (s.version || '');
-            const ps = document.getElementById('pw-storage'); ps.textContent = s.passwordStorage === 'bcrypt' ? '🔒 parola: bcrypt' : '⚠️ parola: düz metin'; ps.className = 'kh-badge ' + (s.passwordStorage === 'bcrypt' ? 'ok' : 'warn'); ps.title = s.passwordStorage === 'bcrypt' ? 'Parola hash olarak saklanıyor' : 'Parola .env içinde düz metin; buradan yeni parola verirseniz hash\'e dönüşür';
+            const ps = document.getElementById('pw-storage'); ps.innerHTML = (s.passwordStorage === 'bcrypt' ? KH.icon('shield') + ' parola: bcrypt' : KH.icon('warn') + ' parola: düz metin'); ps.className = 'kh-badge ' + (s.passwordStorage === 'bcrypt' ? 'ok' : 'warn'); ps.title = s.passwordStorage === 'bcrypt' ? 'Parola hash olarak saklanıyor' : 'Parola .env içinde düz metin; buradan yeni parola verirseniz hash\'e dönüşür';
         }
         async function load() { const d = await KH.api('/api/settings/env'); fill(d.settings); }
         document.getElementById('admin-pass').addEventListener('input', e => { const v = e.target.value; let s = 0; if (v.length >= 8) s++; if (v.length >= 12) s++; if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++; if (/\d/.test(v)) s++; if (/[^\w]/.test(v)) s++; const bar = document.getElementById('pw-bar'); bar.style.width = (v ? s * 20 : 0) + '%'; bar.style.background = s <= 2 ? '#f56565' : s <= 3 ? '#ecc94b' : '#48bb78'; });
@@ -65,6 +84,50 @@
         });
         document.getElementById('reload-btn').addEventListener('click', () => load().then(() => KH.toast('Yeniden yüklendi', 'ok')).catch(e => showAlert(e.message, 'err')));
         load().catch(e => showAlert(e.message, 'err'));
+
+        // ── Tor devresi ──
+        function loadTor() {
+            KH.api('/api/tor/status').then(d => {
+                const st = document.getElementById('tor-status'), btn = document.getElementById('newnym-btn');
+                if (!d.configured) { st.textContent = 'yapılandırılmamış'; btn.disabled = true; document.getElementById('tor-hint').textContent = '(TOR_CONTROL ayarlı değil)'; return; }
+                document.getElementById('tor-hint').textContent = d.addr;
+                if (d.canRenew) { st.textContent = d.lastRenew && new Date(d.lastRenew).getFullYear() > 1971 ? 'son yenileme: ' + KH.ago(d.lastRenew) : 'hazır'; btn.disabled = false; }
+                else { st.textContent = d.waitSeconds + ' sn sonra tekrar denenebilir'; btn.disabled = true; setTimeout(loadTor, Math.min(d.waitSeconds, 30) * 1000); }
+                if (d.lastError) st.textContent += ' · hata: ' + d.lastError;
+            }).catch(() => { document.getElementById('tor-status').textContent = 'durum alınamadı'; });
+        }
+        async function newNym(force) {
+            const btn = document.getElementById('newnym-btn'); KH.busy(btn, true, 'İsteniyor…');
+            try { await KH.api('/api/tor/newnym', { method: 'POST', body: { force } }); KH.toast('Yeni Tor devresi istendi', 'ok'); } catch (e) { KH.toast(e.message, 'warn'); } finally { KH.busy(btn, false); loadTor(); }
+        }
+        loadTor();
+
+        // ── Site profilleri ──
+        function loadProfiles() {
+            KH.api('/api/site-profiles').then(d => {
+                document.getElementById('render-hint').textContent = d.renderAvailable ? '(JS render etkin)' : '(JS render için Chromium gerekli — Docker imajında hazır)';
+                const b = document.getElementById('sp-body'); const ps = d.profiles || [];
+                b.innerHTML = ps.length ? ps.map(p => `<tr>
+                    <td class="kh-mono" style="font-size:.76rem">${KH.esc(p.host)}</td>
+                    <td>${p.hasCookies ? '<span class="kh-badge ok" title="' + KH.esc(p.cookiePeek) + '">' + KH.icon('check') + ' ' + KH.esc(KH.short(p.cookiePeek, 30)) + '</span>' : '<span class="kh-hint">—</span>'}</td>
+                    <td>${p.renderJs ? '<span class="kh-badge info">JS</span>' : '<span class="kh-hint">—</span>'}</td>
+                    <td class="kh-hint" style="font-size:.72rem">${KH.esc(KH.short(p.userAgent || '—', 26))}</td>
+                    <td class="muted kh-mono" style="font-size:.72rem">${KH.ago(p.updatedAt)}</td>
+                    <td><button class="kh-btn xs subtle" onclick="editProfile('${KH.esc(p.host)}',${p.renderJs})">Düzenle</button> <button class="kh-btn xs danger" onclick="delProfile('${KH.esc(p.host)}')">Sil</button></td>
+                </tr>`).join('') : '<tr><td colspan="6" class="kh-hint">Henüz profil yok.</td></tr>';
+            }).catch(() => { document.getElementById('sp-body').innerHTML = '<tr><td colspan="6" class="kh-hint">Alınamadı.</td></tr>'; });
+        }
+        function editProfile(host, render) { document.getElementById('sp-host').value = host; document.getElementById('sp-render').checked = render; document.getElementById('sp-host').scrollIntoView({ behavior: 'smooth' }); KH.toast('Çerez ve UA gizli tutulur; yeniden girip kaydedin', 'info'); }
+        async function saveProfile(btn) {
+            const host = document.getElementById('sp-host').value.trim(); if (!host) { KH.toast('Host girin', 'warn'); return; }
+            KH.busy(btn, true, 'Kaydediliyor…');
+            try { await KH.api('/api/site-profiles', { method: 'POST', body: { host, cookies: document.getElementById('sp-cookies').value.trim(), userAgent: document.getElementById('sp-ua').value.trim(), renderJs: document.getElementById('sp-render').checked } });
+                KH.toast('Profil kaydedildi', 'ok'); ['sp-host','sp-cookies','sp-ua'].forEach(i => document.getElementById(i).value = ''); document.getElementById('sp-render').checked = false; loadProfiles();
+            } catch (e) { KH.toast(e.message, 'err'); } finally { KH.busy(btn, false); }
+        }
+        async function delProfile(host) { if (!await KH.confirm({ title: 'Profili sil', message: host + ' profili silinecek.', okText: 'Sil', danger: true })) return; try { await KH.api('/api/site-profiles/delete', { method: 'POST', body: { host } }); KH.toast('Silindi', 'ok'); loadProfiles(); } catch (e) { KH.toast(e.message, 'err'); } }
+        loadProfiles();
+
     </script>
 </body>
 </html>

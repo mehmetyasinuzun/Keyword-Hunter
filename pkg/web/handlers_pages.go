@@ -27,6 +27,15 @@ func (s *Server) handleIndex(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/login")
 }
 
+// brandFaviconSVG yeni marka logosuyla uyumlu favicon (hedef halkası + tarama + düğüm).
+const brandFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#63b3ed"/><stop offset="1" stop-color="#805ad5"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="#07080d"/><circle cx="14" cy="14" r="7.5" fill="none" stroke="url(#g)" stroke-width="2.2"/><circle cx="14" cy="14" r="2.3" fill="url(#g)"/><path d="M14 4.5V7M14 21v2.5M4.5 14H7M21 14h2.5" stroke="url(#g)" stroke-width="1.8" stroke-linecap="round"/><path d="M19.5 19.5l6 6" stroke="url(#g)" stroke-width="2.4" stroke-linecap="round"/></svg>`
+
+// handleFavicon marka SVG favicon'unu servis eder (tarayıcının /favicon.ico probu için).
+func (s *Server) handleFavicon(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=604800")
+	c.Data(http.StatusOK, "image/svg+xml", []byte(brandFaviconSVG))
+}
+
 // handleHealthz kimlik doğrulaması gerektirmeyen sağlık ucu (Docker/izleme için).
 func (s *Server) handleHealthz(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
@@ -158,11 +167,11 @@ func (s *Server) handleDashboard(c *gin.Context) {
 
 	// Kritiklik tanımları
 	critDescs := map[int]string{
-		1: "🟢 Seviye 1 (Düşük): Genel forum tartışmaları, haberler ve düşük riskli içerikler.",
-		2: "🔵 Seviye 2 (Orta): Şüpheli aktiviteler, doğrulanmamış sızıntı iddiaları.",
-		3: "🟡 Seviye 3 (Yüksek): Doğrulanmış veri sızıntıları, hassas kişisel bilgiler (PII).",
-		4: "🟠 Seviye 4 (Kritik): Veritabanı sızıntıları, kredi kartı bilgileri, illegal ticaret.",
-		5: "🔴 Seviye 5 (Acil): Ransomware, 0day exploitler, devlet sırları ve çok yüksek riskli içerikler.",
+		1: "Seviye 1 (Düşük): Genel forum tartışmaları, haberler ve düşük riskli içerikler.",
+		2: "Seviye 2 (Orta): Şüpheli aktiviteler, doğrulanmamış sızıntı iddiaları.",
+		3: "Seviye 3 (Yüksek): Doğrulanmış veri sızıntıları, hassas kişisel bilgiler (PII).",
+		4: "Seviye 4 (Kritik): Veritabanı sızıntıları, kredi kartı bilgileri, illegal ticaret.",
+		5: "Seviye 5 (Acil): Ransomware, 0day exploitler, devlet sırları ve çok yüksek riskli içerikler.",
 	}
 
 	// ═══════════════════════════════════════════════════════════════════════
@@ -291,6 +300,8 @@ func (s *Server) handleSearchPage(c *gin.Context) {
 	})
 }
 
+// (pages parametresi POST /search içinde okunur)
+
 // SearchStatus arama durumu
 type SearchStatus struct {
 	Query       string
@@ -327,8 +338,12 @@ func (s *Server) handleSearch(c *gin.Context) {
 		knownURLs = map[string]bool{}
 	}
 
+	pages, _ := strconv.Atoi(c.PostForm("pages"))
+	if pages < 1 {
+		pages = 1
+	}
 	startTime := time.Now()
-	results := s.searcher.SearchAll(ctx, query)
+	results := s.searcher.SearchAllPages(ctx, query, pages)
 	elapsed := time.Since(startTime)
 
 	// Sonuçları kaydet (KeywordHits ile birlikte)
@@ -372,6 +387,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 		"newSaved":   savedCount,
 		"totalHits":  totalHits,
 		"duration":   elapsed.Round(time.Millisecond).String(),
+		"pages":      pages,
 	})
 }
 

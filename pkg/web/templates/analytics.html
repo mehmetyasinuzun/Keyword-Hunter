@@ -11,24 +11,24 @@
     <main class="kh-page wide">
         <div class="kh-header">
             <div><h1 class="kh-title">Analiz Merkezi</h1><p class="kh-subtitle">Zaman serisi, kaynak/sorgu/kritiklik/kategori dağılımları, domain haritası ve IOC özeti</p></div>
-            <div class="kh-actions"><a class="kh-btn subtle" id="export-link" href="/api/export/results?format=csv">⬇ CSV</a><button class="kh-btn ghost" onclick="loadAnalyticsData()">↻ Yenile</button></div>
+            <div class="kh-actions"><a class="kh-btn subtle" id="export-link" href="/api/export/results?format=csv">{{icon "download"}} CSV</a><button class="kh-btn ghost" onclick="loadAnalyticsData()">{{icon "refresh"}} Yenile</button></div>
         </div>
 
         <section class="kh-card" style="margin-bottom:16px">
-            <div class="kh-card-title">🔎 Sorgu Filtresi <span class="hint">bir sorgu seçince tüm grafikler o sorguya odaklanır</span><button class="kh-btn xs subtle" style="margin-left:auto" onclick="clearFilters()">Temizle</button></div>
+            <div class="kh-card-title">{{icon "filter"}} Sorgu Filtresi <span class="hint">bir sorgu seçince tüm grafikler o sorguya odaklanır</span><button class="kh-btn xs subtle" style="margin-left:auto" onclick="clearFilters()">Temizle</button></div>
             <div id="filter-chips" class="an-filters"><div class="kh-skel" style="width:40%"></div></div>
         </section>
 
         <section class="kh-grid cols-4" style="margin-bottom:16px">
-            <div class="kh-stat blue"><div class="label">Benzersiz Site</div><div class="value" id="stat-total">—</div><div class="sub" id="stat-total-sub">tüm sorgular</div><div class="icon">🌐</div></div>
-            <div class="kh-stat green"><div class="label">Toplam Sıklık</div><div class="value" id="stat-freq">—</div><div class="sub">anahtar kelime eşleşmesi</div><div class="icon">📊</div></div>
-            <div class="kh-stat cyan"><div class="label">Sıklık Oranı</div><div class="value" id="stat-rate">—</div><div class="sub">en az 1 eşleşmeli kayıt</div><div class="icon">📈</div></div>
-            <div class="kh-stat amber"><div class="label">Yüksek Risk</div><div class="value" id="stat-high">—</div><div class="sub">Sev 3+ kayıt</div><div class="icon">🚨</div></div>
+            <div class="kh-stat blue"><div class="label">Benzersiz Site</div><div class="value" id="stat-total">—</div><div class="sub" id="stat-total-sub">tüm sorgular</div><div class="icon">{{icon "globe"}}</div></div>
+            <div class="kh-stat green"><div class="label">Toplam Sıklık</div><div class="value" id="stat-freq">—</div><div class="sub">anahtar kelime eşleşmesi</div><div class="icon">{{icon "analytics"}}</div></div>
+            <div class="kh-stat cyan"><div class="label">Sıklık Oranı</div><div class="value" id="stat-rate">—</div><div class="sub">en az 1 eşleşmeli kayıt</div><div class="icon">{{icon "pulse"}}</div></div>
+            <div class="kh-stat amber"><div class="label">Yüksek Risk</div><div class="value" id="stat-high">—</div><div class="sub">Sev 3+ kayıt</div><div class="icon">{{icon "siren"}}</div></div>
         </section>
 
         <div class="chart-row full">
             <div class="chart-card">
-                <div class="chart-header"><h3 class="chart-title" id="query-chart-title">📊 Sorgu Bazlı Sonuç Dağılımı</h3>
+                <div class="chart-header"><h3 class="chart-title" id="query-chart-title">{{icon "analytics"}} Sorgu Bazlı Sonuç Dağılımı</h3>
                     <div class="chart-controls" id="query-chart-controls" style="display:none"><button class="chart-control-btn" data-interval="hour" onclick="changeQueryChartInterval('hour')">Saatlik</button><button class="chart-control-btn active" data-interval="day" onclick="changeQueryChartInterval('day')">Günlük</button><button class="chart-control-btn" data-interval="week" onclick="changeQueryChartInterval('week')">Haftalık</button></div></div>
                 <div class="chart-container large"><canvas id="queryBarChart"></canvas></div>
             </div>
@@ -36,25 +36,25 @@
 
         <div class="chart-row full">
             <div class="chart-card">
-                <div class="chart-header"><h3 class="chart-title" id="timeline-title">🕒 Zaman Tüneli <span class="hint">motor bazlı</span></h3>
+                <div class="chart-header"><h3 class="chart-title" id="timeline-title">{{icon "clock"}} Zaman Tüneli <span class="hint">motor bazlı</span></h3>
                     <div class="chart-controls"><button class="chart-control-btn" data-interval="hour" onclick="changeInterval('hour')">Saatlik</button><button class="chart-control-btn active" data-interval="day" onclick="changeInterval('day')">Günlük</button><button class="chart-control-btn" data-interval="week" onclick="changeInterval('week')">Haftalık</button></div></div>
                 <div class="chart-container large"><canvas id="timelineChart"></canvas></div>
             </div>
         </div>
 
         <div class="chart-row thirds">
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">🔎 Sorgu Dağılımı</h3></div><div class="chart-container small"><canvas id="queryPieChart"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">🛰️ Kaynak Dağılımı</h3></div><div class="chart-container small"><canvas id="sourcePieChart"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">🔥 Kritiklik Dağılımı</h3></div><div class="chart-container small"><canvas id="criticalityChart"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "search"}} Sorgu Dağılımı</h3></div><div class="chart-container small"><canvas id="queryPieChart"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "monitor"}} Kaynak Dağılımı</h3></div><div class="chart-container small"><canvas id="sourcePieChart"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "fire"}} Kritiklik Dağılımı</h3></div><div class="chart-container small"><canvas id="criticalityChart"></canvas></div></div>
         </div>
 
         <div class="chart-row halves">
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">🗂️ Kategori Dağılımı</h3></div><div class="chart-container medium"><canvas id="categoryChart"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">🧬 IOC / Artifact Özeti <span class="hint">etiketleme ile çıkarılır</span></h3></div><div id="ioc-grid" class="ioc-grid"><div class="kh-skel"></div></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "folder"}} Kategori Dağılımı</h3></div><div class="chart-container medium"><canvas id="categoryChart"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "dna"}} IOC / Artifact Özeti <span class="hint">etiketleme ile çıkarılır</span></h3></div><div id="ioc-grid" class="ioc-grid"><div class="kh-skel"></div></div></div>
         </div>
 
         <section class="chart-card">
-            <div class="chart-header"><h3 class="chart-title">🗺️ Domain Haritası <span class="hint" id="domain-count">0 domain</span></h3><input class="kh-input sm" id="domain-filter" placeholder="domain filtrele…" style="width:220px" oninput="renderDomains()"></div>
+            <div class="chart-header"><h3 class="chart-title">{{icon "map"}} Domain Haritası <span class="hint" id="domain-count">0 domain</span></h3><input class="kh-input sm" id="domain-filter" placeholder="domain filtrele…" style="width:220px" oninput="renderDomains()"></div>
             <div id="domain-list" class="domain-list"><div class="kh-skel"></div></div>
         </section>
     </main>

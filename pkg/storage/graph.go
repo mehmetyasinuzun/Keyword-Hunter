@@ -139,7 +139,7 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 
 	// Ana root node
 	root := &GraphNode{
-		Name:     "🕵️ KeywordHunter",
+		Name:     "KeywordHunter",
 		Type:     "root",
 		Children: []*GraphNode{},
 	}
@@ -207,7 +207,7 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 	// Her sorgu için sonuçları grupla
 	for _, q := range queries {
 		queryNode := &GraphNode{
-			Name:     "🔍 " + q,
+			Name:     q,
 			Type:     "query",
 			Children: []*GraphNode{},
 		}
@@ -291,7 +291,7 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 		for _, engine := range engineNames {
 			results := engineResults[engine]
 			engineNode := &GraphNode{
-				Name:     "🌐 " + engine,
+				Name:     engine,
 				Type:     "engine",
 				Children: results,
 			}

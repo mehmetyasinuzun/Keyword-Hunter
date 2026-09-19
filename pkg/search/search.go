@@ -131,12 +131,28 @@ func New(torProxy string) (*Searcher, error) {
 	}, nil
 }
 
-// SearchAll tüm arama motorlarında arama yapar
+// MaxSearchPages motor başına istenebilecek en fazla sayfa.
+const MaxSearchPages = 5
+
+// SearchAll tüm arama motorlarında (ilk sayfa) arama yapar.
 func (s *Searcher) SearchAll(ctx context.Context, query string) []Result {
+	return s.SearchAllPages(ctx, query, 1)
+}
+
+// SearchAllPages aktif motorlarda arama yapar; sayfalama destekleyen motorlarda
+// `pages` sayfaya kadar iner (sayfalar sırayla, motorlar paralel). Bir sayfa
+// yeni sonuç üretmezse o motor için durur.
+func (s *Searcher) SearchAllPages(ctx context.Context, query string, pages int) []Result {
 	var results []Result
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	startTime := time.Now()
+	if pages < 1 {
+		pages = 1
+	}
+	if pages > MaxSearchPages {
+		pages = MaxSearchPages
+	}
 
 	engines := s.ActiveEngines()
 	logger.SearchStarted(query, len(engines))
@@ -161,6 +177,34 @@ func (s *Searcher) SearchAll(ctx context.Context, query string) []Result {
 			shared.Streamer.BroadcastLog("engine_start", "Starting search...", eng.Name)
 
 			engineResults, err := s.searchEngine(ctx, eng, query)
+			if err == nil && pages > 1 && eng.PageParam != "" {
+				seen := make(map[string]bool, len(engineResults))
+				for _, r := range engineResults {
+					seen[r.URL] = true
+				}
+				for page := 2; page <= pages; page++ {
+					if ctx.Err() != nil {
+						break
+					}
+					more, perr := s.searchEnginePage(ctx, eng, query, page)
+					if perr != nil {
+						logger.Debug("ENGINE PAGE %d ERROR: %s - %v", page, eng.Name, perr)
+						break
+					}
+					added := 0
+					for _, r := range more {
+						if !seen[r.URL] {
+							seen[r.URL] = true
+							engineResults = append(engineResults, r)
+							added++
+						}
+					}
+					shared.Streamer.BroadcastLog("engine_page", fmt.Sprintf("sayfa %d: +%d", page, added), eng.Name)
+					if added == 0 {
+						break
+					}
+				}
+			}
 			if err != nil {
 				logger.SearchEngineResult(eng.Name, 0, err)
 				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("SEARCH ENGINE ERROR: %v", err), eng.Name)
@@ -196,10 +240,17 @@ func (s *Searcher) SearchAll(ctx context.Context, query string) []Result {
 	return deduped
 }
 
-// searchEngine tek bir arama motorunda arama yapar - retry ile
+// searchEngine tek bir arama motorunda (ilk sayfa) arama yapar - retry ile
 func (s *Searcher) searchEngine(ctx context.Context, engine Engine, query string) ([]Result, error) {
-	// URL'yi oluştur
-	searchURL := strings.Replace(engine.URL, "{query}", url.QueryEscape(query), 1)
+	return s.searchEnginePage(ctx, engine, query, 1)
+}
+
+// searchEnginePage motorun N. sayfasını çeker.
+func (s *Searcher) searchEnginePage(ctx context.Context, engine Engine, query string, page int) ([]Result, error) {
+	searchURL := engine.PageURL(url.QueryEscape(query), page)
+	if searchURL == "" {
+		return nil, fmt.Errorf("%s sayfalama desteklemiyor", engine.Name)
+	}
 
 	// HTTP request oluştur
 	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)

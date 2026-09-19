@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    {{template "head" .}}
+    <title>KeywordHunter - Site Tarama (Örümcek)</title>
+</head>
+<body>
+    {{template "navbar" .}}
+    <main class="kh-page">
+        <div class="kh-header">
+            <div><h1 class="kh-title">Site Tarama (Örümcek)</h1><p class="kh-subtitle">Bir tohum .onion adresinden başlayıp bağlantıları izleyerek siteyi derinlemesine tarar; keşfedilen sayfalar bulgu olarak kaydedilir</p></div>
+            <div class="kh-actions"><button class="kh-btn primary" onclick="KH.openModal('newCrawl')">{{icon "plus"}} Yeni Tarama</button></div>
+        </div>
+
+        <div class="kh-alert info" style="margin-bottom:16px"><span></span><div>Örümcek <strong>tek işçi</strong> ile, istekler arası gecikmeyle nazikçe çalışır (hedef siteyi yormaz). Aynı anda tek tarama; en fazla <strong>3 seviye</strong> derinlik ve <strong>300 sayfa</strong>. JS render ve site profili (çerez) etkinse giriş duvarlı sayfalara da erişebilir.</div></div>
+
+        <section class="kh-card flush">
+            <div class="kh-card-title" style="padding:16px 20px 0">Tarama Geçmişi <button class="kh-btn xs subtle" style="margin-left:auto" onclick="loadJobs()">↻ Yenile</button></div>
+            <div class="kh-table-wrap"><table class="kh-table">
+                <thead><tr><th>Durum</th><th>Tohum</th><th>Sorgu</th><th class="center">Derinlik</th><th class="center">İlerleme</th><th class="center">Bulgu</th><th>Zaman</th><th></th></tr></thead>
+                <tbody id="crawl-body"><tr><td colspan="8"><div class="kh-skel"></div></td></tr></tbody>
+            </table></div>
+        </section>
+    </main>
+
+    <div class="kh-modal-overlay" id="newCrawl"><div class="kh-modal">
+        <h2>{{icon "crawl"}} Yeni Site Taraması</h2>
+        <form onsubmit="submitCrawl(event)" style="display:grid;gap:14px">
+            <div class="kh-field"><label class="kh-label">Tohum .onion URL <span class="req">*</span></label><input class="kh-input mono" id="c-seed" placeholder="http://xxxx…xxxx.onion/forum/" required></div>
+            <div class="kh-grid cols-3">
+                <div class="kh-field"><label class="kh-label">Derinlik</label><select class="kh-select" id="c-depth"><option value="1">1 (yalnız tohum sayfası linkleri)</option><option value="2" selected>2</option><option value="3">3 (en derin)</option></select></div>
+                <div class="kh-field"><label class="kh-label">En çok sayfa</label><input class="kh-input" type="number" id="c-pages" value="50" min="1" max="300"></div>
+                <div class="kh-field"><label class="kh-label">Kapsam</label><select class="kh-select" id="c-domain"><option value="true" selected>Yalnız aynı site</option><option value="false">Dış onion'lara da git</option></select></div>
+            </div>
+            <div class="kh-field"><label class="kh-label">Sorgu etiketi (opsiyonel)</label><input class="kh-input" id="c-query" placeholder="boşsa: crawl:&lt;host&gt;"><span class="kh-hint">Bulgular bu etiketle kaydedilir; Bulgular ve Harita'da bu sorguyla filtrelenir.</span></div>
+            <div class="kh-modal-actions"><button type="button" class="kh-btn subtle" onclick="KH.closeModal('newCrawl')">Vazgeç</button><button type="submit" class="kh-btn primary" id="c-submit">Taramayı Başlat</button></div>
+        </form>
+    </div></div>
+
+    <script>
+        const badge = { pending: 'neutral', running: 'info', completed: 'ok', failed: 'err', cancelled: 'warn' };
+        const label = { pending: 'kuyrukta', running: 'çalışıyor', completed: 'bitti', failed: 'hata', cancelled: 'iptal' };
+        function row(j) {
+            const pct = j.maxPages ? Math.min(100, Math.round(j.pagesDone / j.maxPages * 100)) : 0;
+            return `<tr data-id="${j.id}">
+                <td><span class="kh-badge ${badge[j.status] || 'neutral'}">${j.status === 'running' ? '<span class="kh-dot info pulse"></span> ' : ''}${label[j.status] || j.status}</span></td>
+                <td><a class="link" href="${KH.esc(j.seedUrl)}" target="_blank" rel="noopener noreferrer" title="${KH.esc(j.seedUrl)}">${KH.esc(KH.short(j.seedUrl.replace(/^https?:\/\//, ''), 30))}</a></td>
+                <td class="kh-mono" style="font-size:.76rem">${KH.esc(j.query)}</td>
+                <td class="center">${j.depth} · ${j.sameDomain ? 'içeride' : 'dışa'}</td>
+                <td class="center" style="min-width:120px"><div class="kh-mono" style="font-size:.72rem">${j.pagesDone}/${j.maxPages}</div><div class="kh-progress thin"><div style="width:${pct}%"></div></div></td>
+                <td class="center"><span class="kh-mono" style="font-weight:700;color:${j.savedCount ? '#68d391' : 'var(--text-muted)'}">${j.savedCount}</span><div class="kh-hint">${j.foundCount} sayfa</div></td>
+                <td class="muted kh-mono" style="font-size:.72rem">${KH.ago(j.createdAt)}${j.message ? '<div class="kh-hint" title="' + KH.esc(j.message) + '">' + KH.esc(KH.short(j.message, 24)) + '</div>' : ''}</td>
+                <td>${j.status === 'running' || j.status === 'pending' ? `<button class="kh-btn xs danger" onclick="cancelCrawl('${j.id}')">İptal</button>` : (j.savedCount ? `<a class="kh-btn xs subtle" href="/results?q=${encodeURIComponent(j.query)}">Bulgular</a>` : '')}</td>
+            </tr>`;
+        }
+        let anyRunning = false;
+        function loadJobs() {
+            KH.api('/api/crawl').then(d => {
+                const jobs = d.jobs || [];
+                anyRunning = jobs.some(j => j.status === 'running' || j.status === 'pending');
+                document.getElementById('crawl-body').innerHTML = jobs.length ? jobs.map(row).join('') : '<tr><td colspan="8"><div class="kh-empty"><div class="icon">{{icon "crawl"}}</div><h3>Henüz tarama yok</h3><p>Bir tohum onion adresi verip başlatın.</p></div></td></tr>';
+            }).catch(e => document.getElementById('crawl-body').innerHTML = '<tr><td colspan="8" class="kh-alert err">' + KH.esc(e.message) + '</td></tr>');
+        }
+        async function submitCrawl(e) {
+            e.preventDefault(); const btn = document.getElementById('c-submit'); KH.busy(btn, true, 'Başlatılıyor…');
+            try {
+                await KH.api('/api/crawl', { method: 'POST', body: {
+                    seedUrl: document.getElementById('c-seed').value.trim(),
+                    depth: parseInt(document.getElementById('c-depth').value),
+                    maxPages: parseInt(document.getElementById('c-pages').value),
+                    sameDomain: document.getElementById('c-domain').value === 'true',
+                    query: document.getElementById('c-query').value.trim()
+                }});
+                KH.toast('Tarama başlatıldı', 'ok'); KH.closeModal('newCrawl'); loadJobs();
+            } catch (err) { KH.toast(err.message, 'err'); } finally { KH.busy(btn, false); }
+        }
+        async function cancelCrawl(id) { try { await KH.api('/api/crawl/' + id + '/cancel', { method: 'POST', body: {} }); KH.toast('İptal edildi', 'warn'); loadJobs(); } catch (e) { KH.toast(e.message, 'err'); } }
+        loadJobs();
+        setInterval(() => { if (anyRunning) loadJobs(); }, 3000);
+    </script>
+</body>
+</html>

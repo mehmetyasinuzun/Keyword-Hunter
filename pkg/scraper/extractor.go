@@ -123,6 +123,15 @@ func (s *Scraper) scrapeURLForExpand(ctx context.Context, urlStr string) Content
 
 	req.Header.Set("User-Agent", shared.RandomUserAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	profile := s.profileFor(urlStr)
+	s.ApplyProfile(req)
+
+	// Profil JS render istiyorsa ve tarayıcı varsa doğrudan render et
+	if profile != nil && profile.RenderJS && s.RendererAvailable() {
+		if rc, ok := s.renderInto(ctx, urlStr, profile, content); ok {
+			return rc
+		}
+	}
 
 	// İçerik çekimi: 2 deneme yeterli (arama motorlarından farklı olarak tek site)
 	resp, err := shared.DoWithRetryN(s.client, req, 2)
@@ -133,6 +142,12 @@ func (s *Scraper) scrapeURLForExpand(ctx context.Context, urlStr string) Content
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		// 403/503 (bot koruması) durumunda tarayıcı ile bir şans daha
+		if (resp.StatusCode == 403 || resp.StatusCode == 503) && s.RendererAvailable() {
+			if rc, ok := s.renderInto(ctx, urlStr, profile, content); ok {
+				return rc
+			}
+		}
 		content.Error = fmt.Sprintf("HTTP hatası: %d", resp.StatusCode)
 		return content
 	}
@@ -145,11 +160,44 @@ func (s *Scraper) scrapeURLForExpand(ctx context.Context, urlStr string) Content
 		return content
 	}
 
+	// JS olmadan boş kalan sayfa → headless tarayıcıyla yeniden dene
+	if s.RendererAvailable() && LooksJSOnly(string(body)) {
+		if rc, ok := s.renderInto(ctx, urlStr, profile, content); ok {
+			return rc
+		}
+	}
+
 	content.RawContent = string(body)
 	content.ContentSize = len(body)
 	content.Success = true
 
 	return content
+}
+
+// renderInto headless tarayıcı ile sayfayı yükler; başarılıysa (content, true).
+func (s *Scraper) renderInto(ctx context.Context, urlStr string, profile *SiteProfile, content Content) (Content, bool) {
+	s.mu.RLock()
+	r := s.renderer
+	s.mu.RUnlock()
+	if r == nil {
+		return content, false
+	}
+	cookies, ua := "", ""
+	if profile != nil {
+		cookies, ua = profile.Cookies, profile.UserAgent
+	}
+	htmlOut, _, title, err := r.Render(ctx, urlStr, cookies, ua)
+	if err != nil {
+		logger.Debug("JS render başarısız (%s): %v", urlStr, err)
+		return content, false
+	}
+	content.RawContent = htmlOut
+	content.ContentSize = len(htmlOut)
+	content.Title = title
+	content.Success = true
+	content.Rendered = true
+	logger.Info("JS RENDER: %s (%d bayt)", shared.Truncate(urlStr, 60), len(htmlOut))
+	return content, true
 }
 
 // extractDomainFromURL URL'den domain çıkarır

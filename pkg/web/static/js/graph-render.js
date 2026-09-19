@@ -311,11 +311,11 @@ function collapseAll() {
 
 function showFullMap() {
     if (!GraphState.root) {
-        showToast('⚠️ Graf verisi yok', 'warning');
+        showToast('️ Graf verisi yok', 'warning');
         return;
     }
     expandAllDeep(GraphState.root);
-    showToast('🗺️ Tam harita görünümü', 'success');
+    showToast('️ Tam harita görünümü', 'success');
     renderLayout();
     setTimeout(fitToScreen, 200);
 }

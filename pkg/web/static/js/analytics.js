@@ -159,7 +159,7 @@ function changeInterval(interval) {
     });
 
     const titles = { hour: 'Saatlik', day: 'Günlük', week: 'Haftalık' };
-    document.getElementById('timeline-title').innerHTML = `🕒 Zaman Tüneli <span class="hint">${titles[interval]} · motor bazlı</span>`;
+    document.getElementById('timeline-title').innerHTML = `${KH.icon('clock')} Zaman Tüneli <span class="hint">${titles[interval]} · motor bazlı</span>`;
 
     loadAnalyticsData();
 }
@@ -243,10 +243,10 @@ function renderCategoryChart() {
 
 function renderIOC() {
     const grid = document.getElementById('ioc-grid');
-    const names = { email: '✉️ E-posta', bitcoin: '₿ Bitcoin', monero: 'ɱ Monero', ip: '🌐 IP', onion: '🧅 Onion', credit_card: '💳 Kart', phone: '📞 Telefon', ssh_key: '🔑 SSH', api_key: '🗝️ API Key', username: '👤 Kullanıcı', hash: '#️⃣ Hash' };
+    const names = { email: ['mail','E-posta'], bitcoin: ['coin','Bitcoin'], monero: ['coin','Monero'], ip: ['globe','IP'], onion: ['onion','Onion'], credit_card: ['card','Kart'], phone: ['phone','Telefon'], ssh_key: ['key','SSH'], api_key: ['key','API Key'], username: ['user','Kullanıcı'], hash: ['hash','Hash'] };
     fetch('/api/artifacts/stats').then(r => r.json()).then(d => {
         if (!d.types || d.types.length === 0) { grid.innerHTML = '<p class="kh-hint">Henüz IOC yok. Bulgular sayfasında etiketleme çalıştırın.</p>'; return; }
-        grid.innerHTML = d.types.map(t => `<a class="ioc-tile" href="/results" title="${escapeHtml(t.type)}"><div class="n">${t.count}</div><div class="l">${escapeHtml(names[t.type] || t.type)}</div></a>`).join('');
+        grid.innerHTML = d.types.map(t => { const nm = names[t.type] || ['info', t.type]; return `<a class="ioc-tile" href="/results" title="${escapeHtml(t.type)}"><div class="n">${t.count}</div><div class="l">${KH.icon(nm[0])} ${escapeHtml(nm[1])}</div></a>`; }).join('');
     }).catch(() => grid.innerHTML = '<p class="kh-hint">Alınamadı.</p>');
 }
 
@@ -279,7 +279,7 @@ function renderQueryBarChart() {
     if (hasSelection) {
         // DUAL METRIC COMBO CHART MODE
         const intervalLabels = { hour: 'Saatlik', day: 'Günlük', week: 'Haftalık' };
-        titleEl.innerHTML = `📊 "${escapeHtml(selectedQuery)}" <span class="hint">süreç analizi · ${intervalLabels[queryChartInterval] || 'Günlük'}</span>`;
+        titleEl.innerHTML = `${KH.icon('analytics')} "${escapeHtml(selectedQuery)}" <span class="hint">süreç analizi · ${intervalLabels[queryChartInterval] || 'Günlük'}</span>`;
         controlsEl.style.display = 'flex';
 
         controlsEl.querySelectorAll('.chart-control-btn').forEach(btn => {
@@ -433,7 +433,7 @@ function renderQueryBarChart() {
 
     } else {
         // BAR CHART MODE - Show general query distribution
-        titleEl.innerHTML = '📊 Sorgu Bazlı Sonuç Dağılımı <span class="hint">ilk 12</span>';
+        titleEl.innerHTML = KH.icon('analytics') + ' Sorgu Bazlı Sonuç Dağılımı <span class="hint">ilk 12</span>';
         controlsEl.style.display = 'none';
 
         const data = queryList.slice(0, 12);

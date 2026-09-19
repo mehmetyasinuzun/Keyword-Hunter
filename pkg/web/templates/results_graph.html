@@ -72,7 +72,7 @@
         <!-- Controls -->
         <div class="panel controls">
             <button class="control-btn primary" onclick="showFullMap()" title="Tüm derinleştirmeleri aç">
-                🗺️ Full Map
+                {{icon "map"}} Full Map
             </button>
             <button class="control-btn" onclick="collapseAll()" title="Tüm node'ları kapat">
                 Kapat
@@ -81,7 +81,7 @@
                 Sıfırla
             </button>
             <button class="control-btn" onclick="fitToScreen()" title="Ekrana sığdır">
-                ⬜ Sığdır
+                {{icon "expand"}} Sığdır
             </button>
         </div>
 
@@ -89,13 +89,13 @@
         <div class="layout-selector">
             <button class="layout-btn active" onclick="setLayout('radial')" id="layout-radial"
                 title="Dairesel yerleşim">
-                ◉ Radial
+                {{icon "target"}} Radial
             </button>
             <button class="layout-btn" onclick="setLayout('tree')" id="layout-tree" title="Yatay ağaç">
-                🌳 Tree
+                {{icon "results"}} Tree
             </button>
             <button class="layout-btn" onclick="setLayout('force')" id="layout-force" title="Force-directed">
-                🔮 Force
+                {{icon "graph"}} Force
             </button>
         </div>
 
@@ -122,7 +122,7 @@
             </div>
             <div class="legend-item">
                 <div class="legend-color" style="background: #ed8936;"></div>
-                <span>Çoklu ⭐</span>
+                <span>Çoklu </span>
             </div>
             <div class="legend-divider">
                 <div class="legend-item">
@@ -138,7 +138,7 @@
 
         <!-- Graf Ayarları Paneli -->
         <div class="panel settings-panel" id="settings-panel" style="display: none;">
-            <h3>⚙️ Graf Ayarları</h3>
+            <h3>{{icon "settings"}} Graf Ayarları</h3>
             <div class="settings-group">
                 <label>Yazı Boyutu</label>
                 <input type="range" id="font-size-slider" min="10" max="22" value="14" oninput="updateGraphSettings()">
@@ -171,7 +171,7 @@
 
         <!-- Ayarlar Butonu -->
         <button class="settings-toggle" id="settings-toggle" onclick="toggleSettingsPanel()" title="Graf Ayarları">
-            ⚙️
+            {{icon "settings"}}
         </button>
 
         <!-- Tooltip -->
@@ -180,16 +180,16 @@
 
     <!-- Context Menu -->
     <div class="context-menu" id="context-menu">
-        <div class="context-menu-item" onclick="copyLink()">📋 Linki Kopyala</div>
-        <div class="context-menu-item" onclick="copyTitle()">📝 Başlığı Kopyala</div>
+        <div class="context-menu-item" onclick="copyLink()"> Linki Kopyala</div>
+        <div class="context-menu-item" onclick="copyTitle()"> Başlığı Kopyala</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()">🔍 Derinleştir</div>
-        <div class="context-menu-item" id="watch-menu-item" onclick="watchNode()">📡 İzleme Listesine Ekle</div>
+        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()"> Derinleştir</div>
+        <div class="context-menu-item" id="watch-menu-item" onclick="watchNode()"> İzleme Listesine Ekle</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="focusNode()">🎯 Odaklan</div>
+        <div class="context-menu-item" onclick="focusNode()"> Odaklan</div>
         <div class="context-menu-item" onclick="showLinkInfo()">ℹ️ Detaylar</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item danger" onclick="closeContextMenu()">✖️ Kapat</div>
+        <div class="context-menu-item danger" onclick="closeContextMenu()">️ Kapat</div>
     </div>
 
     <!-- Toast -->
@@ -205,11 +205,11 @@
     <!-- Link Info Modal -->
     <div id="link-modal">
         <div>
-            <h3 style="color: #63b3ed; font-size: 18px; margin-bottom: 20px;">🔗 Link Detayları</h3>
+            <h3 style="color: #63b3ed; font-size: 18px; margin-bottom: 20px;">{{icon "external"}} Link Detayları</h3>
             <div id="link-modal-content"></div>
             <div class="kh-modal-actions">
                 <button class="kh-btn subtle" onclick="closeLinkModal()">Kapat</button>
-                <button class="kh-btn primary" onclick="copyLinkFromModal()">📋 Kopyala</button>
+                <button class="kh-btn primary" onclick="copyLinkFromModal()"> Kopyala</button>
             </div>
         </div>
     </div>

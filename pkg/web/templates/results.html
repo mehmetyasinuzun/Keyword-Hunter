@@ -26,9 +26,10 @@
                 <p class="kh-subtitle">Toplam <strong>{{.totalResults}}</strong> kayıt · filtreyle eşleşen <strong>{{.total}}</strong> · sayfa {{.page}}/{{.totalPages}}</p>
             </div>
             <div class="kh-actions">
-                <a href="/results/graph{{if .query}}?q={{.query}}{{end}}" class="kh-btn ghost">🗺️ Haritada Gör</a>
-                <a id="export-csv" href="/api/export/results?format=csv&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri CSV indir">⬇ CSV</a>
-                <a id="export-json" href="/api/export/results?format=json&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri JSON indir">⬇ JSON</a>
+                <a href="/results/graph{{if .query}}?q={{.query}}{{end}}" class="kh-btn ghost">{{icon "map"}} Haritada Gör</a>
+                <a id="export-csv" href="/api/export/results?format=csv&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri CSV indir">{{icon "download"}} CSV</a>
+                <a id="export-json" href="/api/export/results?format=json&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri JSON indir">{{icon "download"}} JSON</a>
+                <a id="export-stix" href="/api/export/stix?{{.baseQuery}}" class="kh-btn subtle" title="STIX 2.1 (MISP/OpenCTI/Sentinel) — IOC'ler dahil">{{icon "download"}} STIX</a>
             </div>
         </div>
 
@@ -59,10 +60,10 @@
 
         <div class="bulkbar" id="bulkbar">
             <strong id="bulk-count">0 seçili</strong>
-            <button class="kh-btn sm ghost" onclick="batchAutoTag(true)">🏷️ Seçilenleri Etiketle</button>
-            <button class="kh-btn sm subtle" onclick="bulkSetCriticality()">🔥 Kritiklik Ata</button>
-            <button class="kh-btn sm subtle" onclick="bulkCopyUrls()">📋 URL'leri Kopyala</button>
-            <button class="kh-btn sm danger" onclick="bulkDelete()">🗑 Sil</button>
+            <button class="kh-btn sm ghost" onclick="batchAutoTag(true)">{{icon "tag"}} Seçilenleri Etiketle</button>
+            <button class="kh-btn sm subtle" onclick="bulkSetCriticality()">{{icon "fire"}} Kritiklik Ata</button>
+            <button class="kh-btn sm subtle" onclick="bulkCopyUrls()">{{icon "copy"}} URL'leri Kopyala</button>
+            <button class="kh-btn sm danger" onclick="bulkDelete()">{{icon "trash"}} Sil</button>
             <span class="spacer" style="flex:1"></span>
             <button class="kh-btn sm subtle" onclick="clearSelection()">Seçimi kaldır</button>
         </div>
@@ -70,8 +71,8 @@
         {{if .results}}
         <section class="kh-card flush">
             <div class="kh-toolbar" style="padding:12px 16px;border-bottom:1px solid var(--bg-card-border)">
-                <button id="batchTagBtn" class="kh-btn sm primary" onclick="batchAutoTag(false)">🏷️ Bu Sayfayı Etiketle ({{len .results}})</button>
-                <button id="cancelBatchBtn" class="kh-btn sm danger" style="display:none" onclick="cancelBatchJob()">✖ İptal</button>
+                <button id="batchTagBtn" class="kh-btn sm primary" onclick="batchAutoTag(false)">{{icon "tag"}} Bu Sayfayı Etiketle ({{len .results}})</button>
+                <button id="cancelBatchBtn" class="kh-btn sm danger" style="display:none" onclick="cancelBatchJob()">{{icon "close"}} İptal</button>
                 <span class="kh-hint">Etiketleme her kaydı Tor üzerinden çeker (~5-40 sn/kayıt), içerikten etiket + IOC çıkarır ve kategoriyi günceller.</span>
                 <span class="spacer"></span>
                 <div id="tag-progress" style="display:none;min-width:260px">
@@ -89,17 +90,17 @@
                 <tr data-id="{{.ID}}" data-url="{{.URL}}">
                     <td><input type="checkbox" class="row-check" value="{{.ID}}" onchange="updateSelection()"></td>
                     <td><span class="title" title="{{.Title}}">{{truncate .Title 60}}</span><div class="meta"><span class="kh-badge neutral mono">{{.Source}}</span><span>sorgu: <a href="/results?q={{.Query}}" style="color:var(--text-secondary)">{{.Query}}</a></span></div></td>
-                    <td><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" title="{{.URL}}">{{truncate .URL 44}}</a> <span class="kh-copy" title="Kopyala" onclick="KH.copy(this.closest('tr').dataset.url,'URL kopyalandı')">📋</span></td>
+                    <td><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" title="{{.URL}}">{{truncate .URL 44}}</a> <span class="kh-copy" title="Kopyala" onclick="KH.copy(this.closest('tr').dataset.url,'URL kopyalandı')" aria-label="Kopyala">{{icon "copy"}}</span></td>
                     <td id="tags-{{.ID}}"><div id="tag-list-{{.ID}}">{{if .AutoTags}}{{range $t := (split .AutoTags ", ")}}<span class="kh-tag">{{$t}}</span>{{end}}{{else}}<span class="kh-hint">etiketlenmedi</span>{{end}}</div><div id="art-{{.ID}}" style="margin-top:4px"></div></td>
                     <td class="center"><select data-field="criticality" onchange="updateRowFrom(this)" class="kh-select sm crit-select s{{.Criticality}}" style="width:76px">{{$cc := .Criticality}}{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $cc}}selected{{end}}>{{$v}}</option>{{end}}</select></td>
                     <td><input type="text" data-field="category" value="{{.Category}}" maxlength="64" onchange="updateRowFrom(this)" class="kh-input sm" style="width:130px" list="category-list"></td>
                     <td class="center"><span id="count-{{.ID}}" class="kh-mono" style="font-weight:700;{{if gt .KeywordCount 0}}color:#68d391{{else}}color:var(--text-muted){{end}}">{{.KeywordCount}}</span></td>
                     <td class="muted kh-mono" style="font-size:.72rem;white-space:nowrap">{{formatTime .CreatedAt}}</td>
                     <td><div class="kh-rowactions">
-                        <button class="kh-btn xs ghost" title="Etiketle + IOC çıkar" onclick="autoTagResult('{{.ID}}', this)"><span class="icon">🏷️</span></button>
-                        <button class="kh-btn xs subtle" title="Sıklığı Tor üzerinden yeniden say" onclick="analyzeResult('{{.ID}}', this)">🔄</button>
-                        <button class="kh-btn xs subtle" title="IOC listesi" onclick="showArtifacts('{{.ID}}')">🧬</button>
-                        <button class="kh-btn xs subtle" title="İzleme listesine ekle" onclick="addToWatchlist(this.closest('tr'))">📡</button>
+                        <button class="kh-btn xs ghost" title="Etiketle + IOC çıkar" onclick="autoTagResult('{{.ID}}', this)">{{icon "tag"}}</button>
+                        <button class="kh-btn xs subtle" title="Sıklığı Tor üzerinden yeniden say" onclick="analyzeResult('{{.ID}}', this)">{{icon "refresh"}}</button>
+                        <button class="kh-btn xs subtle" title="IOC listesi" onclick="showArtifacts('{{.ID}}')">{{icon "dna"}}</button>
+                        <button class="kh-btn xs subtle" title="İzleme listesine ekle" onclick="addToWatchlist(this.closest('tr'))">{{icon "radar"}}</button>
                     </div></td>
                 </tr>
                 {{end}}
@@ -112,11 +113,11 @@
             </div>
         </section>
         {{else}}
-        <section class="kh-card"><div class="kh-empty"><div class="icon">📭</div><h3>{{if .total}}Bu sayfada kayıt yok{{else}}Filtreyle eşleşen bulgu yok{{end}}</h3><p>Filtreleri gevşetin ya da yeni bir arama başlatın.</p><div class="kh-inline" style="justify-content:center;margin-top:12px"><a href="/results" class="kh-btn subtle">Filtreleri temizle</a><a href="/search" class="kh-btn primary">Yeni Arama →</a></div></div></section>
+        <section class="kh-card"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>{{if .total}}Bu sayfada kayıt yok{{else}}Filtreyle eşleşen bulgu yok{{end}}</h3><p>Filtreleri gevşetin ya da yeni bir arama başlatın.</p><div class="kh-inline" style="justify-content:center;margin-top:12px"><a href="/results" class="kh-btn subtle">Filtreleri temizle</a><a href="/search" class="kh-btn primary">Yeni Arama →</a></div></div></section>
         {{end}}
     </main>
 
-    <div class="kh-modal-overlay" id="artifact-modal"><div class="kh-modal lg"><h2>🧬 Çıkarılan IOC / Artifact'lar</h2><div id="artifact-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('artifact-modal')">Kapat</button></div></div></div>
+    <div class="kh-modal-overlay" id="artifact-modal"><div class="kh-modal lg"><h2>{{icon "dna" }} Çıkarılan IOC / Artifact'lar</h2><div id="artifact-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('artifact-modal')">Kapat</button></div></div></div>
 
     <script>
         const currentQuery = {{.query}};
@@ -134,14 +135,14 @@
         KH.api('/api/queries').then(d => { document.getElementById('query-list').innerHTML = (d.queries || []).map(q => `<option value="${KH.esc(q.query)}">`).join(''); }).catch(() => { });
 
         // ── IOC rozetleri (tek toplu istek) ──
-        if (pageIds.length) KH.api('/api/artifacts/counts?ids=' + pageIds.join(',')).then(d => { Object.entries(d.counts || {}).forEach(([id, n]) => { const el = document.getElementById('art-' + id); if (el && n > 0) el.innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer">🧬 ${n} IOC</button>`; }); }).catch(() => { });
+        if (pageIds.length) KH.api('/api/artifacts/counts?ids=' + pageIds.join(',')).then(d => { Object.entries(d.counts || {}).forEach(([id, n]) => { const el = document.getElementById('art-' + id); if (el && n > 0) el.innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer">${KH.icon('dna')} ${n} IOC</button>`; }); }).catch(() => { });
 
         function showArtifacts(id) {
             const body = document.getElementById('artifact-body'); body.innerHTML = '<div class="kh-skel"></div>'; KH.openModal('artifact-modal');
-            const names = { email: 'E-posta', bitcoin: 'Bitcoin', monero: 'Monero', ip: 'IP', onion: 'Onion', credit_card: 'Kart', phone: 'Telefon', ssh_key: 'SSH Key', api_key: 'API Key', username: 'Kullanıcı', hash: 'Hash' };
+            const names = { email: 'E-posta', bitcoin: 'Bitcoin', monero: 'Monero', ip: 'IP', onion: 'Onion', credit_card: 'Kart', phone: 'Telefon', ssh_key: 'SSH Key', api_key: 'API Key', username: 'Kullanıcı', hash: 'Hash' }; const ticon = { email:'mail', bitcoin:'coin', monero:'coin', ip:'globe', onion:'onion', credit_card:'card', phone:'phone', ssh_key:'key', api_key:'key', username:'user', hash:'hash' };
             KH.api('/api/results/' + id + '/artifacts').then(d => {
-                if (!d.count) { body.innerHTML = '<p class="kh-hint">Bu kayıt için IOC yok. Önce <strong>🏷️ Etiketle</strong> çalıştırın (sayfa metni Tor üzerinden çekilir).</p>'; return; }
-                body.innerHTML = '<p class="kh-hint" style="margin-bottom:8px">' + d.count + ' artifact · güven skoruna göre sıralı</p>' + d.artifacts.map(a => `<div class="art-row"><span class="kh-badge neutral">${KH.esc(names[a.type] || a.type)}</span><div><div class="v">${KH.esc(a.value)}</div><div class="kh-hint">${KH.esc(a.context)}</div></div><div class="kh-inline"><span class="kh-badge ${a.confidence >= .8 ? 'ok' : a.confidence >= .6 ? 'info' : 'neutral'}">${Math.round(a.confidence * 100)}%</span><button class="kh-btn xs subtle" onclick="KH.copy(${JSON.stringify(a.value)})">📋</button></div></div>`).join('') + `<div style="margin-top:12px"><button class="kh-btn sm subtle" onclick="KH.copy(${JSON.stringify(d.artifacts.map(a => a.type + ',' + a.value).join('\n'))}, 'Tüm IOC\\'lar kopyalandı')">📋 Tümünü CSV olarak kopyala</button></div>`;
+                if (!d.count) { body.innerHTML = '<p class="kh-hint">Bu kayıt için IOC yok. Önce <strong> Etiketle</strong> çalıştırın (sayfa metni Tor üzerinden çekilir).</p>'; return; }
+                body.innerHTML = '<p class="kh-hint" style="margin-bottom:8px">' + d.count + ' artifact · güven skoruna göre sıralı</p>' + d.artifacts.map(a => `<div class="art-row"><span class="kh-badge neutral">${KH.icon(ticon[a.type]||'info')} ${KH.esc(names[a.type] || a.type)}</span><div><div class="v">${KH.esc(a.value)}</div><div class="kh-hint">${KH.esc(a.context)}</div></div><div class="kh-inline"><span class="kh-badge ${a.confidence >= .8 ? 'ok' : a.confidence >= .6 ? 'info' : 'neutral'}">${Math.round(a.confidence * 100)}%</span><button class="kh-btn xs subtle" onclick="KH.copy(${JSON.stringify(a.value)})" aria-label="Kopyala">${KH.icon('copy')}</button></div></div>`).join('') + `<div style="margin-top:12px"><button class="kh-btn sm subtle" onclick="KH.copy(${JSON.stringify(d.artifacts.map(a => a.type + ',' + a.value).join('\n'))}, 'Tüm IOC\\'lar kopyalandı')">${KH.icon('copy')} Tümünü CSV olarak kopyala</button></div>`;
             }).catch(e => body.innerHTML = '<p class="kh-alert err">' + KH.esc(e.message) + '</p>');
         }
 
@@ -184,7 +185,7 @@
             KH.api('/api/auto-tag', { method: 'POST', body: { id: parseInt(id) } }).then(d => {
                 KH.busy(btn, false);
                 tagsEl.innerHTML = KH.tags(d.tagsStr);
-                if (d.artifacts > 0) document.getElementById('art-' + id).innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer">🧬 ${d.artifacts} IOC</button>`;
+                if (d.artifacts > 0) document.getElementById('art-' + id).innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer"> ${d.artifacts} IOC</button>`;
                 const row = document.querySelector(`tr[data-id="${id}"]`);
                 if (d.keywordHits > 0) { const c = document.getElementById('count-' + id); c.textContent = d.keywordHits; c.style.color = '#68d391'; }
                 const sel = row.querySelector('select[data-field="criticality"]'); if (typeof d.criticality === 'number') { sel.value = String(d.criticality); sel.className = 'kh-select sm crit-select s' + d.criticality; sel.style.width = '76px'; }
@@ -204,7 +205,7 @@
             const btn = document.getElementById('batchTagBtn'); KH.busy(btn, true, 'Kuyruğa alınıyor…'); document.getElementById('cancelBatchBtn').style.display = '';
             const prog = document.getElementById('tag-progress'); prog.style.display = ''; setProgress(0, 'İş kuyruğa alınıyor…');
             startTagEventStream(ids.length);
-            KH.api('/api/batch-auto-tag', { method: 'POST', body: { resultIds: ids, query: currentQuery || '' } }).then(d => { activeBatchJobId = d.jobId; btn.innerHTML = '🏷️ İşleniyor…'; startBatchStatusPolling(d.jobId, d.total || ids.length); }).catch(e => { cleanupBatchUI(); KH.toast(e.message, 'err'); });
+            KH.api('/api/batch-auto-tag', { method: 'POST', body: { resultIds: ids, query: currentQuery || '' } }).then(d => { activeBatchJobId = d.jobId; btn.innerHTML = ' İşleniyor…'; startBatchStatusPolling(d.jobId, d.total || ids.length); }).catch(e => { cleanupBatchUI(); KH.toast(e.message, 'err'); });
         }
         function setProgress(pct, text) { document.getElementById('tag-progress-bar').style.width = pct + '%'; document.getElementById('tag-progress-text').textContent = '%' + pct; if (text) document.getElementById('tag-status').textContent = text; }
         function startTagEventStream(total) {

@@ -24,7 +24,14 @@ type EngineMonitor struct {
 	stopChan chan struct{}
 	once     sync.Once
 	interval time.Duration
+
+	// onAllDown ardışık kontrollerde tüm motorlar düştüğünde çağrılır (Tor devre yenileme).
+	onAllDown  func()
+	downStreak int
 }
+
+// SetAllDownHook tüm motorlar art arda düştüğünde tetiklenecek geri çağrıyı atar.
+func (em *EngineMonitor) SetAllDownHook(fn func()) { em.onAllDown = fn }
 
 // New yeni EngineMonitor oluşturur
 // interval: kontrol aralığı (örn: 5*time.Minute)
@@ -117,6 +124,30 @@ func (em *EngineMonitor) checkAll() {
 	}
 	wg.Wait()
 	logger.Info("Engine Monitor: tüm motorlar kontrol edildi")
+
+	// Tüm motorlar düştü mü? (ağ/devre sorunu olabilir → devre yenileme)
+	if em.onAllDown != nil {
+		stats, err := em.db.GetAllEngineStats()
+		if err == nil && len(stats) > 0 {
+			up := 0
+			for _, e := range stats {
+				if e.IsActive && e.LastStatus == "up" {
+					up++
+				}
+			}
+			if up == 0 {
+				em.downStreak++
+				// İki ardışık tam-düşük turdan sonra yeni devre iste (geçici dalgalanmada tetiklenmesin)
+				if em.downStreak >= 2 {
+					logger.Warn("Engine Monitor: tüm aktif motorlar çevrimdışı — Tor devre yenileme tetikleniyor")
+					em.onAllDown()
+					em.downStreak = 0
+				}
+			} else {
+				em.downStreak = 0
+			}
+		}
+	}
 }
 
 // checkEngine tek bir motoru kontrol eder

@@ -220,6 +220,16 @@ func (db *DB) createTables() error {
 		return err
 	}
 
+	// Site profilleri (çerez/UA/JS render)
+	if err := db.EnsureSiteProfileSchema(); err != nil {
+		return fmt.Errorf("site_profiles şeması başarısız: %w", err)
+	}
+
+	// Örümcek (site tarama) işleri
+	if err := db.EnsureCrawlSchema(); err != nil {
+		return fmt.Errorf("crawl_jobs şeması başarısız: %w", err)
+	}
+
 	// Eski sürümlerin yazdığı, SQL tarafında parse edilemeyen zaman damgalarını normalize et
 	if err := db.normalizeLegacyTimestamps(); err != nil {
 		return fmt.Errorf("zaman damgası migrasyonu başarısız: %w", err)

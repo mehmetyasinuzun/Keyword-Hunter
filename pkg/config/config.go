@@ -23,6 +23,8 @@ const (
 type AppConfig struct {
 	EnvFilePath     string
 	TorProxy        string
+	TorControlAddr  string
+	TorControlPass  string
 	DBPath          string
 	WebAddr         string
 	LogDir          string
@@ -101,6 +103,8 @@ func Load(envFilePath string) (AppConfig, error) {
 	cfg := AppConfig{
 		EnvFilePath:     store.Path(),
 		TorProxy:        get("TOR_PROXY", defaultTorProxy),
+		TorControlAddr:  get("TOR_CONTROL", ""),
+		TorControlPass:  get("TOR_CONTROL_PASSWORD", ""),
 		DBPath:          get("DB_PATH", defaultDBPath),
 		WebAddr:         get("WEB_ADDR", defaultWebAddr),
 		LogDir:          get("LOG_DIR", defaultLogDir),

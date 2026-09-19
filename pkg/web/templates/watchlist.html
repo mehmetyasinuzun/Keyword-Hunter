@@ -17,7 +17,7 @@
     <main class="kh-page wide">
         <div class="kh-header">
             <div><h1 class="kh-title">İzleme Listesi</h1><p class="kh-subtitle">Bilinen onion sitelerini periyodik izle: ayakta mı, içerik değişti mi, engel/captcha var mı, görsel kanıt</p></div>
-            <div class="kh-actions"><button class="kh-btn subtle" onclick="loadList()">↻ Yenile</button><button class="kh-btn ghost" onclick="seedTR()" title="Gömülü Türk onion tohum listesi (forum, market, sorgu paneli)">🇹🇷 Türk Tohum Listesini Yükle</button></div>
+            <div class="kh-actions"><button class="kh-btn subtle" onclick="loadList()">{{icon "refresh"}} Yenile</button><button class="kh-btn ghost" onclick="seedTR()" title="Gömülü Türk onion tohum listesi (forum, market, sorgu paneli)">{{icon "flag"}} Türk Tohum Listesini Yükle</button></div>
         </div>
         <section class="kh-grid cols-4" style="margin-bottom:16px" id="wl-kpi">
             <div class="kh-stat green"><div class="label">Ayakta</div><div class="value" id="k-up">—</div></div>
@@ -26,7 +26,7 @@
             <div class="kh-stat blue"><div class="label">Değişen</div><div class="value" id="k-changed">—</div><div class="sub">son kontrolde içerik değişti</div></div>
         </section>
         <section class="kh-card" style="margin-bottom:16px">
-            <div class="kh-card-title">➕ Yeni Site Ekle</div>
+            <div class="kh-card-title">{{icon "plus"}} Yeni Site Ekle</div>
             <div class="add-grid">
                 <div class="kh-field"><label class="kh-label">Site adı <span class="req">*</span></label><input class="kh-input sm" id="wl-name" maxlength="128" placeholder="Örn. Shadow Forum"></div>
                 <div class="kh-field"><label class="kh-label">Kategori</label><input class="kh-input sm" id="wl-category" maxlength="64" placeholder="Forum / Market / Dizin" list="cat-list"><datalist id="cat-list"><option>Forum</option><option>Market</option><option>Dizin</option><option>Sorgu Paneli</option><option>Chat</option><option>Haber</option><option>Arşiv</option></datalist></div>
@@ -37,42 +37,42 @@
             <p class="kh-hint" style="margin-top:8px">Yalnızca v3 .onion adresleri (56 karakter) kabul edilir. Kontroller her {{.interval}} dakikada Tor üzerinden yapılır; içerik değiştiğinde otomatik ekran görüntüsü alınır (Docker imajında).</p>
         </section>
         <section class="kh-card flush">
-            <div class="kh-card-title">🛰️ İzlenen Siteler <span class="hint" id="wl-count"></span><input class="kh-input sm" id="wl-filter" placeholder="filtrele…" style="width:200px;margin-left:auto" oninput="renderList()"></div>
+            <div class="kh-card-title">{{icon "monitor"}} İzlenen Siteler <span class="hint" id="wl-count"></span><input class="kh-input sm" id="wl-filter" placeholder="filtrele…" style="width:200px;margin-left:auto" oninput="renderList()"></div>
             <div class="kh-table-wrap"><table class="kh-table"><thead><tr><th>Durum</th><th>Site</th><th>Kategori</th><th>URL</th><th>Son Kontrol</th><th>Yanıt</th><th>Uptime</th><th style="text-align:right">Aksiyonlar</th></tr></thead><tbody id="wl-body"><tr><td colspan="8"><div class="kh-skel"></div></td></tr></tbody></table></div>
         </section>
     </main>
-    <div class="kh-modal-overlay" id="shotModal"><div class="kh-modal lg"><h2>📸 Ekran Görüntüsü Geçmişi <span class="hint" id="shot-title" style="font-weight:400;font-size:.8rem"></span></h2><div id="shot-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('shotModal')">Kapat</button></div></div></div>
+    <div class="kh-modal-overlay" id="shotModal"><div class="kh-modal lg"><h2>{{icon "camera"}} Ekran Görüntüsü Geçmişi <span class="hint" id="shot-title" style="font-weight:400;font-size:.8rem"></span></h2><div id="shot-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('shotModal')">Kapat</button></div></div></div>
     <script>
         let items = [];
         function statusCell(i) {
             if (!i.lastChecked) return '<span class="kh-badge neutral">bekliyor</span>';
             if (i.status === 'up') return '<span class="kh-badge ok"><span class="kh-dot up pulse"></span> ayakta</span>';
-            if (i.status === 'engel') return '<span class="kh-badge warn" title="Doğrulama/captcha ekranı">⚠ engel</span>';
+            if (i.status === 'engel') return '<span class="kh-badge warn" title="Doğrulama/captcha ekranı">' + KH.icon('warn') + ' engel</span>';
             return '<span class="kh-badge err">kapalı</span>';
         }
         function row(i) {
             const has = !!i.lastChecked; const up = i.uptimePct; const upCls = up < 50 ? '#fc8181' : up < 85 ? '#f6e05e' : '#68d391';
             return `<tr data-id="${i.id}" style="${i.enabled ? '' : 'opacity:.5'}">
                 <td data-cell="status">${statusCell(i)}${i.status === 'up' && i.changed ? ' <span class="kh-badge info" title="İçerik değişti">değişti</span>' : ''}</td>
-                <td><span class="title">${KH.esc(i.name)}</span><div class="meta">${i.title ? KH.esc(KH.short(i.title, 60)) : ''}${i.notes ? ' <span title="' + KH.esc(i.notes) + '">📝</span>' : ''}</div></td>
+                <td><span class="title">${KH.esc(i.name)}</span><div class="meta">${i.title ? KH.esc(KH.short(i.title, 60)) : ''}${i.notes ? ' <span title="' + KH.esc(i.notes) + '">' + KH.icon('info') + '</span>' : ''}</div></td>
                 <td><span class="kh-badge neutral">${KH.esc(i.category)}</span></td>
-                <td><a class="link" href="${KH.esc(i.url)}" target="_blank" rel="noopener noreferrer" title="${KH.esc(i.url)}">${KH.esc(KH.short(i.url.replace(/^https?:\/\//, ''), 26))}</a> <span class="kh-copy" onclick="KH.copy('${KH.esc(i.url)}','URL kopyalandı')">📋</span></td>
+                <td><a class="link" href="${KH.esc(i.url)}" target="_blank" rel="noopener noreferrer" title="${KH.esc(i.url)}">${KH.esc(KH.short(i.url.replace(/^https?:\/\//, ''), 26))}</a> <span class="kh-copy" onclick="KH.copy('${KH.esc(i.url)}','URL kopyalandı')" aria-label="Kopyala">${KH.icon('copy')}</span></td>
                 <td class="muted kh-mono" style="font-size:.72rem" title="${KH.esc(KH.fmtTime(i.lastChecked, true))}">${has ? KH.ago(i.lastChecked) : '—'}</td>
                 <td class="kh-mono" style="font-size:.76rem">${has && i.responseMs ? (i.responseMs / 1000).toFixed(1) + 's' : '—'}${has && i.httpCode ? ' <span class="kh-muted">(' + i.httpCode + ')</span>' : ''}</td>
                 <td>${has ? '<span class="kh-mono" style="font-weight:700;color:' + upCls + '">%' + up + '</span>' : '<span class="kh-muted">—</span>'}</td>
                 <td style="text-align:right;white-space:nowrap"><div class="kh-rowactions" style="opacity:1">
                     <button class="kh-btn xs ghost" onclick="checkNow(${i.id}, this)">Kontrol</button>
-                    <button class="kh-btn xs subtle" onclick="captureSite(${i.id}, this)" data-url="${KH.esc(i.url)}">📸</button>
-                    <button class="kh-btn xs subtle" onclick="showHistory('${KH.esc(i.url)}')" title="Görüntü geçmişi">🕘</button>
-                    <button class="kh-btn xs subtle" onclick="toggleItem(${i.id})">${i.enabled ? '⏸' : '▶'}</button>
-                    <button class="kh-btn xs danger" onclick="deleteItem(${i.id}, ${JSON.stringify(i.name)})">🗑</button>
+                    <button class="kh-btn xs subtle" onclick="captureSite(${i.id}, this)" data-url="${KH.esc(i.url)}"aria-label="Görüntü al">${KH.icon('camera')}</button>
+                    <button class="kh-btn xs subtle" onclick="showHistory('${KH.esc(i.url)}')" title="Görüntü geçmişi">${KH.icon('clock')}</button>
+                    <button class="kh-btn xs subtle" onclick="toggleItem(${i.id})">${i.enabled ? KH.icon('pause') : KH.icon('play')}</button>
+                    <button class="kh-btn xs danger" onclick="deleteItem(${i.id}, ${JSON.stringify(i.name)})"aria-label="Sil">${KH.icon('trash')}</button>
                 </div></td></tr>`;
         }
         function renderList() {
             const f = document.getElementById('wl-filter').value.toLowerCase(); const body = document.getElementById('wl-body');
             const list = items.filter(i => !f || (i.name + ' ' + i.url + ' ' + i.category + ' ' + (i.title || '')).toLowerCase().includes(f));
             document.getElementById('wl-count').textContent = '(' + list.length + '/' + items.length + ')';
-            body.innerHTML = list.length ? list.map(row).join('') : '<tr><td colspan="8"><div class="kh-empty"><div class="icon">📡</div><h3>İzlenen site yok</h3><p>Yukarıdan ekleyin ya da tohum listesini yükleyin.</p></div></td></tr>';
+            body.innerHTML = list.length ? list.map(row).join('') : '<tr><td colspan="8"><div class="kh-empty"><div class="icon">{{icon "radar"}}</div><h3>İzlenen site yok</h3><p>Yukarıdan ekleyin ya da tohum listesini yükleyin.</p></div></td></tr>';
             document.getElementById('k-up').textContent = items.filter(i => i.status === 'up').length; document.getElementById('k-down').textContent = items.filter(i => i.status === 'down').length;
             document.getElementById('k-blocked').textContent = items.filter(i => i.status === 'engel').length; document.getElementById('k-changed').textContent = items.filter(i => i.changed).length;
         }
@@ -93,7 +93,7 @@
         async function showHistory(url) {
             document.getElementById('shot-title').textContent = url; const body = document.getElementById('shot-body'); body.innerHTML = '<div class="kh-skel"></div>'; KH.openModal('shotModal');
             try { const d = await KH.api('/api/screenshots?target=' + encodeURIComponent(url) + '&limit=30'); const s = d.screenshots || [];
-                body.innerHTML = s.length ? '<div class="timeline">' + s.map(x => `<a href="/screenshot/file/${x.id}" target="_blank" rel="noopener"><img loading="lazy" src="/screenshot/file/${x.id}" alt=""><div class="cap">${KH.fmtTime(x.takenAt)}${x.challenge ? ' ⚠️' : ''} · ${Math.round(x.bytes / 1024)}KB</div></a>`).join('') + '</div>' : '<p class="kh-hint">' + (d.available ? 'Bu hedef için görüntü yok. 📸 ile alın.' : 'Ekran görüntüsü bu ortamda kapalı (yalnızca Docker imajında chromium var).') + '</p>'; }
+                body.innerHTML = s.length ? '<div class="timeline">' + s.map(x => `<a href="/screenshot/file/${x.id}" target="_blank" rel="noopener"><img loading="lazy" src="/screenshot/file/${x.id}" alt=""><div class="cap">${KH.fmtTime(x.takenAt)}${x.challenge ? ' ' : ''} · ${Math.round(x.bytes / 1024)}KB</div></a>`).join('') + '</div>' : '<p class="kh-hint">' + (d.available ? 'Bu hedef için görüntü yok.  ile alın.' : 'Ekran görüntüsü bu ortamda kapalı (yalnızca Docker imajında chromium var).') + '</p>'; }
             catch (e) { body.innerHTML = '<p class="kh-alert err">' + KH.esc(e.message) + '</p>'; }
         }
         async function seedTR() { if (!await KH.confirm({ title: 'Tohum listesini yükle', message: 'Gömülü Türk onion listesindeki (forum, market, sorgu paneli, chat) hedefler izleme listesine eklenir ve periyodik olarak Tor üzerinden kontrol edilmeye başlanır.', okText: 'Yükle' })) return; try { const d = await KH.api('/api/watchlist/seed', { method: 'POST', body: {} }); KH.toast(d.added + ' hedef eklendi', 'ok'); loadList(); } catch (e) { KH.toast(e.message, 'err'); } }

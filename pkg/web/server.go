@@ -17,6 +17,7 @@ import (
 
 	"keywordhunter-mvp/pkg/capture"
 	"keywordhunter-mvp/pkg/config"
+	"keywordhunter-mvp/pkg/crawler"
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/monitor"
 	"keywordhunter-mvp/pkg/scheduler"
@@ -25,16 +26,26 @@ import (
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tagging"
+	"keywordhunter-mvp/pkg/tor"
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.10.1"
+var Version = "0.11.0"
 
 //go:embed templates/*
 var templateFS embed.FS
 
 //go:embed static/*
 var staticFS embed.FS
+
+// iconSVG özgün ikon sprite'ından <svg><use> döndürür (currentColor ile tema uyumlu).
+func iconSVG(name, cls string) template.HTML {
+	c := "ico"
+	if cls != "" {
+		c += " " + cls
+	}
+	return template.HTML(`<svg class="` + template.HTMLEscapeString(c) + `" aria-hidden="true"><use href="#i-` + template.HTMLEscapeString(name) + `"/></svg>`)
+}
 
 type TagEngine interface {
 	TagResultByID(ctx context.Context, resultID int64) (*tagging.AutoTagResult, error)
@@ -69,6 +80,8 @@ type Server struct {
 	scheduler     *scheduler.Scheduler
 	engineMonitor *monitor.EngineMonitor
 	capturer      *capture.Capturer
+	torCtl        *tor.Controller
+	crawler       *crawler.Runner
 
 	engineCacheMu sync.Mutex
 	engineCache   map[string]bool
@@ -89,6 +102,8 @@ type Config struct {
 	RateLimitBurst int
 	EnvStore       *config.EnvStore
 	TorProxy       string
+	TorControlAddr string
+	TorControlPass string
 }
 
 // New yeni web sunucusu oluşturur
@@ -153,10 +168,35 @@ func New(cfg Config) (*Server, error) {
 
 	s.capturer = capture.New(cfg.TorProxy, "", "")
 	if s.capturer.Available() {
-		logger.Info("Ekran görüntüsü alt sistemi hazır (chromium bulundu)")
+		logger.Info("Ekran görüntüsü + JS render alt sistemi hazır (chromium bulundu)")
+		// Scraper'a JS render ve site profili (çerez/UA) yeteneği ver
+		if r := s.capturer.AsScraperRenderer(); r != nil {
+			cfg.Scraper.SetRenderer(r)
+		}
 	} else {
-		logger.Warn("Ekran görüntüsü devre dışı: Chrome/Chromium bulunamadı. Kurun veya CHROME_BIN ile yolunu verin (Docker imajında hazır gelir)")
+		logger.Warn("Ekran görüntüsü + JS render devre dışı: Chrome/Chromium bulunamadı. Kurun veya CHROME_BIN ile yolunu verin (Docker imajında hazır gelir)")
 	}
+	// Site profillerini (çerez/UA/renderJS) DB'den çöz
+	cfg.Scraper.SetProfileResolver(func(host string) *scraper.SiteProfile {
+		p, err := s.db.GetSiteProfile(host)
+		if err != nil || p == nil {
+			return nil
+		}
+		return &scraper.SiteProfile{Cookies: p.Cookies, UserAgent: p.UserAgent, RenderJS: p.RenderJS}
+	})
+
+	// Tor kontrol portu (NEWNYM) — yapılandırıldıysa
+	if cfg.TorControlAddr != "" {
+		s.torCtl = tor.New(cfg.TorControlAddr, cfg.TorControlPass, 2*time.Minute)
+		if err := s.torCtl.Ping(); err != nil {
+			logger.Warn("Tor kontrol portu (%s) yanıt vermiyor: %v", cfg.TorControlAddr, err)
+		} else {
+			logger.Info("Tor kontrol portu hazır (%s) — devre yenileme etkin", cfg.TorControlAddr)
+		}
+	}
+
+	// Örümcek (site tarama) işçisi
+	s.crawler = crawler.New(cfg.DB, cfg.Scraper)
 
 	// Motor aktif/pasif durumu DB'den okunur ve aramayı gerçekten etkiler
 	if s.searcher != nil {
@@ -229,6 +269,16 @@ func (s *Server) startScheduler() {
 	if err != nil {
 		logger.Warn("Motor izleyici başlatılamadı: %v", err)
 		return
+	}
+	// Tüm motorlar düşerse yeni Tor devresi iste (yapılandırıldıysa)
+	if s.torCtl != nil {
+		em.SetAllDownHook(func() {
+			if err := s.torCtl.NewNym(false); err != nil {
+				logger.Debug("Otomatik NEWNYM atlandı: %v", err)
+			} else {
+				s.invalidateEngineCache()
+			}
+		})
 	}
 	em.Start()
 	s.engineMonitor = em
@@ -421,6 +471,13 @@ func (s *Server) setupRoutes() {
 		"eq": func(a, b interface{}) bool {
 			return a == b
 		},
+		// icon özgün SVG ikon setinden bir simgeyi güvenli HTML olarak basar.
+		"icon": func(name string) template.HTML {
+			return iconSVG(name, "")
+		},
+		"iconc": func(name, cls string) template.HTML {
+			return iconSVG(name, cls)
+		},
 	}).ParseFS(templateFS, "templates/*.html", "templates/partials/*.html"))
 	s.router.SetHTMLTemplate(tmpl)
 
@@ -442,6 +499,8 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/logout", s.handleLogout)
 	s.router.POST("/logout", s.handleLogout)
 	s.router.GET("/healthz", s.handleHealthz)
+	s.router.GET("/favicon.ico", s.handleFavicon)
+	s.router.GET("/favicon.svg", s.handleFavicon)
 
 	// Protected routes
 	protected := s.router.Group("/")
@@ -456,6 +515,7 @@ func (s *Server) setupRoutes() {
 		protected.GET("/scheduled", s.handleScheduledPage)
 		protected.GET("/watchlist", s.handleWatchlistPage)
 		protected.GET("/monitor", s.handleMonitorPage)
+		protected.GET("/crawl", s.handleCrawlPage)
 		protected.GET("/screenshot/file/:id", s.handleServeScreenshot)
 
 		// SSE Events - Gerçek zamanlı loglar için
@@ -493,6 +553,24 @@ func (s *Server) setupRoutes() {
 			api.GET("/results/:id/artifacts", s.handleArtifactsForResult)
 			api.GET("/artifacts", s.handleArtifactSearch)
 			api.GET("/artifacts/counts", s.handleArtifactCounts)
+
+			// STIX 2.1 export
+			api.GET("/export/stix", s.handleExportSTIX)
+
+			// Site profilleri (çerez/UA/JS render)
+			api.GET("/site-profiles", s.handleSiteProfilesList)
+			api.POST("/site-profiles", s.handleSiteProfileSave)
+			api.POST("/site-profiles/delete", s.handleSiteProfileDelete)
+
+			// Tor devre yenileme
+			api.GET("/tor/status", s.handleTorStatus)
+			api.POST("/tor/newnym", s.handleTorNewNym)
+
+			// Örümcek (site tarama)
+			api.GET("/crawl", s.handleCrawlList)
+			api.POST("/crawl", s.handleCrawlSubmit)
+			api.POST("/crawl/:id/cancel", s.handleCrawlCancel)
+			api.GET("/crawl/:id", s.handleCrawlStatus)
 			api.GET("/artifacts/stats", s.handleArtifactStats)
 			api.GET("/settings/env", s.handleEnvSettingsGet)
 			api.POST("/settings/env", s.handleEnvSettingsUpdate)
@@ -566,6 +644,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	if s.engineMonitor != nil {
 		s.engineMonitor.Stop()
+	}
+	if s.crawler != nil {
+		s.crawler.Stop()
 	}
 
 	if s.httpServer == nil {

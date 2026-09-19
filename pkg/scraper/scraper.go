@@ -41,6 +41,22 @@ type Content struct {
 	ScrapedAt    time.Time
 	Success      bool
 	Error        string
+	Rendered     bool // headless tarayıcı (JS) ile alındı
+}
+
+// SiteProfile host bazlı çekim ayarları (storage.SiteProfile'ın scraper görünümü).
+type SiteProfile struct {
+	Cookies   string
+	UserAgent string
+	RenderJS  bool
+}
+
+// ProfileResolver host için profil döndürür (yoksa nil).
+type ProfileResolver func(host string) *SiteProfile
+
+// Renderer headless tarayıcı ile JS çalıştırıp DOM döndürür (capture paketi).
+type Renderer interface {
+	Render(ctx context.Context, targetURL, cookieHeader, userAgent string) (html, text, title string, err error)
 }
 
 // Scraper URL scraper yapısı
@@ -50,6 +66,67 @@ type Scraper struct {
 	maxChars   int
 	seenHashes map[string]bool // Duplicate kontrolü
 	mu         sync.RWMutex
+
+	profiles ProfileResolver
+	renderer Renderer
+}
+
+// SetProfileResolver site profillerini (çerez/UA/JS) sağlayan çözücüyü atar.
+func (s *Scraper) SetProfileResolver(r ProfileResolver) { s.mu.Lock(); s.profiles = r; s.mu.Unlock() }
+
+// SetRenderer JS render için headless tarayıcıyı atar (nil = devre dışı).
+func (s *Scraper) SetRenderer(r Renderer) { s.mu.Lock(); s.renderer = r; s.mu.Unlock() }
+
+// RendererAvailable JS render'ın etkin olup olmadığını döndürür.
+func (s *Scraper) RendererAvailable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.renderer != nil
+}
+
+// profileFor URL'nin host'u için profil döndürür.
+func (s *Scraper) profileFor(rawURL string) *SiteProfile {
+	s.mu.RLock()
+	r := s.profiles
+	s.mu.RUnlock()
+	if r == nil {
+		return nil
+	}
+	return r(shared.ExtractDomain(rawURL))
+}
+
+// ApplyProfile isteğe host profilinin çerez ve User-Agent'ını uygular.
+func (s *Scraper) ApplyProfile(req *http.Request) {
+	p := s.profileFor(req.URL.String())
+	if p == nil {
+		return
+	}
+	if p.Cookies != "" {
+		req.Header.Set("Cookie", p.Cookies)
+	}
+	if p.UserAgent != "" {
+		req.Header.Set("User-Agent", p.UserAgent)
+	}
+}
+
+// LooksJSOnly HTML'in JavaScript olmadan anlamlı içerik vermediğini sezer:
+// görünür metin çok kısa ve sayfa script/noscript/"enable javascript" izleri taşıyor.
+func LooksJSOnly(htmlContent string) bool {
+	text := HTMLToText(htmlContent)
+	if len(text) > 600 {
+		return false
+	}
+	lower := strings.ToLower(htmlContent)
+	if !strings.Contains(lower, "<script") {
+		return false
+	}
+	markers := []string{"<noscript", "enable javascript", "javascript is required", "requires javascript", "javascript'i etkinleştir", "id=\"root\"", "id=\"app\"", "__next", "ng-app", "data-reactroot"}
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return len(text) < 120
 }
 
 // New yeni Scraper oluşturur
