@@ -12,19 +12,20 @@
         </div>
         <button class="nav-burger" id="nav-burger" aria-label="Menü" aria-controls="nav-links">{{icon "menu"}}</button>
         <div class="nav-links" id="nav-links">
-            <a href="/dashboard" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}" title="g d">{{icon "dashboard"}} Panel</a>
-            <a href="/search" class="nav-link{{if eq .ActivePage "search"}} active{{end}}" title="/">{{icon "search"}} Arama</a>
-            <a href="/results" class="nav-link{{if eq .ActivePage "results"}} active{{end}}" title="g r">{{icon "results"}} Bulgular</a>
-            <a href="/results/graph" class="nav-link{{if eq .ActivePage "graph"}} active{{end}}" title="g h">{{icon "graph"}} Harita</a>
-            <a href="/analytics" class="nav-link{{if eq .ActivePage "analytics"}} active{{end}}" title="g a">{{icon "analytics"}} Analiz</a>
-            <a href="/scheduled" class="nav-link{{if eq .ActivePage "scheduled"}} active{{end}}" title="g p">{{icon "scheduled"}} Planlı</a>
-            <a href="/watchlist" class="nav-link{{if eq .ActivePage "watchlist"}} active{{end}}" title="g i">{{icon "watchlist"}} İzleme</a>
-            <a href="/monitor" class="nav-link{{if eq .ActivePage "monitor"}} active{{end}}" title="g m">{{icon "monitor"}} Motorlar</a>
-            <a href="/crawl" class="nav-link{{if eq .ActivePage "crawl"}} active{{end}}" title="g c">{{icon "crawl"}} Örümcek</a>
-            <a href="/users" class="nav-link{{if eq .ActivePage "users"}} active{{end}}" data-role="admin" title="g u">{{icon "user"}} Kullanıcılar</a>
-            <a href="/settings" class="nav-link{{if eq .ActivePage "settings"}} active{{end}}" data-role="admin" title="g y">{{icon "settings"}} Ayarlar</a>
+            <a href="/dashboard" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}" title="g d">{{icon "dashboard"}} <span data-i18n="nav.dashboard">Panel</span></a>
+            <a href="/search" class="nav-link{{if eq .ActivePage "search"}} active{{end}}" title="/">{{icon "search"}} <span data-i18n="nav.search">Arama</span></a>
+            <a href="/results" class="nav-link{{if eq .ActivePage "results"}} active{{end}}" title="g r">{{icon "results"}} <span data-i18n="nav.results">Bulgular</span></a>
+            <a href="/results/graph" class="nav-link{{if eq .ActivePage "graph"}} active{{end}}" title="g h">{{icon "graph"}} <span data-i18n="nav.graph">Harita</span></a>
+            <a href="/analytics" class="nav-link{{if eq .ActivePage "analytics"}} active{{end}}" title="g a">{{icon "analytics"}} <span data-i18n="nav.analytics">Analiz</span></a>
+            <a href="/scheduled" class="nav-link{{if eq .ActivePage "scheduled"}} active{{end}}" title="g p">{{icon "scheduled"}} <span data-i18n="nav.scheduled">Planlı</span></a>
+            <a href="/watchlist" class="nav-link{{if eq .ActivePage "watchlist"}} active{{end}}" title="g i">{{icon "watchlist"}} <span data-i18n="nav.watchlist">İzleme</span></a>
+            <a href="/monitor" class="nav-link{{if eq .ActivePage "monitor"}} active{{end}}" title="g m">{{icon "monitor"}} <span data-i18n="nav.monitor">Motorlar</span></a>
+            <a href="/crawl" class="nav-link{{if eq .ActivePage "crawl"}} active{{end}}" title="g c">{{icon "crawl"}} <span data-i18n="nav.crawl">Örümcek</span></a>
+            <a href="/users" class="nav-link{{if eq .ActivePage "users"}} active{{end}}" data-role="admin" title="g u">{{icon "user"}} <span data-i18n="nav.users">Kullanıcılar</span></a>
+            <a href="/settings" class="nav-link{{if eq .ActivePage "settings"}} active{{end}}" data-role="admin" title="g y">{{icon "settings"}} <span data-i18n="nav.settings">Ayarlar</span></a>
+            <button class="nav-lang" id="nav-lang" title="Dil / Language" aria-label="Dil">TR</button>
             <a href="/monitor" class="nav-status" id="nav-health" title="Motor sağlığı"><span class="kh-dot unknown"></span><span class="txt">…</span></a>
-            <a href="/logout" class="nav-link danger">{{icon "logout"}} Çıkış</a>
+            <a href="/logout" class="nav-link danger">{{icon "logout"}} <span data-i18n="nav.logout">Çıkış</span></a>
         </div>
     </div>
 </nav>

@@ -1,5 +1,21 @@
 # Değişiklik Günlüğü
 
+## v0.13.0 — 2026-09-19
+
+### İki dilli arayüz (TR / EN)
+- `pkg/i18n` mesaj kataloğu (tr tam, en kapsar; eksik anahtar otomatik tr'ye düşer).
+- Dil çerezi + navbar/giriş ekranında **TR/EN** anahtarı; `data-i18n` işaretli
+  öğeler istemci tarafında çevrilir (işaretlenmemiş metin Türkçe kalır → FOUC/bozulma yok).
+- Navbar ve giriş ekranı tam çevrildi; panel/arama/bulgular başlıkları işaretlendi.
+  `GET /api/i18n`, `POST /api/lang`.
+
+### Kararlılık doğrulaması
+- ~18.500 istek (5000'i 10 paralel, ~875 req/s) altında bellek 36→38 MB'de sabit
+  kaldı (sızıntı yok), 16 OS thread sabit, CPU boşta %0. Örümcek + JS render + çok
+  sayfalı arama gerçek Tor ile uçtan uca doğrulandı.
+
+Testler: i18n (fallback zinciri, normalize, katalog). `go test -race ./...` 13 paket yeşil.
+
 ## v0.12.0 — 2026-09-19
 
 ### Çoklu kullanıcı + roller

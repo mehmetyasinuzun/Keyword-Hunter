@@ -45,7 +45,7 @@ func (rl *IPRateLimiter) Middleware() gin.HandlerFunc {
 		// Statik varlıklar ve sağlık ucu limitten muaf: bir sayfa yüklemesi
 		// onlarca font/CSS/JS isteği üretir ve gerçek API bütçesini tüketmemeli.
 		path := c.Request.URL.Path
-		if strings.HasPrefix(path, "/static/") || path == "/healthz" {
+		if strings.HasPrefix(path, "/static/") || path == "/healthz" || path == "/api/i18n" || path == "/favicon.ico" || path == "/favicon.svg" {
 			c.Next()
 			return
 		}

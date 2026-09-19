@@ -178,7 +178,7 @@
             <div class="auth-brand">
                 <div class="auth-logo"><svg style="width:34px;height:34px" aria-hidden="true"><use href="#i-brand"/></svg></div>
                 <h1 class="auth-title">KeywordHunter</h1>
-                <p class="auth-subtitle">Dark Web Tehdit İstihbarat Platformu</p>
+                <p class="auth-subtitle" data-i18n="login.subtitle">Dark Web Tehdit İstihbarat Platformu</p>
             </div>
 
             {{if eq .error "locked"}}
@@ -202,7 +202,7 @@
 
             <form method="POST" action="/login" autocomplete="on">
                 <div class="field">
-                    <label class="field-label" for="username">Kullanıcı Adı</label>
+                    <label class="field-label" for="username" data-i18n="login.username">Kullanıcı Adı</label>
                     <div class="field-input-wrap">
                         <input class="field-input" id="username" name="username" type="text"
                             autocomplete="username" required autofocus placeholder="admin">
@@ -210,7 +210,7 @@
                 </div>
 
                 <div class="field">
-                    <label class="field-label" for="password">Şifre</label>
+                    <label class="field-label" for="password" data-i18n="login.password">Şifre</label>
                     <div class="field-input-wrap">
                         <input class="field-input" id="password" name="password" type="password"
                             autocomplete="current-password" required placeholder="••••••••" style="padding-right: 2.5rem;">
@@ -219,7 +219,7 @@
                     </div>
                 </div>
 
-                <button type="submit" class="auth-btn">Giriş Yap →</button>
+                <button type="submit" class="auth-btn"><span data-i18n="login.submit">Giriş Yap</span> →</button>
             </form>
 
             <p class="auth-footer">
@@ -229,7 +229,9 @@
         </main>
     </div>
 
+    <div style="position:fixed;top:16px;right:16px"><button onclick="KH.setLang((document.cookie.match(/lang=(\w+)/)||[])[1]==='en'?'tr':'en')" style="font-family:var(--font-mono);font-size:.72rem;font-weight:700;color:var(--text-secondary);background:rgba(255,255,255,.04);border:1px solid var(--bg-card-border);border-radius:6px;padding:5px 10px;cursor:pointer" id="login-lang">TR</button></div>
     <script>
+        if (window.KH) { KH.applyI18n(); var lb=document.getElementById('login-lang'); if(lb){ var cur=(document.cookie.match(/lang=(\w+)/)||[])[1]||'tr'; lb.textContent=cur.toUpperCase(); } }
         (function () {
             var w = document.getElementById('lock-wait');
             if (w) { var n = parseInt(w.textContent) || 0; var t = setInterval(function () { n--; if (n <= 0) { clearInterval(t); location.href = '/login'; } else w.textContent = n; }, 1000); }

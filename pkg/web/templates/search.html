@@ -25,7 +25,7 @@
     {{template "navbar" .}}
     <main class="kh-page">
         <div class="kh-header">
-            <div><h1 class="kh-title">Dark Web Arama</h1><p class="kh-subtitle">Aktif arama motorlarında eşzamanlı tarama; sonuçlar otomatik sınıflandırılır ve kaydedilir</p></div>
+            <div><h1 class="kh-title" data-i18n="search.title">Dark Web Arama</h1><p class="kh-subtitle">Aktif arama motorlarında eşzamanlı tarama; sonuçlar otomatik sınıflandırılır ve kaydedilir</p></div>
             <div class="kh-actions"><a href="/monitor" class="kh-btn subtle sm" id="engine-summary">{{icon "monitor"}} motorlar…</a></div>
         </div>
 
@@ -33,7 +33,7 @@
             {{if .error}}<div class="kh-alert err" style="margin-bottom:12px">{{icon "warn"}} {{.error}}</div>{{end}}
             <form method="POST" action="/search" id="searchForm">
                 <div class="search-box">
-                    <input class="kh-input" type="text" name="query" id="query" value="{{.query}}" placeholder="ransomware, leak, tc kimlik, şirket adı, e-posta alanı…" required autofocus maxlength="200" autocomplete="off">
+                    <input class="kh-input" type="text" name="query" id="query" value="{{.query}}" placeholder="ransomware, leak, tc kimlik, şirket adı, e-posta alanı…" data-i18n-ph="search.placeholder" required autofocus maxlength="200" autocomplete="off">
                     <select class="kh-select" name="pages" id="pages" title="Sayfalama destekleyen motorlarda kaç sayfa taransın" style="width:130px;flex:none">
                         <option value="1"{{if not .pages}} selected{{end}}>1 sayfa</option>
                         <option value="2"{{if eq .pages 2}} selected{{end}}>2 sayfa</option>

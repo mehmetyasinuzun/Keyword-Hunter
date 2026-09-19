@@ -36,22 +36,22 @@
     <main class="kh-page">
         <div class="kh-header">
             <div>
-                <h1 class="kh-title">Operasyon Paneli</h1>
-                <p class="kh-subtitle">Bulgu hacmi, sınıflandırma kalitesi, motor sağlığı ve son 24 saatin özeti</p>
+                <h1 class="kh-title" data-i18n="dash.title">Operasyon Paneli</h1>
+                <p class="kh-subtitle" data-i18n="dash.subtitle">Bulgu hacmi, sınıflandırma kalitesi, motor sağlığı ve son 24 saatin özeti</p>
             </div>
             <div class="kh-actions">
-                <a href="/search" class="kh-btn primary">{{icon "search"}} Yeni Arama</a>
-                <a href="/scheduled#new" class="kh-btn ghost">{{icon "scheduled"}} Tarama Planla</a>
+                <a href="/search" class="kh-btn primary">{{icon "search"}} <span data-i18n="dash.newSearch">Yeni Arama</span></a>
+                <a href="/scheduled#new" class="kh-btn ghost">{{icon "scheduled"}} <span data-i18n="dash.planScan">Tarama Planla</span></a>
                 <a href="/api/export/results?format=csv" class="kh-btn subtle" title="Tüm bulguları CSV indir">{{icon "download"}} CSV</a>
             </div>
         </div>
 
         <!-- KPI -->
         <section class="kh-grid cols-4" style="margin-bottom:18px">
-            <div class="kh-stat blue"><div class="label">Toplam Bulgu</div><div class="value">{{.totalResults}}</div><div class="sub">{{.totalURLs}} benzersiz kayıt</div><div class="icon">{{icon "database"}}</div></div>
-            <div class="kh-stat purple"><div class="label">Toplam Arama</div><div class="value">{{.totalSearches}}</div><div class="sub">manuel + planlı çalışma</div><div class="icon">{{icon "search"}}</div></div>
-            <div class="kh-stat red"><div class="label">Acil (Sev 5)</div><div class="value">{{index .criticalityStats 5}}</div><div class="sub">{{.highRiskCount}} yüksek risk (Sev 3+)</div><div class="icon">{{icon "siren"}}</div></div>
-            <div class="kh-stat green" id="engine-stat"><div class="label">Motor Sağlığı</div><div class="value" id="engine-up">—</div><div class="sub" id="engine-sub">yükleniyor…</div><div class="icon">{{icon "monitor"}}</div></div>
+            <div class="kh-stat blue"><div class="label" data-i18n="dash.totalFindings">Toplam Bulgu</div><div class="value">{{.totalResults}}</div><div class="sub">{{.totalURLs}} benzersiz kayıt</div><div class="icon">{{icon "database"}}</div></div>
+            <div class="kh-stat purple"><div class="label" data-i18n="dash.totalSearches">Toplam Arama</div><div class="value">{{.totalSearches}}</div><div class="sub">manuel + planlı çalışma</div><div class="icon">{{icon "search"}}</div></div>
+            <div class="kh-stat red"><div class="label" data-i18n="dash.critical">Acil (Sev 5)</div><div class="value">{{index .criticalityStats 5}}</div><div class="sub">{{.highRiskCount}} yüksek risk (Sev 3+)</div><div class="icon">{{icon "siren"}}</div></div>
+            <div class="kh-stat green" id="engine-stat"><div class="label" data-i18n="dash.engineHealth">Motor Sağlığı</div><div class="value" id="engine-up">—</div><div class="sub" id="engine-sub">yükleniyor…</div><div class="icon">{{icon "monitor"}}</div></div>
         </section>
 
         <!-- Quick actions + health -->

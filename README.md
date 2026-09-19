@@ -9,7 +9,7 @@ bulguları **webhook** ile bildiren, tek ikili dosyadan oluşan bir CTI aracıd�
 Tüm dış trafik Tor üzerinden çıkar; arayüz ve varlıklar tamamen yerel (CDN yok), veri
 yalnızca sizin makinenizde SQLite'ta tutulur.
 
-**Sürüm:** v0.11 · Go 1.26 · SQLite (modernc, saf Go, CGO yok) · Gin · D3.js · Chart.js
+**Sürüm:** v0.13 · Go 1.26 · SQLite (modernc, saf Go, CGO yok) · Gin · D3.js · Chart.js
 
 ---
 

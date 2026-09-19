@@ -9,6 +9,28 @@
 
     const KH = window.KH = window.KH || {};
 
+    // ── i18n (istemci tarafı çeviri) ─────────────────────────────────────
+    KH.i18n = { lang: 'tr', msgs: {} };
+    KH.t = function (key, fallback) { return KH.i18n.msgs[key] || fallback || key; };
+    function readCookieRaw(name) {
+        const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+    KH.applyI18n = function () {
+        const lang = readCookieRaw('lang') || 'tr';
+        if (lang === 'tr') { KH.i18n.lang = 'tr'; document.documentElement.lang = 'tr'; return Promise.resolve(); }
+        return fetch('/api/i18n?lang=' + encodeURIComponent(lang)).then(r => r.json()).then(d => {
+            KH.i18n = { lang: d.lang, msgs: d.messages || {} };
+            document.documentElement.lang = d.lang;
+            document.querySelectorAll('[data-i18n]').forEach(el => { const v = KH.i18n.msgs[el.getAttribute('data-i18n')]; if (v) el.textContent = v; });
+            document.querySelectorAll('[data-i18n-ph]').forEach(el => { const v = KH.i18n.msgs[el.getAttribute('data-i18n-ph')]; if (v) el.setAttribute('placeholder', v); });
+            document.querySelectorAll('[data-i18n-title]').forEach(el => { const v = KH.i18n.msgs[el.getAttribute('data-i18n-title')]; if (v) el.setAttribute('title', v); });
+        }).catch(() => { });
+    };
+    KH.setLang = function (lang) {
+        fetch('/api/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang }) }).then(() => location.reload()).catch(() => { document.cookie = 'lang=' + lang + ';path=/;max-age=31536000'; location.reload(); });
+    };
+
     // ── Özgün ikon (JS ile üretilen içerik için) ─────────────────────────
     KH.icon = function (name, cls) {
         return '<svg class="ico' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + String(name).replace(/[^a-z0-9-]/gi, '') + '"/></svg>';
@@ -145,6 +167,7 @@
 
     // ── Navbar: hamburger + sağlık çipi + kısayollar ─────────────────────
     document.addEventListener('DOMContentLoaded', () => {
+        KH.applyI18n();
         const burger = document.getElementById('nav-burger');
         const links = document.getElementById('nav-links');
         if (burger && links) burger.addEventListener('click', () => links.classList.toggle('open'));
@@ -160,6 +183,13 @@
                 document.body.classList.add('role-viewer');
             }
         }).catch(() => { });
+
+        const langBtn = document.getElementById('nav-lang');
+        if (langBtn) {
+            const cur = (readCookieRaw('lang') || 'tr');
+            langBtn.textContent = cur.toUpperCase();
+            langBtn.addEventListener('click', () => KH.setLang(cur === 'tr' ? 'en' : 'tr'));
+        }
 
         const chip = document.getElementById('nav-health');
         if (chip) {

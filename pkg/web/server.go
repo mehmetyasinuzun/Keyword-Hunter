@@ -30,7 +30,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.12.0"
+var Version = "0.13.0"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -510,6 +510,8 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/healthz", s.handleHealthz)
 	s.router.GET("/favicon.ico", s.handleFavicon)
 	s.router.GET("/favicon.svg", s.handleFavicon)
+	s.router.GET("/api/i18n", s.handleI18nCatalog)
+	s.router.POST("/api/lang", s.handleSetLang)
 
 	// Protected routes
 	protected := s.router.Group("/")
