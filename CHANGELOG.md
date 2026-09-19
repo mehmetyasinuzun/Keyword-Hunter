@@ -66,6 +66,13 @@
 - Doğrulandı (düzeltme gerekmedi): dışa aktarımlar sınırlı (bulgular ≤50k, STIX ≤20k,
   500'lük sayfalarla); hız sınırlayıcı `ClientIP()` ile anahtarlanır ve
   `SetTrustedProxies(nil)` XFF sahteciliğini kapatır; kod yolunda `panic(` yok.
+- **Test kapsamı:** testsiz iki pakete birim testleri eklendi (Tor gerektirmeden).
+  `crawler`: `normalizeURL` (fragment/sondaki `/`/küçük harf, ziyaret-tekilleştirme),
+  `titleFromURL`, `Submit` reddi (.onion olmayan tohum → iş satırı yok) ve **sınır
+  kırpma** (depth 99→3, pages 99999→300, alt sınır 0→1/50, boş sorgu → `crawl:<host>`;
+  durdurulmuş runner üzerinden gerçek kırpma kodu sınanır). `scraper`: `LooksJSOnly`
+  dört kuralı (zengin metin, script yok, SPA/noscript izi, kısa metin eşiği).
+  Test edilen paket 13 → 15.
 - Güvenlik taramaları (düzeltme gerekmedi, doğrulandı): webhook istemcisi yönlendirme
   takip etmiyor (`ErrUseLastResponse`) ve **bağlantı anında** çözümlenmiş IP'yi
   `net.Dialer.Control` ile reddediyor (DNS rebinding/TOCTOU kapalı), ortam proxy'leri
