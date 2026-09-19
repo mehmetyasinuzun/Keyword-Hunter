@@ -426,12 +426,13 @@ func (s *Server) handleSearch(c *gin.Context) {
 // parseResultFilter sorgu parametrelerinden filtre üretir (HTML sayfası, JSON API ve export ortak).
 func parseResultFilter(c *gin.Context) storage.ResultFilter {
 	f := storage.ResultFilter{
-		Query:    strings.TrimSpace(c.Query("q")),
-		Text:     strings.TrimSpace(c.Query("text")),
-		Source:   strings.TrimSpace(c.Query("source")),
-		Category: strings.TrimSpace(c.Query("category")),
-		Tag:      strings.TrimSpace(c.Query("tag")),
-		Sort:     strings.TrimSpace(c.DefaultQuery("sort", "newest")),
+		Query:      strings.TrimSpace(c.Query("q")),
+		Text:       strings.TrimSpace(c.Query("text")),
+		Source:     strings.TrimSpace(c.Query("source")),
+		Category:   strings.TrimSpace(c.Query("category")),
+		Tag:        strings.TrimSpace(c.Query("tag")),
+		CaseStatus: strings.TrimSpace(c.Query("case")),
+		Sort:       strings.TrimSpace(c.DefaultQuery("sort", "newest")),
 	}
 	f.MinCriticality, _ = strconv.Atoi(c.DefaultQuery("minCriticality", "1"))
 	if f.MinCriticality < 1 || f.MinCriticality > 5 {

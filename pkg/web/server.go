@@ -30,7 +30,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.13.0"
+var Version = "0.14.0"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -581,6 +581,8 @@ func (s *Server) setupRoutes() {
 			api.GET("/export/results", s.handleExportResults)
 			api.GET("/results", s.handleResultsAPI)
 			api.POST("/results/delete", s.handleDeleteResults)
+			api.POST("/results/:id/case", s.handleUpdateCase)
+			api.GET("/results/case-counts", s.handleCaseCounts)
 			api.GET("/results/:id/artifacts", s.handleArtifactsForResult)
 			api.GET("/artifacts", s.handleArtifactSearch)
 			api.GET("/artifacts/counts", s.handleArtifactCounts)

@@ -235,6 +235,11 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("users şeması başarısız: %w", err)
 	}
 
+	// Vaka yönetimi sütunları (not + durum)
+	if err := db.EnsureCaseColumns(); err != nil {
+		return err
+	}
+
 	// Eski sürümlerin yazdığı, SQL tarafında parse edilemeyen zaman damgalarını normalize et
 	if err := db.normalizeLegacyTimestamps(); err != nil {
 		return fmt.Errorf("zaman damgası migrasyonu başarısız: %w", err)

@@ -15,6 +15,10 @@
         .art-badge { font-size: .66rem; }
         #artifact-modal .art-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: .82rem; align-items: center; }
         #artifact-modal .art-row .v { font-family: var(--font-mono); word-break: break-all; }
+    .case-sel { font-weight: 600; }
+    .case-sel.cs-new { color: #90cdf4; } .case-sel.cs-investigating { color: #f6e05e; }
+    .case-sel.cs-confirmed { color: #68d391; } .case-sel.cs-dismissed { color: var(--text-muted); }
+    .note-btn.has-note { color: var(--accent-primary); border-color: rgba(99,179,237,.4); }
     </style>
 </head>
 <body>
@@ -40,6 +44,14 @@
                 <div class="kh-field"><label class="kh-label">Motor</label><select class="kh-select sm" name="source"><option value="">Tümü</option>{{range .sources}}<option value="{{.}}" {{if eq $.filter.Source .}}selected{{end}}>{{.}}</option>{{end}}</select></div>
                 <div class="kh-field"><label class="kh-label">Kategori</label><select class="kh-select sm" name="category"><option value="">Tümü</option>{{range .categories}}<option value="{{.}}" {{if eq $.filter.Category .}}selected{{end}}>{{.}}</option>{{end}}</select></div>
                 <div class="kh-field"><label class="kh-label">Min. Kritiklik</label><select class="kh-select sm" name="minCriticality">{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $.filter.MinCriticality}}selected{{end}}>Sev {{$v}}+</option>{{end}}</select></div>
+                <div class="kh-field"><label class="kh-label">Vaka</label><select class="kh-select sm" name="case">
+                    <option value=""{{if eq .filter.CaseStatus ""}} selected{{end}}>Tümü</option>
+                    <option value="any"{{if eq .filter.CaseStatus "any"}} selected{{end}}>İşaretli</option>
+                    <option value="new"{{if eq .filter.CaseStatus "new"}} selected{{end}}>Yeni</option>
+                    <option value="investigating"{{if eq .filter.CaseStatus "investigating"}} selected{{end}}>İnceleniyor</option>
+                    <option value="confirmed"{{if eq .filter.CaseStatus "confirmed"}} selected{{end}}>Doğrulandı</option>
+                    <option value="dismissed"{{if eq .filter.CaseStatus "dismissed"}} selected{{end}}>Elendi</option>
+                </select></div>
                 <div class="kh-field"><label class="kh-label">Sırala</label><select class="kh-select sm" name="sort">
                     <option value="newest" {{if eq .filter.Sort "newest"}}selected{{end}}>En yeni</option><option value="oldest" {{if eq .filter.Sort "oldest"}}selected{{end}}>En eski</option>
                     <option value="criticality" {{if eq .filter.Sort "criticality"}}selected{{end}}>Kritiklik</option><option value="hits" {{if eq .filter.Sort "hits"}}selected{{end}}>Sıklık</option></select></div>
@@ -83,7 +95,7 @@
             <div class="kh-table-wrap"><table class="kh-table" id="results-table" style="min-width:1180px">
                 <thead><tr>
                     <th style="width:32px"><input type="checkbox" id="select-all" title="Tümünü seç" onchange="toggleAll(this)"></th>
-                    <th>Başlık &amp; Kaynak</th><th>URL</th><th>Etiketler / IOC</th><th class="center">Kritiklik</th><th>Kategori</th><th class="center" title="Arama kelimesinin sayfada geçme sayısı">Sıklık</th><th>Tarih</th><th></th>
+                    <th>Başlık &amp; Kaynak</th><th>URL</th><th>Etiketler / IOC</th><th class="center">Kritiklik</th><th>Kategori</th><th class="center" title="Arama kelimesinin sayfada geçme sayısı">Sıklık</th><th>Vaka</th><th>Tarih</th><th></th>
                 </tr></thead>
                 <tbody>
                 {{range .results}}
@@ -95,6 +107,16 @@
                     <td class="center"><select data-field="criticality" onchange="updateRowFrom(this)" class="kh-select sm crit-select s{{.Criticality}}" style="width:76px">{{$cc := .Criticality}}{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $cc}}selected{{end}}>{{$v}}</option>{{end}}</select></td>
                     <td><input type="text" data-field="category" value="{{.Category}}" maxlength="64" onchange="updateRowFrom(this)" class="kh-input sm" style="width:130px" list="category-list"></td>
                     <td class="center"><span id="count-{{.ID}}" class="kh-mono" style="font-weight:700;{{if gt .KeywordCount 0}}color:#68d391{{else}}color:var(--text-muted){{end}}">{{.KeywordCount}}</span></td>
+                    <td>
+                        <select data-field="case" onchange="updateCase('{{.ID}}', this)" class="kh-select sm case-sel cs-{{.CaseStatus}}" style="width:110px" title="Vaka durumu">
+                            <option value=""{{if eq .CaseStatus ""}} selected{{end}}>—</option>
+                            <option value="new"{{if eq .CaseStatus "new"}} selected{{end}}>Yeni</option>
+                            <option value="investigating"{{if eq .CaseStatus "investigating"}} selected{{end}}>İnceleniyor</option>
+                            <option value="confirmed"{{if eq .CaseStatus "confirmed"}} selected{{end}}>Doğrulandı</option>
+                            <option value="dismissed"{{if eq .CaseStatus "dismissed"}} selected{{end}}>Elendi</option>
+                        </select>
+                        <button class="kh-btn xs subtle note-btn{{if .Note}} has-note{{end}}" title="{{if .Note}}Not: {{.Note}}{{else}}Not ekle{{end}}" onclick="editNote('{{.ID}}', this)" data-note="{{.Note}}">{{icon "file"}}</button>
+                    </td>
                     <td class="muted kh-mono" style="font-size:.72rem;white-space:nowrap">{{formatTime .CreatedAt}}</td>
                     <td><div class="kh-rowactions">
                         <button class="kh-btn xs ghost" title="Etiketle + IOC çıkar" onclick="autoTagResult('{{.ID}}', this)">{{icon "tag"}}</button>
@@ -144,6 +166,28 @@
                 if (!d.count) { body.innerHTML = '<p class="kh-hint">Bu kayıt için IOC yok. Önce <strong> Etiketle</strong> çalıştırın (sayfa metni Tor üzerinden çekilir).</p>'; return; }
                 body.innerHTML = '<p class="kh-hint" style="margin-bottom:8px">' + d.count + ' artifact · güven skoruna göre sıralı</p>' + d.artifacts.map(a => `<div class="art-row"><span class="kh-badge neutral">${KH.icon(ticon[a.type]||'info')} ${KH.esc(names[a.type] || a.type)}</span><div><div class="v">${KH.esc(a.value)}</div><div class="kh-hint">${KH.esc(a.context)}</div></div><div class="kh-inline"><span class="kh-badge ${a.confidence >= .8 ? 'ok' : a.confidence >= .6 ? 'info' : 'neutral'}">${Math.round(a.confidence * 100)}%</span><button class="kh-btn xs subtle" onclick="KH.copy(${JSON.stringify(a.value)})" aria-label="Kopyala">${KH.icon('copy')}</button></div></div>`).join('') + `<div style="margin-top:12px"><button class="kh-btn sm subtle" onclick="KH.copy(${JSON.stringify(d.artifacts.map(a => a.type + ',' + a.value).join('\n'))}, 'Tüm IOC\\'lar kopyalandı')">${KH.icon('copy')} Tümünü CSV olarak kopyala</button></div>`;
             }).catch(e => body.innerHTML = '<p class="kh-alert err">' + KH.esc(e.message) + '</p>');
+        }
+
+        // ── Vaka yönetimi ──
+        function updateCase(id, el) {
+            const row = el.closest('tr[data-id]');
+            const status = el.value; el.className = 'kh-select sm case-sel cs-' + status; el.style.width = '110px';
+            const noteBtn = row.querySelector('.note-btn');
+            KH.api('/api/results/' + id + '/case', { method: 'POST', body: { status, note: noteBtn.dataset.note || '' } })
+                .then(() => KH.toast('Vaka güncellendi', 'ok', 1500)).catch(e => KH.toast(e.message, 'err'));
+        }
+        function editNote(id, btn) {
+            const cur = btn.dataset.note || '';
+            const note = prompt('Analist notu (bu bulgu için):', cur);
+            if (note === null) return;
+            const row = btn.closest('tr[data-id]');
+            const status = row.querySelector('select[data-field="case"]').value;
+            KH.api('/api/results/' + id + '/case', { method: 'POST', body: { status, note: note.trim() } }).then(() => {
+                btn.dataset.note = note.trim();
+                btn.classList.toggle('has-note', !!note.trim());
+                btn.title = note.trim() ? 'Not: ' + note.trim() : 'Not ekle';
+                KH.toast('Not kaydedildi', 'ok', 1500);
+            }).catch(e => KH.toast(e.message, 'err'));
         }
 
         // ── Seçim ──

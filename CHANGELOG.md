@@ -1,5 +1,21 @@
 # Değişiklik Günlüğü
 
+## v0.14.0 — 2026-09-19
+
+### Vaka yönetimi (analist iş akışı)
+- Bulgulara **vaka durumu** (yeni · inceleniyor · doğrulandı · reddedildi) ve serbest
+  **not** eklenebilir. `search_results` tablosuna `case_status` + `note` sütunları
+  idempotent göçle eklendi (`EnsureCaseColumns`), `idx_search_results_case` indeksi.
+- Bulgular sayfasında **Vaka** filtresi (durum bazlı + "atanmış herhangi") ve satır içi
+  renkli durum seçici + not düzenleme düğmesi. `POST /api/results/:id/case`,
+  `GET /api/results/case-counts`.
+- CSV/JSON dışa aktarımı artık `case_status` ve `note` alanlarını da içeriyor.
+- RBAC: durum/not yazma analyst+; viewer salt-okunur.
+
+Testler: `TestCaseManagement` (durum doğrulama, filtre, sayım, güncelleme) yeşil.
+`go test -race ./...` 13 paket yeşil, gofmt/vet temiz.
+
+
 ## v0.13.0 — 2026-09-19
 
 ### İki dilli arayüz (TR / EN)

@@ -1119,11 +1119,13 @@ func (s *Server) handleExportResults(c *gin.Context) {
 			Category     string    `json:"category"`
 			KeywordCount int       `json:"keywordCount"`
 			Tags         []string  `json:"tags"`
+			CaseStatus   string    `json:"caseStatus,omitempty"`
+			Note         string    `json:"note,omitempty"`
 			CreatedAt    time.Time `json:"createdAt"`
 		}
 		out := make([]row, 0, len(filtered))
 		for _, r := range filtered {
-			out = append(out, row{r.ID, r.Title, r.URL, r.Source, r.Query, r.Criticality, r.Category, r.KeywordCount, splitTagList(r.AutoTags), r.CreatedAt})
+			out = append(out, row{r.ID, r.Title, r.URL, r.Source, r.Query, r.Criticality, r.Category, r.KeywordCount, splitTagList(r.AutoTags), r.CaseStatus, r.Note, r.CreatedAt})
 		}
 		enc := json.NewEncoder(c.Writer)
 		enc.SetIndent("", "  ")
@@ -1133,11 +1135,12 @@ func (s *Server) handleExportResults(c *gin.Context) {
 		c.Header("Content-Type", "text/csv; charset=utf-8")
 		_, _ = c.Writer.Write([]byte("\xEF\xBB\xBF")) // Excel için BOM
 		w := csv.NewWriter(c.Writer)
-		_ = w.Write([]string{"id", "title", "url", "source", "query", "criticality", "category", "keyword_count", "tags", "created_at"})
+		_ = w.Write([]string{"id", "title", "url", "source", "query", "criticality", "category", "keyword_count", "tags", "case_status", "note", "created_at"})
 		for _, r := range filtered {
 			_ = w.Write([]string{
 				strconv.FormatInt(r.ID, 10), csvSafe(r.Title), csvSafe(r.URL), r.Source, csvSafe(r.Query),
 				strconv.Itoa(r.Criticality), csvSafe(r.Category), strconv.Itoa(r.KeywordCount), r.AutoTags,
+				r.CaseStatus, csvSafe(r.Note),
 				r.CreatedAt.UTC().Format(time.RFC3339),
 			})
 		}
@@ -1199,4 +1202,45 @@ func (s *Server) handleDeleteResults(c *gin.Context) {
 	}
 	logger.Info("RESULTS DELETED: %d kayıt", n)
 	c.JSON(http.StatusOK, gin.H{"success": true, "deleted": n})
+}
+
+// handleUpdateCase bir bulgunun vaka durumunu ve notunu günceller (analist iş akışı).
+func (s *Server) handleUpdateCase(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+		Note   string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		return
+	}
+	if !storage.ValidCaseStatus(req.Status) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz vaka durumu"})
+		return
+	}
+	n, err := s.db.UpdateResultCase(id, req.Status, strings.TrimSpace(req.Note))
+	if err != nil {
+		respondInternalError(c, "UpdateResultCase", err)
+		return
+	}
+	if n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Kayıt bulunamadı"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// handleCaseCounts vaka durumu dağılımını döndürür.
+func (s *Server) handleCaseCounts(c *gin.Context) {
+	counts, err := s.db.CaseCounts()
+	if err != nil {
+		respondInternalError(c, "CaseCounts", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"counts": counts})
 }

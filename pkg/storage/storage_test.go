@@ -196,3 +196,41 @@ func TestUpsertEngineStat_RespectsUserOverride(t *testing.T) {
 		t.Fatalf("budama %d satır sildi, beklenen 1", n)
 	}
 }
+
+func TestCaseManagement(t *testing.T) {
+	db := newTestDB(t)
+	n, err := db.SaveResults([]SearchResult{
+		{Title: "A", URL: "http://a.onion", Source: "Tordex", Query: "leak"},
+		{Title: "B", URL: "http://b.onion", Source: "Tor66", Query: "leak"},
+	})
+	if err != nil || n != 2 {
+		t.Fatalf("seed: %d %v", n, err)
+	}
+	var id int64
+	db.conn.QueryRow(`SELECT id FROM search_results WHERE url='http://a.onion'`).Scan(&id)
+
+	if _, err := db.UpdateResultCase(id, "bogus", "x"); err == nil {
+		t.Fatal("geçersiz durum kabul edildi")
+	}
+	aff, err := db.UpdateResultCase(id, "confirmed", "kritik sızıntı doğrulandı")
+	if err != nil || aff != 1 {
+		t.Fatalf("update: %d %v", aff, err)
+	}
+	r, _ := db.GetResultByID(id)
+	if r.CaseStatus != "confirmed" || r.Note != "kritik sızıntı doğrulandı" {
+		t.Fatalf("kayıt: %+v", r)
+	}
+	// filter by case
+	res, total, err := db.GetResultsFiltered(ResultFilter{CaseStatus: "confirmed", Limit: 10})
+	if err != nil || total != 1 || len(res) != 1 || res[0].ID != id {
+		t.Fatalf("confirmed filtresi: total=%d len=%d", total, len(res))
+	}
+	res, total, _ = db.GetResultsFiltered(ResultFilter{CaseStatus: "any", Limit: 10})
+	if total != 1 {
+		t.Fatalf("any filtresi: total=%d", total)
+	}
+	counts, _ := db.CaseCounts()
+	if counts["confirmed"] != 1 || counts["none"] != 1 {
+		t.Fatalf("counts: %v", counts)
+	}
+}

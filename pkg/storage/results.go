@@ -22,7 +22,18 @@ type SearchResult struct {
 	Category     string // Veri kategorisi
 	KeywordCount int    // İçerikteki anahtar kelime sayısı
 	AutoTags     string // Otomatik çıkarılan etiketler (virgülle ayrılmış)
+	Note         string // Analist notu (vaka yönetimi)
+	CaseStatus   string // "", "new", "investigating", "confirmed", "dismissed"
 	CreatedAt    time.Time
+}
+
+// ValidCaseStatus vaka durumunun geçerli olup olmadığını döndürür.
+func ValidCaseStatus(s string) bool {
+	switch s {
+	case "", "new", "investigating", "confirmed", "dismissed":
+		return true
+	}
+	return false
 }
 
 // QueryInfo sorgu bilgisi
@@ -160,9 +171,9 @@ func (db *DB) ApplyTagging(id int64, tags string, keywordCount int, criticality 
 func (db *DB) GetResultByID(id int64) (*SearchResult, error) {
 	var r SearchResult
 	err := db.conn.QueryRow(`
-		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at 
+		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), COALESCE(note,''), COALESCE(case_status,''), created_at 
 		FROM search_results WHERE id = ?
-	`, id).Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt)
+	`, id).Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.Note, &r.CaseStatus, &r.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -551,6 +562,7 @@ type ResultFilter struct {
 	Category       string // tam eşleşme
 	MinCriticality int
 	Tag            string // result_tags tam eşleşme
+	CaseStatus     string // "", "new", "investigating", "confirmed", "dismissed", "any" (durumu olan)
 	Sort           string // "newest" (varsayılan), "oldest", "criticality", "hits"
 	Limit          int
 	Offset         int
@@ -618,6 +630,14 @@ func (db *DB) GetResultsFiltered(f ResultFilter) ([]SearchResult, int, error) {
 		where = append(where, "id IN (SELECT result_id FROM result_tags WHERE tag = ?)")
 		args = append(args, tag)
 	}
+	if cs := strings.TrimSpace(f.CaseStatus); cs != "" {
+		if cs == "any" {
+			where = append(where, "COALESCE(case_status,'') <> ''")
+		} else if ValidCaseStatus(cs) {
+			where = append(where, "case_status = ?")
+			args = append(args, cs)
+		}
+	}
 	whereSQL := strings.Join(where, " AND ")
 
 	var total int
@@ -637,7 +657,7 @@ func (db *DB) GetResultsFiltered(f ResultFilter) ([]SearchResult, int, error) {
 
 	listArgs := append(append([]interface{}{}, args...), f.Limit, f.Offset)
 	rows, err := db.conn.Query(`
-		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), created_at
+		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), COALESCE(note,''), COALESCE(case_status,''), created_at
 		FROM search_results
 		WHERE `+whereSQL+`
 		ORDER BY `+order+`
@@ -651,7 +671,7 @@ func (db *DB) GetResultsFiltered(f ResultFilter) ([]SearchResult, int, error) {
 	results := make([]SearchResult, 0, f.Limit)
 	for rows.Next() {
 		var r SearchResult
-		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Title, &r.URL, &r.Source, &r.Query, &r.Criticality, &r.Category, &r.KeywordCount, &r.AutoTags, &r.Note, &r.CaseStatus, &r.CreatedAt); err != nil {
 			continue
 		}
 		results = append(results, r)
@@ -681,4 +701,46 @@ func escapeLike(s string) string {
 	s = strings.ReplaceAll(s, "%", "\\%")
 	s = strings.ReplaceAll(s, "_", "\\_")
 	return s
+}
+
+// EnsureCaseColumns search_results tablosuna vaka yönetimi sütunlarını ekler (idempotent).
+func (db *DB) EnsureCaseColumns() error {
+	// "duplicate column" hatası yutulur
+	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN note TEXT DEFAULT ''`)
+	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN case_status TEXT DEFAULT ''`)
+	_, _ = db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_search_results_case ON search_results(case_status)`)
+	return nil
+}
+
+// UpdateResultCase bir bulgunun vaka durumunu ve/veya notunu günceller.
+func (db *DB) UpdateResultCase(id int64, status, note string) (int64, error) {
+	if !ValidCaseStatus(status) {
+		return 0, fmt.Errorf("geçersiz vaka durumu")
+	}
+	if len(note) > 4000 {
+		note = note[:4000]
+	}
+	res, err := db.conn.Exec(`UPDATE search_results SET case_status = ?, note = ? WHERE id = ?`, status, note, id)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// CaseCounts vaka durumu başına sayım döndürür (dashboard/analytics).
+func (db *DB) CaseCounts() (map[string]int, error) {
+	rows, err := db.conn.Query(`SELECT COALESCE(NULLIF(case_status,''),'none') AS st, COUNT(*) FROM search_results GROUP BY st`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var st string
+		var n int
+		if rows.Scan(&st, &n) == nil {
+			out[st] = n
+		}
+	}
+	return out, rows.Err()
 }
