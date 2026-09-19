@@ -238,9 +238,13 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 		}
 	}
 	// Diğer oturumları düşür, mevcut oturumu koru
+	// comma-ok şart: tip uyuşmazsa "" ile devam etmek `id <> ""` üzerinden çağıranın
+	// KENDİ oturumunu da düşürürdü; bu yüzden yalnız gerçek bir kimlikle çalış.
 	if sid, ok := c.Get("sessionID"); ok {
-		if _, err := s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE AND id <> ?`, username, sid.(string)); err != nil {
-			logger.Error("SESSION REVOKE FAILED (öz parola, kullanıcı=%s): %v", username, err)
+		if sidStr, ok := sid.(string); ok && sidStr != "" {
+			if _, err := s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE AND id <> ?`, username, sidStr); err != nil {
+				logger.Error("SESSION REVOKE FAILED (öz parola, kullanıcı=%s): %v", username, err)
+			}
 		}
 	}
 	logger.Info("SELF PASSWORD CHANGE: %s", username)

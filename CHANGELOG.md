@@ -54,6 +54,18 @@
 - Doğrulandı (düzeltme gerekmedi): giriş her seferinde yeni oturum kimliği üretir
   (`crypto/rand`, fixation kapalı); CSRF `subtle.ConstantTimeCompare`; site profili
   logu çerez *değerini* değil yalnız varlığını yazar.
+- **Bağımlılık/hijyen:** `go.mod` düzenli değildi (`chromedp/cdproto` doğrudan
+  içe aktarılıyor ama dolaylı listeleniyordu) — `go mod tidy` uygulandı ve CI'ye
+  **`go mod tidy -diff` kapısı** eklendi (sapma yeniden oluşamaz). `go mod verify`
+  temiz. `govulncheck`: kodun eriştiği **0** açık; tek modül-düzeyi bulgu
+  GO-2026-5932 (`golang.org/x/crypto@v0.57.0`, yalnız bcrypt kullanılıyor, etkilenen
+  simgeler çağrılmıyor, **henüz düzeltilmiş sürüm yok** — izlenecek).
+- Bağlam değeri üzerindeki iki çıplak `sid.(string)` iddiası comma-ok'a çevrildi
+  (gizli 500-panik). Öz-parola yolunda boş kimlikle devam etmek `id <> ""` üzerinden
+  çağıranın **kendi** oturumunu da düşüreceğinden ek boş-olmayan koruması eklendi.
+- Doğrulandı (düzeltme gerekmedi): dışa aktarımlar sınırlı (bulgular ≤50k, STIX ≤20k,
+  500'lük sayfalarla); hız sınırlayıcı `ClientIP()` ile anahtarlanır ve
+  `SetTrustedProxies(nil)` XFF sahteciliğini kapatır; kod yolunda `panic(` yok.
 - Güvenlik taramaları (düzeltme gerekmedi, doğrulandı): webhook istemcisi yönlendirme
   takip etmiyor (`ErrUseLastResponse`) ve **bağlantı anında** çözümlenmiş IP'yi
   `net.Dialer.Control` ile reddediyor (DNS rebinding/TOCTOU kapalı), ortam proxy'leri

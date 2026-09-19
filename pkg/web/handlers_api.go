@@ -738,8 +738,10 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 	// Parola değiştiyse diğer tüm oturumları düşür
 	if newPass != "" {
 		if sid, ok := c.Get("sessionID"); ok {
-			if n, err := s.db.DeleteOtherSessions(sid.(string)); err == nil && n > 0 {
-				logger.Info("Parola değişti: %d diğer oturum sonlandırıldı", n)
+			if sidStr, ok := sid.(string); ok { // bağlam değeri: bare assert yerine comma-ok
+				if n, err := s.db.DeleteOtherSessions(sidStr); err == nil && n > 0 {
+					logger.Info("Parola değişti: %d diğer oturum sonlandırıldı", n)
+				}
 			}
 		}
 	}

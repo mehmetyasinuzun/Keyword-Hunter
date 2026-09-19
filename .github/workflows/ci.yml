@@ -23,6 +23,9 @@ jobs:
         run: |
           fmtout="$(gofmt -l cmd pkg)"
           if [ -n "$fmtout" ]; then echo "gofmt gerekli:"; echo "$fmtout"; exit 1; fi
+      - name: go mod tidy (no drift)
+        run: |
+          if ! go mod tidy -diff; then echo "go.mod/go.sum düzenli değil: 'go mod tidy' çalıştırın"; exit 1; fi
       - name: go vet
         run: go vet ./...
       - name: Test (race)
