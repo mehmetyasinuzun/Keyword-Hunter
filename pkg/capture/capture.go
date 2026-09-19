@@ -15,8 +15,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -56,13 +58,7 @@ func New(torProxy, chromePath, outDir string) *Capturer {
 		chromePath = os.Getenv("CHROME_BIN")
 	}
 	if chromePath == "" {
-		// yaygın konumlar
-		for _, p := range []string{"/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome"} {
-			if _, err := os.Stat(p); err == nil {
-				chromePath = p
-				break
-			}
-		}
+		chromePath = findChrome()
 	}
 	if outDir == "" {
 		outDir = os.Getenv("SCREENSHOT_DIR")
@@ -86,6 +82,46 @@ func New(torProxy, chromePath, outDir string) *Capturer {
 		timeout:    70 * time.Second,
 		sem:        make(chan struct{}, 2),
 	}
+}
+
+// findChrome işletim sistemine göre bilinen Chromium/Chrome konumlarını ve PATH'i tarar.
+// Bulunamazsa "" döner; özellik kapalı kalır (README: CHROME_BIN ile elle verilebilir).
+func findChrome() string {
+	var candidates []string
+	switch runtime.GOOS {
+	case "darwin":
+		candidates = []string{
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			"/Applications/Chromium.app/Contents/MacOS/Chromium",
+			"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+			"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+		}
+	case "windows":
+		for _, base := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LocalAppData")} {
+			if base == "" {
+				continue
+			}
+			candidates = append(candidates,
+				filepath.Join(base, "Google", "Chrome", "Application", "chrome.exe"),
+				filepath.Join(base, "Chromium", "Application", "chrome.exe"),
+				filepath.Join(base, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+				filepath.Join(base, "Microsoft", "Edge", "Application", "msedge.exe"),
+			)
+		}
+	default: // linux / bsd
+		candidates = []string{"/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/snap/bin/chromium", "/usr/bin/brave-browser"}
+	}
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	for _, name := range []string{"chromium", "chromium-browser", "google-chrome", "chrome", "brave-browser", "msedge"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 // Available chromium kullanılabilir mi (yoksa özellik devre dışı)

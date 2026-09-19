@@ -28,7 +28,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.10.0"
+var Version = "0.10.1"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -155,7 +155,7 @@ func New(cfg Config) (*Server, error) {
 	if s.capturer.Available() {
 		logger.Info("Ekran görüntüsü alt sistemi hazır (chromium bulundu)")
 	} else {
-		logger.Warn("Ekran görüntüsü devre dışı: chromium bulunamadı (yalnız Docker imajında mevcut)")
+		logger.Warn("Ekran görüntüsü devre dışı: Chrome/Chromium bulunamadı. Kurun veya CHROME_BIN ile yolunu verin (Docker imajında hazır gelir)")
 	}
 
 	// Motor aktif/pasif durumu DB'den okunur ve aramayı gerçekten etkiler

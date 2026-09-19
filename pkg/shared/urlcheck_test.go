@@ -94,3 +94,14 @@ func TestTruncateRuneSafe(t *testing.T) {
 		t.Fatal("negatif uzunluk boş dönmeli")
 	}
 }
+
+func TestIsHTTPURL(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"http://10.0.0.5:8080/hook": true, "https://siem.corp.local/in": true,
+		"ftp://x/": false, "http://user:pw@x/": false, "": false, "http:///": false,
+	} {
+		if got := IsHTTPURL(raw); got != want {
+			t.Errorf("IsHTTPURL(%q)=%v want %v", raw, got, want)
+		}
+	}
+}

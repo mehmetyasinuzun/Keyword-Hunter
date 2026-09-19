@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"time"
 
 	"keywordhunter-mvp/pkg/shared"
@@ -15,6 +17,27 @@ import (
 // webhookClient yönlendirme takip etmeyen, dahili hedefleri reddeden istemci
 // (SSRF koruması). Slack/Discord/Teams gibi genel servisler için yeterlidir.
 var webhookClient = shared.NewSafeClearnetClient(15 * time.Second)
+
+// privateClient WEBHOOK_ALLOW_PRIVATE=true iken kullanılır: kurum içi SIEM/SOAR
+// alıcıları (10.x, 192.168.x) için dahili hedeflere izin verir; yine yönlendirme yok.
+var privateClient = shared.NewPlainClearnetClient(15 * time.Second)
+
+// allowPrivate dahili ağ hedeflerine izin verilip verilmediğini döndürür.
+var allowPrivate = func() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("WEBHOOK_ALLOW_PRIVATE")))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+// AllowPrivateTargets yapılandırma bilgisini dışa verir (UI uyarısı için).
+func AllowPrivateTargets() bool { return allowPrivate() }
+
+// ValidTarget webhook adresinin kabul edilebilir olup olmadığını söyler.
+func ValidTarget(raw string) bool {
+	if allowPrivate() {
+		return shared.IsHTTPURL(raw)
+	}
+	return shared.IsPublicWebURL(raw, false)
+}
 
 // AlertPayload bildirim verisi
 type AlertPayload struct {
@@ -48,11 +71,15 @@ func SendWebhook(webhookURL string, payload AlertPayload) error {
 		return fmt.Errorf("webhook marshal hatası: %w", err)
 	}
 
-	if !shared.IsPublicWebURL(webhookURL, false) {
-		return fmt.Errorf("webhook adresi geçersiz veya dahili bir hedefe işaret ediyor")
+	if !ValidTarget(webhookURL) {
+		return fmt.Errorf("webhook adresi geçersiz veya dahili bir hedefe işaret ediyor (kurum içi alıcı için WEBHOOK_ALLOW_PRIVATE=true)")
 	}
 
-	resp, err := webhookClient.Post(webhookURL, "application/json", bytes.NewReader(data))
+	client := webhookClient
+	if allowPrivate() {
+		client = privateClient
+	}
+	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("webhook isteği başarısız: %w", err)
 	}

@@ -1,5 +1,17 @@
 # Değişiklik Günlüğü
 
+## v0.10.1 — 2026-09-19
+
+- Analiz ve Harita sayfaları ortak bileşen setine taşındı (kategori grafiği, IOC özeti,
+  domain filtresi/bulgu bağlantısı; harita: tema uyumu, kullanım ipucu, "izleme listesine ekle").
+- Çapraz platform: `run.sh` (macOS/Linux), `run.ps1` (Windows), ince `.bat` sarmalayıcılar,
+  `Makefile`, `./run.sh release` ile 6 hedef için ikili; Chrome/Chromium otomatik tespiti
+  macOS/Windows/Linux için; platform bilgisi açılış logunda.
+- `WEBHOOK_ALLOW_PRIVATE`: kurum içi SIEM/SOAR alıcılarına izin (yönlendirme yine kapalı);
+  webhook teslimi gerçek HTTP alıcıyla (unit + canlı) doğrulandı, zamanlayıcı gerçek zamanda
+  doğrulandı (tick → 154 sonuç → 35 eşik üstü bulgu → genel webhook).
+- Yeni testler: notify (teslim, yönlendirme reddi, özel-ağ anahtarı), capture (Chrome tespiti).
+
 ## v0.10.0 — 2026-09-18
 
 Tam denetim + sertleştirme + yeniden tasarım sürümü. Tüm değişiklikler gerçek Tor

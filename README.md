@@ -51,16 +51,24 @@ Windows: `temiz_baslat.bat` aynı adımları yapar.
 Kalıcı veriler `./data/` altındadır: `keywordhunter.db`, `.env`, `logs/`, `screenshots/`.
 `docker compose down -v && rm -rf data` tüm veriyi siler.
 
-### Yerel çalıştırma (Go 1.26+)
+### Yerel çalıştırma — macOS / Linux / Windows (Go 1.26+)
 
-```bash
-cp .env.example .env        # ADMIN_PASS'ı değiştirin
-# Tor Browser (9150) veya tor servisi (9050) çalışıyor olmalı; TOR_PROXY'yi eşleyin
-go build -o keywordhunter ./cmd && ./keywordhunter
-```
+Uygulama saf Go'dur (CGO yok, SQLite gömülü); altı hedefte derlenir ve çalışır:
+`darwin/arm64`, `darwin/amd64`, `linux/amd64`, `linux/arm64`, `windows/amd64`, `windows/arm64`.
 
-Windows: `build_and_run.bat`. Ekran görüntüsü özelliği yalnızca Docker imajında
-(Chromium) etkindir; yerelde `CHROME_BIN` ile bir Chromium yolu verirseniz de çalışır.
+| Platform | Başlat | Not |
+|---|---|---|
+| macOS / Linux | `./run.sh` (veya `make run`) | `.env` yoksa şablondan oluşturur, Tor portunu kontrol eder |
+| Windows (PowerShell) | `.un.ps1` | `winget install GoLang.Go` ile Go kurun |
+| Windows (cmd) | `build_and_run.bat` | `run.ps1`'i çağıran ince sarmalayıcı |
+| Her platform | `./run.sh release` | `dist/` altına 6 platform için ikili üretir |
+
+Tor: **Tor Browser** açıkken 9150, **tor servisi** 9050 portunu dinler (`brew install tor`,
+`apt install tor`, Windows'ta Tor Expert Bundle). `.env` içindeki `TOR_PROXY` bunu göstermeli.
+
+Ekran görüntüsü: makinede Chrome/Chromium/Brave/Edge varsa otomatik bulunur
+(macOS `/Applications`, Windows `Program Files`, Linux `/usr/bin`); bulunamazsa
+`CHROME_BIN=/yol/chrome` verin. Docker imajında Chromium hazır gelir.
 
 ---
 
@@ -80,7 +88,9 @@ Windows: `build_and_run.bat`. Ekran görüntüsü özelliği yalnızca Docker im
 | `LOG_DIR` / `LOG_LEVEL` | `logs` / `info` | Günlük döndürmeli log |
 | `WATCHLIST_INTERVAL_MIN` | `15` | İzleme kontrol aralığı |
 | `WATCHLIST_SEED` | `none` | `turkey` = gömülü Türk onion listesini otomatik yükle; dosya yolu = JSON seed. UI'dan da yüklenebilir |
-| `SCREENSHOT_DIR` | `/data/screenshots` (Docker) | PNG çıktı dizini |
+| `SCREENSHOT_DIR` | `/data/screenshots` (Docker) / `screenshots` | PNG çıktı dizini |
+| `CHROME_BIN` | otomatik | Chrome/Chromium ikili yolu (ekran görüntüsü) |
+| `WEBHOOK_ALLOW_PRIVATE` | `false` | `true` ise webhook'lar kurum içi (10.x, 192.168.x, localhost) SIEM/SOAR alıcılarına da gidebilir; internete açık kurulumda kapalı tutun |
 | `TZ` (compose) | `Europe/Istanbul` | Arayüzde gösterilen saat dilimi |
 
 Docker'da `ENV_FILE=/data/.env` kullanılır; kökteki `.env` Docker için okunmaz.
@@ -93,7 +103,7 @@ Docker'da `ENV_FILE=/data/.env` kullanılır; kökteki `.env` Docker için okunm
 * Oturum çerezi `HttpOnly + SameSite=Lax`, kayan + mutlak ömür; parola değişince diğer oturumlar düşer.
 * API yazma uçlarında **CSRF token**; `GET /logout` siteler-arası tetiklemeye karşı Fetch Metadata ile korunur.
 * **CSP** (`default-src 'self'`, harici script/iframe yok), `X-Frame-Options: DENY`, `nosniff`, `no-store`, HSTS (HTTPS'te).
-* **SSRF koruması**: derinleştirme/analiz/izleme yalnızca `.onion`; webhook ve ekran görüntüsü hedefleri dahili/loopback/link-local adreslere çözümlenemez (DNS sonrası kontrol), yönlendirme takip edilmez.
+* **SSRF koruması**: derinleştirme/analiz/izleme yalnızca `.onion`; webhook ve ekran görüntüsü hedefleri dahili/loopback/link-local adreslere çözümlenemez (DNS sonrası kontrol), yönlendirme takip edilmez. Kurum içi alıcı gerekiyorsa `WEBHOOK_ALLOW_PRIVATE=true` (yönlendirme yine kapalı).
 * Dark web'den gelen tüm metinler arayüzde kaçışlanır (stored XSS yok); CSV export formül enjeksiyonuna karşı korumalı.
 * Docker: root olmayan kullanıcı, `no-new-privileges`, Tor portu host'a kapalı, `govulncheck` temiz.
 

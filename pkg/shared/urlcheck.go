@@ -125,3 +125,17 @@ func SplitHostPort(v string) (string, string, error) {
 	}
 	return host, port, nil
 }
+
+// IsHTTPURL yalnızca http(s) şemalı, host'u olan, kullanıcı bilgisi içermeyen URL kabul eder
+// (dahili hedeflere izin verir; WEBHOOK_ALLOW_PRIVATE için).
+func IsHTTPURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > 2048 {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+		return false
+	}
+	return true
+}

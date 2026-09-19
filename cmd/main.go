@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -48,6 +49,7 @@ func main() {
 
 	// Sistem başlangıç logu
 	logger.SystemStartup(appConfig.TorProxy, appConfig.DBPath, appConfig.WebAddr)
+	logger.Info("CONFIG: Platform: %s/%s, Go %s, sürüm v%s", runtime.GOOS, runtime.GOARCH, runtime.Version(), web.Version)
 
 	// Veritabanını aç
 	db, err := storage.New(appConfig.DBPath)
@@ -65,7 +67,7 @@ func main() {
 	searcher, err := search.New(appConfig.TorProxy)
 	if err != nil {
 		logger.Error("Tor connection failed: %v", err)
-		logger.Warn("Ensure Tor Browser or Tor Service is running on %s", appConfig.TorProxy)
+		logger.Warn("Tor Browser (9150) veya tor servisi (9050) %s adresinde çalışıyor olmalı; TOR_PROXY ile değiştirin", appConfig.TorProxy)
 		os.Exit(1)
 	}
 	logger.Info("Tor connection ready")

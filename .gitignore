@@ -5,6 +5,8 @@
 *.so
 *.dylib
 keywordhunter
+bin/
+dist/
 
 # Test binary
 *.test

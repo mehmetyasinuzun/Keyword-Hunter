@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/notify"
 	"keywordhunter-mvp/pkg/search"
 )
 
@@ -179,7 +180,7 @@ func (s *Server) handleCreateScheduled(c *gin.Context) {
 		req.AlertThreshold = 3
 	}
 	req.WebhookURL = strings.TrimSpace(req.WebhookURL)
-	if req.WebhookURL != "" && !isValidWebhookURL(req.WebhookURL) {
+	if req.WebhookURL != "" && !notify.ValidTarget(req.WebhookURL) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook yalnızca http(s) ve genel bir adres olabilir"})
 		return
 	}

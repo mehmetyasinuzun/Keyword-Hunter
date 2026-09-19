@@ -58,3 +58,22 @@ type contextKey struct{}
 
 var _ = context.Background
 var _ contextKey
+
+// NewPlainClearnetClient dahili hedeflere izin veren ama yine yönlendirme takip
+// etmeyen, ortam proxy'si kullanmayan istemci (WEBHOOK_ALLOW_PRIVATE için).
+func NewPlainClearnetClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy:               nil,
+			DialContext:         dialer.DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+			MaxIdleConns:        4,
+			IdleConnTimeout:     30 * time.Second,
+		},
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}

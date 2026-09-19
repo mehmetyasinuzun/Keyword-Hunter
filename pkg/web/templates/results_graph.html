@@ -14,15 +14,15 @@
     <!-- Query Panel -->
     <div class="query-panel">
         <div class="query-selector">
-            <label>📌 Sorgu:</label>
+            <label>Sorgu</label>
             <select id="query-select" onchange="loadSelectedQuery()">
                 <option value="">Yükleniyor...</option>
             </select>
         </div>
         <div class="query-search">
-            <input type="text" id="quick-search" placeholder="Yeni arama..."
+            <input type="text" id="quick-search" placeholder="Yeni arama (Tor, ~10-90 sn)…" maxlength="200"
                 onkeypress="if(event.key==='Enter') quickSearch()">
-            <button onclick="quickSearch()" class="search-btn"></button>
+            <button onclick="quickSearch()" class="search-btn" title="Ara ve haritaya ekle">Ara</button>
         </div>
         <div class="query-info">
             <span id="current-query-label"></span>
@@ -39,10 +39,10 @@
                 </div>
                 <div class="graph-load-step" id="graph-step-results">
                     <span class="graph-load-dot"></span>
-                    <span>Sonuclar</span>
+                    <span>Sonuçlar</span>
                 </div>
             </div>
-            <div class="graph-load-meta" id="graph-load-meta">Yukleme baslatiliyor...</div>
+            <div class="graph-load-meta" id="graph-load-meta">Yükleme başlatılıyor…</div>
         </div>
     </div>
 
@@ -50,7 +50,7 @@
     <div id="graph-container">
         <!-- Stats Panel -->
         <div class="panel stats">
-            <h3> İstatistikler</h3>
+            <h3>İstatistikler</h3>
             <div class="stats-item">
                 <span>Sorgu:</span>
                 <span class="stats-value" id="stat-queries">0</span>
@@ -107,7 +107,7 @@
 
         <!-- Legend -->
         <div class="panel legend">
-            <h3>🏷️ Açıklama</h3>
+            <h3>Açıklama</h3>
             <div class="legend-item">
                 <div class="legend-color" style="background: #4299e1;"></div>
                 <span>Sorgu</span>
@@ -167,6 +167,8 @@
             </div>
         </div>
 
+        <div class="graph-help"><b>Kullanım:</b> sol tık aç/kapat · sağ tık menü (derinleştir, kopyala, odaklan) · tekerlek yakınlaştır · sürükle kaydır. Derinleştirme sayfadaki linkleri Tor'dan çekip grafa ekler.</div>
+
         <!-- Ayarlar Butonu -->
         <button class="settings-toggle" id="settings-toggle" onclick="toggleSettingsPanel()" title="Graf Ayarları">
             ⚙️
@@ -178,12 +180,13 @@
 
     <!-- Context Menu -->
     <div class="context-menu" id="context-menu">
-        <div class="context-menu-item" onclick="copyLink()"> Linki Kopyala</div>
+        <div class="context-menu-item" onclick="copyLink()">📋 Linki Kopyala</div>
         <div class="context-menu-item" onclick="copyTitle()">📝 Başlığı Kopyala</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()"> Derinleştir</div>
+        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()">🔍 Derinleştir</div>
+        <div class="context-menu-item" id="watch-menu-item" onclick="watchNode()">📡 İzleme Listesine Ekle</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="focusNode()"> Odaklan</div>
+        <div class="context-menu-item" onclick="focusNode()">🎯 Odaklan</div>
         <div class="context-menu-item" onclick="showLinkInfo()">ℹ️ Detaylar</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item danger" onclick="closeContextMenu()">✖️ Kapat</div>
@@ -204,12 +207,9 @@
         <div>
             <h3 style="color: #63b3ed; font-size: 18px; margin-bottom: 20px;">🔗 Link Detayları</h3>
             <div id="link-modal-content"></div>
-            <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
-                <button onclick="copyLinkFromModal()"
-                    style="background: linear-gradient(135deg, #4299e1, #3182ce); color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">
-                    Kopyala</button>
-                <button onclick="closeLinkModal()"
-                    style="background: #4a5568; color: white; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer;">Kapat</button>
+            <div class="kh-modal-actions">
+                <button class="kh-btn subtle" onclick="closeLinkModal()">Kapat</button>
+                <button class="kh-btn primary" onclick="copyLinkFromModal()">📋 Kopyala</button>
             </div>
         </div>
     </div>

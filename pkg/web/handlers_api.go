@@ -1007,7 +1007,7 @@ func (s *Server) handleAlertConfigGet(c *gin.Context) {
 		respondInternalError(c, "GetAlertConfig", err)
 		return
 	}
-	c.JSON(http.StatusOK, cfg)
+	c.JSON(http.StatusOK, gin.H{"webhookUrl": cfg.WebhookURL, "minCriticality": cfg.MinCriticality, "enabled": cfg.Enabled, "updatedAt": cfg.UpdatedAt, "allowPrivateTargets": notify.AllowPrivateTargets()})
 }
 
 // handleAlertConfigSave bildirim ayarlarını kaydeder
@@ -1030,7 +1030,7 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 		MinCriticality: req.MinCriticality,
 		Enabled:        req.Enabled,
 	}
-	if cfg.WebhookURL != "" && !shared.IsPublicWebURL(cfg.WebhookURL, false) {
+	if cfg.WebhookURL != "" && !notify.ValidTarget(cfg.WebhookURL) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Webhook yalnızca http(s) ve genel (dahili olmayan) bir adres olabilir"})
 		return
 	}
@@ -1058,7 +1058,7 @@ func (s *Server) handleAlertConfigTest(c *gin.Context) {
 			target = cfg.WebhookURL
 		}
 	}
-	if !shared.IsPublicWebURL(target, false) {
+	if !notify.ValidTarget(target) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli bir webhook adresi gerekli"})
 		return
 	}

@@ -183,6 +183,8 @@ function showContextMenu(x, y) {
     const menu = document.getElementById('context-menu');
     const expandItem = document.getElementById('expand-menu-item');
 
+    const watchItem = document.getElementById('watch-menu-item');
+    if (watchItem) watchItem.style.display = (GraphState.selectedNode && GraphState.selectedNode.data.url && GraphState.selectedNode.data.url.includes('.onion')) ? 'flex' : 'none';
     if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
         const isOnion = GraphState.selectedNode.data.url.includes('.onion');
         if (GraphState.selectedNode.data.isExpanded) {
@@ -338,6 +340,19 @@ function expandNode() {
             _expandInProgress = false;
             if (loading) loading.style.display = 'none';
         });
+}
+
+// Seçili düğümün alan adını izleme listesine ekler
+function watchNode() {
+    closeContextMenu();
+    const node = GraphState.selectedNode;
+    if (!node || !node.data || !node.data.url) { showToast('⚠️ Önce bir sonuç düğümü seçin', 'warning'); return; }
+    let host = '';
+    try { host = new URL(node.data.url).hostname; } catch (_) { showToast('⚠️ Geçersiz URL', 'warning'); return; }
+    if (!host.endsWith('.onion')) { showToast('⚠️ Yalnızca .onion siteleri izlenebilir', 'warning'); return; }
+    fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: (node.data.name || host).slice(0, 100), url: 'http://' + host, category: 'Harita', notes: 'Haritadan eklendi' }) })
+        .then(r => r.json()).then(d => { if (d.success) showToast('📡 İzleme listesine eklendi', 'success'); else throw new Error(d.error || 'Eklenemedi'); })
+        .catch(e => showToast('❌ ' + e.message, 'error'));
 }
 
 function showLinkInfo() {

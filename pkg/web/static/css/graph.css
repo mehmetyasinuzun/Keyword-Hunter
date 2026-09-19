@@ -2,34 +2,31 @@
    KeywordHunter - Graph Visualization Styles (v2 - Fixed Layout)
    ========================================================================== */
 
+/* Sayfa dikey flex: navbar (yüksekliği değişebilir) → sorgu paneli → graf alanı (kalan).
+   Sabit (fixed) konum ve elle hesaplanmış top değerleri kaldırıldı; navbar iki satıra
+   sarsa bile çakışma olmaz. Paneller graf alanına göre absolute konumlanır. */
 body.graph-page {
-    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
     overflow: hidden;
     margin: 0;
     padding: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Graph page: Minimal fixed navbar override */
-body.graph-page .nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 56px;
-    z-index: 1000;
-}
+body.graph-page .nav { position: relative; z-index: 1000; flex: none; }
 
 /* ==========================================================================
    Query Panel (Top Bar) - Fixed Position
    ========================================================================== */
 .query-panel {
-    position: fixed;
-    top: 56px;
-    left: 0;
-    right: 0;
-    height: 50px;
-    background: rgba(15, 15, 26, 0.98);
-    border-bottom: 1px solid #2d3748;
+    position: relative;
+    flex: none;
+    flex-wrap: wrap;
+    min-height: 54px;
+    background: rgba(7, 8, 13, 0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--bg-card-border);
     display: flex;
     align-items: center;
     padding: 0 20px;
@@ -44,15 +41,17 @@ body.graph-page .nav {
 }
 
 .query-selector label {
-    color: #ed8936;
-    font-size: 13px;
-    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
 }
 
 .query-selector select {
-    background: #1a202c;
-    border: 1px solid #4a5568;
-    color: #e2e8f0;
+    background: rgba(7,8,13,.6);
+    border: 1px solid rgba(99,179,237,.15);
+    color: var(--text-primary);
     padding: 8px 36px 8px 12px;
     border-radius: 8px;
     font-size: 13px;
@@ -83,8 +82,8 @@ body.graph-page .nav {
 
 .query-search input {
     width: 200px;
-    background: #1a202c;
-    border: 1px solid #4a5568;
+    background: rgba(7,8,13,.7);
+    border: 1px solid rgba(99,179,237,.2);
     color: #e2e8f0;
     padding: 8px 14px;
     border-radius: 8px;
@@ -135,7 +134,7 @@ body.graph-page .nav {
     align-items: center;
     gap: 12px;
     background: rgba(15, 15, 26, 0.92);
-    border: 1px solid #2d3748;
+    border: 1px solid rgba(99,179,237,.12);
     border-radius: 10px;
     padding: 6px 10px;
     min-width: 360px;
@@ -163,7 +162,7 @@ body.graph-page .nav {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #4a5568;
+    background: rgba(99,179,237,.2);
     box-shadow: 0 0 0 0 rgba(99, 179, 237, 0);
 }
 
@@ -221,8 +220,13 @@ body.graph-page .nav {
    Graph Container
    ========================================================================== */
 #graph-container {
-    position: fixed;
-    top: 106px;
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    background:
+        radial-gradient(ellipse at 30% 20%, var(--glow-secondary) 0%, transparent 55%),
+        radial-gradient(ellipse at 75% 80%, var(--glow-primary) 0%, transparent 55%),
+        var(--bg-primary);
     left: 0;
     right: 0;
     bottom: 0;
@@ -233,22 +237,24 @@ body.graph-page .nav {
    Panels - Non-overlapping Layout
    ========================================================================== */
 .panel {
-    position: fixed;
-    background: rgba(15, 15, 26, 0.95);
-    border: 1px solid #2d3748;
-    border-radius: 12px;
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px solid var(--bg-card-border);
+    border-radius: var(--radius-md);
     padding: 14px;
     z-index: 100;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     font-size: 12px;
 }
 
 .panel h3 {
-    color: #e2e8f0;
-    font-weight: 600;
+    color: var(--text-muted);
+    font-weight: 800;
     margin: 0 0 10px 0;
-    font-size: 13px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -256,7 +262,7 @@ body.graph-page .nav {
 
 /* Stats Panel - Top Left */
 .stats {
-    top: 115px;
+    top: 12px;
     left: 12px;
     min-width: 140px;
 }
@@ -276,7 +282,7 @@ body.graph-page .nav {
 
 /* Controls Panel - Top Right */
 .controls {
-    top: 115px;
+    top: 12px;
     right: 12px;
     display: flex;
     gap: 6px;
@@ -286,9 +292,11 @@ body.graph-page .nav {
 }
 
 .control-btn {
-    background: rgba(45, 55, 72, 0.9);
-    border: 1px solid #4a5568;
-    color: #e2e8f0;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    color: var(--text-secondary);
+    font-family: var(--font-primary);
+    font-weight: 600;
     padding: 8px 12px;
     border-radius: 8px;
     cursor: pointer;
@@ -301,14 +309,15 @@ body.graph-page .nav {
 }
 
 .control-btn:hover {
-    background: #4a5568;
-    border-color: #63b3ed;
+    background: rgba(255,255,255,.08);
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
 }
 
 .control-btn.primary {
-    background: linear-gradient(135deg, #4299e1, #3182ce);
-    border-color: #63b3ed;
-    font-weight: 600;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border-color: transparent;
+    color: #fff;
 }
 
 .control-btn.primary:hover {
@@ -319,15 +328,16 @@ body.graph-page .nav {
 
 /* Layout Selector - Below Controls */
 .layout-selector {
-    position: fixed;
-    top: 170px;
+    position: absolute;
+    top: 66px;
     right: 12px;
     display: flex;
     gap: 4px;
-    background: rgba(26, 32, 44, 0.95);
+    background: var(--bg-card);
     padding: 4px;
     border-radius: 10px;
-    border: 1px solid #2d3748;
+    border: 1px solid var(--bg-card-border);
+    backdrop-filter: blur(12px);
     z-index: 100;
 }
 
@@ -343,7 +353,7 @@ body.graph-page .nav {
 }
 
 .layout-btn:hover {
-    background: #2d3748;
+    background: rgba(99,179,237,.12);
     color: #e2e8f0;
 }
 
@@ -376,7 +386,7 @@ body.graph-page .nav {
 }
 
 .legend-divider {
-    border-top: 1px solid #2d3748;
+    border-top: 1px solid rgba(99,179,237,.12);
     margin: 6px 0;
     padding-top: 6px;
 }
@@ -404,16 +414,16 @@ body.graph-page .nav {
 
 /* Zoom Controls - Bottom Center */
 .zoom-controls {
-    position: fixed;
+    position: absolute;
     bottom: 12px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 4px;
-    background: rgba(26, 32, 44, 0.95);
+    background: var(--bg-card);
     padding: 6px;
     border-radius: 10px;
-    border: 1px solid #2d3748;
+    border: 1px solid rgba(99,179,237,.12);
     z-index: 100;
 }
 
@@ -433,7 +443,7 @@ body.graph-page .nav {
 }
 
 .zoom-btn:hover {
-    background: #4a5568;
+    background: rgba(99,179,237,.2);
 }
 
 /* ==========================================================================
@@ -569,7 +579,7 @@ body.graph-page .nav {
 .tooltip {
     position: fixed;
     background: rgba(15, 15, 26, 0.98);
-    border: 1px solid #4a5568;
+    border: 1px solid rgba(99,179,237,.2);
     border-radius: 10px;
     padding: 14px;
     color: #e2e8f0;
@@ -592,7 +602,7 @@ body.graph-page .nav {
     word-break: break-all;
     font-size: 10px;
     font-family: monospace;
-    background: #1a202c;
+    background: rgba(7,8,13,.7);
     padding: 6px 10px;
     border-radius: 6px;
     margin-top: 6px;
@@ -625,7 +635,7 @@ body.graph-page .nav {
 .context-menu {
     position: fixed;
     background: rgba(15, 15, 26, 0.98);
-    border: 1px solid #4a5568;
+    border: 1px solid rgba(99,179,237,.2);
     border-radius: 10px;
     padding: 6px 0;
     min-width: 180px;
@@ -655,7 +665,7 @@ body.graph-page .nav {
 
 .context-menu-divider {
     height: 1px;
-    background: #2d3748;
+    background: rgba(99,179,237,.12);
     margin: 4px 12px;
 }
 
@@ -697,12 +707,12 @@ body.graph-page .nav {
    Loading Spinner
    ========================================================================== */
 .expand-loading {
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     background: rgba(15, 15, 26, 0.98);
-    border: 1px solid #4a5568;
+    border: 1px solid rgba(99,179,237,.2);
     border-radius: 14px;
     padding: 28px 48px;
     z-index: 5000;
@@ -717,7 +727,7 @@ body.graph-page .nav {
 .spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid #2d3748;
+    border: 3px solid rgba(99,179,237,.12);
     border-top-color: #63b3ed;
     border-radius: 50%;
     animation: spin 1s linear infinite;
@@ -750,13 +760,13 @@ body.graph-page .nav {
    Settings Panel - Graf Ayarları
    ========================================================================== */
 .settings-toggle {
-    position: fixed;
+    position: absolute;
     bottom: 70px;
     right: 12px;
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #4a5568, #2d3748);
+    background: linear-gradient(135deg, rgba(99,179,237,.2), rgba(99,179,237,.12));
     border: 1px solid #718096;
     color: #e2e8f0;
     font-size: 20px;
@@ -774,12 +784,12 @@ body.graph-page .nav {
 }
 
 .settings-panel {
-    position: fixed;
+    position: absolute;
     bottom: 130px;
     right: 12px;
     width: 280px;
     background: rgba(26, 32, 44, 0.98);
-    border: 1px solid #4a5568;
+    border: 1px solid rgba(99,179,237,.2);
     border-radius: 12px;
     padding: 16px;
     z-index: 450;
@@ -791,7 +801,7 @@ body.graph-page .nav {
     font-size: 14px;
     margin-bottom: 16px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #4a5568;
+    border-bottom: 1px solid rgba(99,179,237,.2);
 }
 
 .settings-group {
@@ -808,7 +818,7 @@ body.graph-page .nav {
 .settings-group input[type="range"] {
     width: calc(100% - 50px);
     height: 6px;
-    background: #4a5568;
+    background: rgba(99,179,237,.2);
     border-radius: 3px;
     outline: none;
     -webkit-appearance: none;
@@ -845,7 +855,7 @@ body.graph-page .nav {
     gap: 8px;
     margin-top: 16px;
     padding-top: 12px;
-    border-top: 1px solid #4a5568;
+    border-top: 1px solid rgba(99,179,237,.2);
 }
 
 .settings-btn {
@@ -856,7 +866,7 @@ body.graph-page .nav {
     font-size: 12px;
     cursor: pointer;
     transition: all 0.2s;
-    background: #4a5568;
+    background: rgba(99,179,237,.2);
     color: #e2e8f0;
 }
 
@@ -890,8 +900,8 @@ body.graph-page .nav {
 }
 
 #link-modal>div {
-    background: linear-gradient(135deg, #1a202c, #2d3748);
-    border: 1px solid #4a5568;
+    background: linear-gradient(135deg, rgba(7,8,13,.7), rgba(99,179,237,.12));
+    border: 1px solid rgba(99,179,237,.2);
     border-radius: 14px;
     padding: 24px;
     max-width: 500px;
@@ -910,3 +920,44 @@ body.graph-page .nav {
         display: none;
     }
 }
+
+/* ── Tema uyumu (v0.10) ─────────────────────────────────────────────── */
+.query-search input { background: rgba(7,8,13,.6); border: 1px solid rgba(99,179,237,.15); color: var(--text-primary); font-family: var(--font-primary); }
+.query-search input:focus { border-color: var(--accent-primary); outline: none; box-shadow: 0 0 0 3px var(--glow-primary); }
+.search-btn { background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); border: none; color: #fff; font-weight: 700; }
+.query-info { color: var(--text-secondary); font-size: 12px; }
+.graph-load-status { background: rgba(7,8,13,.6); border: 1px solid var(--bg-card-border); border-radius: 999px; padding: 4px 12px; }
+.graph-load-meta { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
+.tooltip { background: rgba(13,15,22,.97); border: 1px solid var(--bg-card-border); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5); color: var(--text-primary); font-family: var(--font-primary); }
+.tooltip .url { font-family: var(--font-mono); color: var(--accent-primary); }
+.context-menu { background: rgba(13,15,22,.98); border: 1px solid var(--bg-card-border); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.55); font-family: var(--font-primary); }
+.context-menu-item:hover { background: rgba(99,179,237,.12); }
+.context-menu-item.danger { color: var(--accent-danger); }
+.settings-panel { top: 118px; right: 12px; }
+.settings-toggle { background: var(--bg-card); border: 1px solid var(--bg-card-border); color: var(--text-primary); }
+.settings-btn { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: var(--text-secondary); font-family: var(--font-primary); }
+.settings-btn.primary { background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); color: #fff; border-color: transparent; }
+.settings-group input[type=range] { accent-color: var(--accent-primary); }
+.zoom-btn { background: var(--bg-card); border: 1px solid var(--bg-card-border); color: var(--text-primary); }
+.zoom-btn:hover { border-color: var(--accent-primary); }
+.legend { font-size: 11px; }
+.stats-item { color: var(--text-secondary); }
+.stats-value { color: var(--accent-primary); font-family: var(--font-mono); }
+#link-modal > div { background: var(--bg-secondary); border: 1px solid var(--bg-card-border); border-radius: var(--radius-xl); }
+.expand-loading { background: rgba(13,15,22,.97); border: 1px solid var(--bg-card-border); border-radius: var(--radius-lg); }
+.graph-empty-state a { font-weight: 600; }
+.node text { font-family: var(--font-primary); }
+.graph-help { position: absolute; bottom: 12px; right: 12px; z-index: 100; background: var(--bg-card); border: 1px solid var(--bg-card-border); border-radius: var(--radius-md); padding: 10px 12px; font-size: 11px; color: var(--text-muted); backdrop-filter: blur(12px); max-width: 260px; line-height: 1.5; }
+.graph-help b { color: var(--text-secondary); }
+@media (max-width: 900px) {
+    .stats, .legend, .graph-help, .settings-toggle { display: none; }
+    .controls { max-width: none; left: 12px; }
+    .layout-selector { top: 110px; }
+    .query-panel { padding: 8px 12px; gap: 8px; }
+}
+
+.query-panel .query-search { flex: 1 1 260px; }
+.query-panel .query-search input { width: 100%; min-width: 0; }
+.query-panel .search-btn { padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+.query-panel .query-info { flex: 1 1 auto; }
+.query-panel .graph-load-status { flex: none; }

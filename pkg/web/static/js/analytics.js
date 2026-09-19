@@ -119,20 +119,18 @@ function renderFilterChips() {
     const container = document.getElementById('filter-chips');
 
     if (queryList.length === 0) {
-        container.innerHTML = '<span class="filter-empty">Henüz sorgu verisi bulunamadı</span>';
+        container.innerHTML = '<span class="kh-hint">Henüz sorgu verisi yok — <a href="/search" style="color:var(--accent-primary)">arama yapın</a></span>';
         return;
     }
 
-    container.innerHTML = queryList.map((q, index) => `
-        <button 
-            class="filter-chip ${selectedQueries.has(q.query) ? 'active' : ''}"
+    container.innerHTML = queryList.map((q) => `
+        <button class="kh-chip ${selectedQueries.has(q.query) ? 'active' : ''}"
             onclick="toggleQuery('${encodeURIComponent(q.query)}')"
-            data-query="${encodeURIComponent(q.query)}"
-        >
-            ${escapeHtml(q.query)}
-            <span class="filter-chip-count">${q.count || 0}</span>
-        </button>
-    `).join('');
+            data-query="${encodeURIComponent(q.query)}">
+            ${escapeHtml(q.query)} <span class="count">${q.count || 0}</span>
+        </button>`).join('');
+    const exp = document.getElementById('export-link');
+    if (exp) exp.href = '/api/export/results?format=csv' + (selectedQueries.size ? '&q=' + encodeURIComponent([...selectedQueries][0]) : '');
 }
 
 function toggleQuery(encodedQuery) {
@@ -161,7 +159,7 @@ function changeInterval(interval) {
     });
 
     const titles = { hour: 'Saatlik', day: 'Günlük', week: 'Haftalık' };
-    document.getElementById('timeline-title').innerHTML = `<span></span> Zaman Tüneli (${titles[interval]})`;
+    document.getElementById('timeline-title').innerHTML = `🕒 Zaman Tüneli <span class="hint">${titles[interval]} · motor bazlı</span>`;
 
     loadAnalyticsData();
 }
@@ -190,7 +188,9 @@ function updateStats() {
     animateNumber('stat-total', total);
     animateNumber('stat-freq', freq);
     document.getElementById('stat-rate').textContent = `%${rate}`;
-    animateNumber('stat-queries', queryList.length);
+    const high = (analyticsData.criticality || []).filter(c => c.level >= 3).reduce((a, c) => a + c.count, 0);
+    animateNumber('stat-high', high);
+    document.getElementById('stat-total-sub').textContent = selectedQueries.size ? '"' + [...selectedQueries][0] + '" sorgusu' : queryList.length + ' sorgu';
 }
 
 function animateNumber(elementId, target) {
@@ -224,6 +224,30 @@ function renderAllCharts() {
     renderQueryPieChart();
     renderSourcePieChart();
     renderCriticalityChart();
+    renderCategoryChart();
+    renderIOC();
+}
+
+const PIE_LEGEND = { position: 'right', labels: { boxWidth: 10, padding: 8, font: { size: 10 }, color: '#8b9dc3' } };
+
+function renderCategoryChart() {
+    const ctx = getChartContext('categoryChart');
+    const cats = (analyticsData.categories || []).filter(c => c.category);
+    if (cats.length === 0) { renderEmptyChart(ctx, 'Kategori verisi yok'); return; }
+    charts.categoryChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: cats.map(c => c.category), datasets: [{ data: cats.map(c => c.count), backgroundColor: cats.map((_, i) => COLORS.queries[i % COLORS.queries.length]), borderRadius: 6, borderSkipped: false }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: 'rgba(99,179,237,0.06)' } }, y: { grid: { display: false } } } }
+    });
+}
+
+function renderIOC() {
+    const grid = document.getElementById('ioc-grid');
+    const names = { email: '✉️ E-posta', bitcoin: '₿ Bitcoin', monero: 'ɱ Monero', ip: '🌐 IP', onion: '🧅 Onion', credit_card: '💳 Kart', phone: '📞 Telefon', ssh_key: '🔑 SSH', api_key: '🗝️ API Key', username: '👤 Kullanıcı', hash: '#️⃣ Hash' };
+    fetch('/api/artifacts/stats').then(r => r.json()).then(d => {
+        if (!d.types || d.types.length === 0) { grid.innerHTML = '<p class="kh-hint">Henüz IOC yok. Bulgular sayfasında etiketleme çalıştırın.</p>'; return; }
+        grid.innerHTML = d.types.map(t => `<a class="ioc-tile" href="/results" title="${escapeHtml(t.type)}"><div class="n">${t.count}</div><div class="l">${escapeHtml(names[t.type] || t.type)}</div></a>`).join('');
+    }).catch(() => grid.innerHTML = '<p class="kh-hint">Alınamadı.</p>');
 }
 
 function getChartContext(id) {
@@ -255,7 +279,7 @@ function renderQueryBarChart() {
     if (hasSelection) {
         // DUAL METRIC COMBO CHART MODE
         const intervalLabels = { hour: 'Saatlik', day: 'Günlük', week: 'Haftalık' };
-        titleEl.innerHTML = `<span></span> "${escapeHtml(selectedQuery)}" - Süreç Analizi (${intervalLabels[queryChartInterval] || 'Günlük'})`;
+        titleEl.innerHTML = `📊 "${escapeHtml(selectedQuery)}" <span class="hint">süreç analizi · ${intervalLabels[queryChartInterval] || 'Günlük'}</span>`;
         controlsEl.style.display = 'flex';
 
         controlsEl.querySelectorAll('.chart-control-btn').forEach(btn => {
@@ -409,7 +433,7 @@ function renderQueryBarChart() {
 
     } else {
         // BAR CHART MODE - Show general query distribution
-        titleEl.innerHTML = '<span></span> Sorgu Bazlı Sonuç Dağılımı';
+        titleEl.innerHTML = '📊 Sorgu Bazlı Sonuç Dağılımı <span class="hint">ilk 12</span>';
         controlsEl.style.display = 'none';
 
         const data = queryList.slice(0, 12);
@@ -570,10 +594,7 @@ function renderQueryPieChart() {
             maintainAspectRatio: false,
             cutout: '60%',
             plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { boxWidth: 10, padding: 8, font: { size: 10 } }
-                }
+                legend: PIE_LEGEND
             }
         }
     });
@@ -604,10 +625,7 @@ function renderSourcePieChart() {
             maintainAspectRatio: false,
             cutout: '60%',
             plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { boxWidth: 10, padding: 8, font: { size: 10 } }
-                }
+                legend: PIE_LEGEND
             }
         }
     });
@@ -638,10 +656,7 @@ function renderCriticalityChart() {
             maintainAspectRatio: false,
             cutout: '60%',
             plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { boxWidth: 10, padding: 8, font: { size: 10 } }
-                }
+                legend: PIE_LEGEND
             }
         }
     });
@@ -657,31 +672,25 @@ function renderDomains() {
     const domains = analyticsData.domains || [];
 
     if (domains.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">🌐</div>
-                <p>Henüz domain verisi bulunamadı</p>
-            </div>
-        `;
+        container.innerHTML = '<p class="kh-hint">Henüz domain verisi yok.</p>';
         countEl.textContent = '0 domain';
         return;
     }
 
-    const sorted = [...domains].sort((a, b) => b.count - a.count);
-    const maxCount = sorted[0].count;
+    const f = (document.getElementById('domain-filter') || {}).value || '';
+    const sorted = [...domains].filter(d => !f || d.domain.includes(f.toLowerCase())).sort((a, b) => b.count - a.count);
+    const maxCount = sorted.length ? sorted[0].count : 1;
 
     countEl.textContent = `${sorted.length} domain`;
 
-    container.innerHTML = sorted.slice(0, 50).map((d, i) => {
+    container.innerHTML = sorted.slice(0, 60).map((d, i) => {
         const barWidth = Math.max(5, (d.count / maxCount) * 100);
         return `
             <div class="domain-item">
                 <span class="domain-rank">${i + 1}</span>
-                <div class="domain-info">
-                    <div class="domain-name" title="${escapeHtml(d.domain)}">${escapeHtml(d.domain)}</div>
-                    <div class="domain-bar-container">
-                        <div class="domain-bar" style="width: ${barWidth}%"></div>
-                    </div>
+                <div style="min-width:0">
+                    <a class="domain-name" href="/results?text=${encodeURIComponent(d.domain)}" title="${escapeHtml(d.domain)} — bulgularda ara" style="display:block;text-decoration:none">${escapeHtml(d.domain)}</a>
+                    <div class="domain-bar-container"><div class="domain-bar" style="width: ${barWidth}%"></div></div>
                 </div>
                 <span class="domain-value">${d.count}</span>
             </div>
