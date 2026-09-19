@@ -73,6 +73,18 @@
   durdurulmuş runner üzerinden gerçek kırpma kodu sınanır). `scraper`: `LooksJSOnly`
   dört kuralı (zengin metin, script yok, SPA/noscript izi, kısa metin eşiği).
   Test edilen paket 13 → 15.
+- **Motor izleyicide gizli DNS sızıntısı kapatıldı:** `buildTorTransport("")`
+  `http.DefaultTransport`'a (doğrudan clearnet) düşüyordu — boş `TOR_PROXY` ile
+  `.onion` motor adresleri yerel DNS'e sızar ve `HTTP_PROXY` ortam değişkenleri
+  onurlandırılırdı; kod tabanının "yalnız Tor, geri düşüş yok" değişmezini bozuyordu.
+  Artık hata döner; başlangıç bunu `Warn` ile bildirip izleyiciyi devre dışı bırakır
+  (yapılandırma varsayılanı `127.0.0.1:9150` olduğundan yalnız açık yanlış
+  yapılandırmada tetiklenir). Test: `TestBuildTorTransport_NoDirectFallback`.
+- **Kalan testsiz paketler de kapatıldı — kod içeren her paket artık test edilir:**
+  `scheduler`: `DispatchGlobalAlert` davranışsal test (httptest alıcı; devre dışı → çağrı
+  yok, yalnız eşik altı → çağrı yok, karışık → tam 1 çağrı ve gövde eşik üstü başlıkları
+  içerir/eşik altını içermez, boş webhook → çağrı yok). `logger`: seviye filtresi + günlük
+  tarih adlı dosya + dosyaya ANSI sızmaz. Test edilen paket 15 → 18.
 - Güvenlik taramaları (düzeltme gerekmedi, doğrulandı): webhook istemcisi yönlendirme
   takip etmiyor (`ErrUseLastResponse`) ve **bağlantı anında** çözümlenmiş IP'yi
   `net.Dialer.Control` ile reddediyor (DNS rebinding/TOCTOU kapalı), ortam proxy'leri

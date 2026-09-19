@@ -186,8 +186,12 @@ func (em *EngineMonitor) checkEngine(eng search.Engine) {
 
 // buildTorTransport SOCKS5 proxy üzerinden çalışan HTTP transport oluşturur
 func buildTorTransport(torProxy string) (http.RoundTripper, error) {
+	// Boş proxy'de http.DefaultTransport'a (doğrudan clearnet) düşmek, .onion motor
+	// adreslerinin yerel DNS'e sızmasına ve HTTP_PROXY ortam değişkenlerinin
+	// onurlandırılmasına yol açardı — kod tabanının "yalnız Tor, geri düşüş yok"
+	// değişmezini bozar. Yanlış yapılandırma sessizce sızmak yerine yüksek sesle düşsün.
 	if torProxy == "" {
-		return http.DefaultTransport, nil
+		return nil, fmt.Errorf("TOR_PROXY boş: motor sağlık denetimi doğrudan ağa çıkamaz (.onion DNS sızıntısı)")
 	}
 
 	proxyURL, err := url.Parse("socks5://" + torProxy)
