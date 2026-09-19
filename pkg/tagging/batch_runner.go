@@ -110,7 +110,10 @@ func (r *BatchRunner) RecoverPendingJobs() error {
 
 // Submit yeni bir toplu etiketleme işi oluşturur.
 func (r *BatchRunner) Submit(ctx context.Context, resultIDs []int64, query string) (*storage.TaggingJob, error) {
-	_ = ctx
+	// İptal edilmiş bir istek yetim iş üretmesin.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	ids := normalizeIDs(resultIDs)
 	if len(ids) == 0 {

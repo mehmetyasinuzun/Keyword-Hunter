@@ -104,7 +104,10 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 			}
 		}
 
-		// Graph nodes tablosuna da kaydet (derinleştirme için altyapı)
+		// Graph nodes tablosuna da kaydet (derinleştirme için altyapı).
+		// Bilinçli en-iyi-çaba: INSERT OR IGNORE ikincil altyapıdır; graf düğümü
+		// yazılamaması bulgunun kaydını düşürmemeli. Gerçek bir G/Ç hatası zaten
+		// aşağıdaki Commit'i de düşürür, sessizce kaybolmaz.
 		domain := shared.ExtractDomain(r.URL)
 		_, _ = tx.Exec(`
 			INSERT OR IGNORE INTO graph_nodes (url, title, domain, depth, link_type, source_query)

@@ -18,6 +18,19 @@
 - Vaka notu kesimi bayt yerine rune sınırında (Türkçe çok baytlı karakter bölünmez).
 - `update-criticality` içindeki gereksiz `Sprintf` ile kurulmuş SQL düz sabite indirgendi
   (tablo zaten sabitti; enjeksiyon görünümlü kalıp temizlendi).
+- **Sessiz güvenlik hataları görünür kılındı (`handlers_users.go`):**
+  - Parola sıfırlama/değişiminde **oturum iptali** (`DELETE FROM sessions`) başarısız
+    olursa eski oturumlar canlı kalıyordu ve bu yutuluyordu — artık hata loglanıyor.
+  - Bootstrap admin öz-parola değişiminde `creds.Update` hatası yutuluyordu; başarısız
+    olsa **boş hash `.env`'e yazılıp admin kilitlenebilirdi** — artık 500 ile durur.
+  - `.env`'e kalıcı yazma başarısız olursa yeni parola yalnız bellekte kalıyor, yeniden
+    başlatmada **eski parola geri geliyordu** — artık kullanıcıya açıkça bildirilir.
+- `BatchRunner.Submit` artık `ctx` iptalini onurlandırıyor (iptal edilmiş istek yetim
+  iş üretmez). `graph_nodes` en-iyi-çaba eklemesi bilinçli olarak belgelendi.
+- Tarama sonuçları (düzeltme gerekmedi): `context.With*` üç adayı yanlış pozitif
+  (cancel farklı adla çağrılıyor); gerçek DB sorgularının tümü `rows.Close` ediyor;
+  15 goroutine lansmanı sınırlı/iptal edilebilir; global 1 MB gövde sınırı
+  22 `ShouldBindJSON` ucunu kapsıyor; 3 isteğe bağlı gövdeli uç güvenli varsayılana düşüyor.
 
 `go test -race ./...` 13 paket yeşil, gofmt/vet temiz.
 

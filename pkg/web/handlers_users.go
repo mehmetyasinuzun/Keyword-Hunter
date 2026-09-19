@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -116,8 +117,11 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 			respondInternalError(c, "UpdateUserPassword", err)
 			return
 		}
-		// Parola değişince o kullanıcının diğer oturumları düşer
-		_, _ = s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE`, target.Username)
+		// Parola değişince o kullanıcının diğer oturumları düşer. Bu başarısız
+		// olursa eski oturumlar canlı kalır — sessizce yutulmamalı.
+		if _, err := s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE`, target.Username); err != nil {
+			logger.Error("SESSION REVOKE FAILED (parola sıfırlama, kullanıcı=%s): %v", target.Username, err)
+		}
 	}
 	if req.Role != nil {
 		if !storage.ValidRole(*req.Role) {
@@ -199,9 +203,24 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Mevcut parola yanlış"})
 			return
 		}
-		hash, _ := s.creds.Update("", req.New)
+		// Update hatası yutulursa boş hash .env'e yazılıp admin kilitlenebilir.
+		hash, err := s.creds.Update("", req.New)
+		if err == nil && hash == "" {
+			err = fmt.Errorf("boş hash üretildi")
+		}
+		if err != nil {
+			respondInternalError(c, "creds.Update", err)
+			return
+		}
 		if s.envStore != nil {
-			_ = s.envStore.Update(map[string]string{"ADMIN_PASS_HASH": hash, "ADMIN_PASS": ""})
+			// .env'e yazılamazsa yeni parola yalnız bellekte kalır; yeniden
+			// başlatmada ESKİ parola geri gelir. Kullanıcı bunu bilmeli.
+			if err := s.envStore.Update(map[string]string{"ADMIN_PASS_HASH": hash, "ADMIN_PASS": ""}); err != nil {
+				logger.Error("ENV PERSIST FAILED (admin parola): %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false,
+					"error": "Parola bu oturum için değişti ancak .env dosyasına kalıcı yazılamadı; yeniden başlatmada eski parola geri gelir. Dosya izinlerini kontrol edin."})
+				return
+			}
 		}
 	} else {
 		if !verifyBcrypt(u.PasswordHash, req.Current) {
@@ -220,7 +239,9 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 	}
 	// Diğer oturumları düşür, mevcut oturumu koru
 	if sid, ok := c.Get("sessionID"); ok {
-		_, _ = s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE AND id <> ?`, username, sid.(string))
+		if _, err := s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE AND id <> ?`, username, sid.(string)); err != nil {
+			logger.Error("SESSION REVOKE FAILED (öz parola, kullanıcı=%s): %v", username, err)
+		}
 	}
 	logger.Info("SELF PASSWORD CHANGE: %s", username)
 	c.JSON(http.StatusOK, gin.H{"success": true})
