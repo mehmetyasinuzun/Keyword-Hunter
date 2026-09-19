@@ -1,6 +1,7 @@
 package web
 
 import (
+	"keywordhunter-mvp/pkg/shared"
 	"net/http"
 	"strconv"
 	"strings"
@@ -145,6 +146,12 @@ func (s *Server) handleGetScheduledSearches(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "liste alınamadı"})
 		return
+	}
+	// Tarama-özel webhook adresleri sırdır; admin dışı roller gizlenmiş görür.
+	if roleRank(c.GetString("role")) < roleRank("admin") {
+		for i := range searches {
+			searches[i].WebhookURL = shared.RedactURL(searches[i].WebhookURL)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"searches": searches, "count": len(searches)})
 }

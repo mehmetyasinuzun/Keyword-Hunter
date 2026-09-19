@@ -5,8 +5,10 @@ package notify
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -81,7 +83,13 @@ func SendWebhook(webhookURL string, payload AlertPayload) error {
 	}
 	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("webhook isteği başarısız: %w", err)
+		// *url.Error mesajı tam URL'yi (sırrı) içerir; yalnız alttaki ağ hatasını
+		// ve gizlenmiş adresi taşı — bu hata log'a yazılır.
+		var ue *url.Error
+		if errors.As(err, &ue) && ue.Err != nil {
+			err = ue.Err
+		}
+		return fmt.Errorf("webhook isteği başarısız (%s): %w", shared.RedactURL(webhookURL), err)
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))

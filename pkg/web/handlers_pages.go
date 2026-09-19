@@ -523,10 +523,19 @@ func (s *Server) handleScheduledPage(c *gin.Context) {
 	if err != nil {
 		logger.Warn("Planlı taramalar alınamadı: %v", err)
 	}
+	// Sayfaya gömülen genel webhook adresi bir sırdır; admin dışı roller
+	// HTML kaynağında bile tam adresi görmemeli (istemci gizleme yetmez).
+	isAdmin := roleRank(c.GetString("role")) >= roleRank("admin")
+	if !isAdmin && cfg != nil {
+		cp := *cfg
+		cp.WebhookURL = shared.RedactURL(cp.WebhookURL)
+		cfg = &cp
+	}
 	c.HTML(http.StatusOK, "scheduled.html", gin.H{
 		"ActivePage":  "scheduled",
 		"alertConfig": cfg,
 		"searches":    searches,
+		"isAdmin":     isAdmin,
 	})
 }
 

@@ -586,7 +586,7 @@ func (s *Server) setupRoutes() {
 			api.GET("/tags", s.handleTagStats)
 			api.GET("/results-by-tag", s.handleResultsByTag)
 			api.GET("/new-results", s.handleNewResults)
-			api.GET("/alert-config", s.handleAlertConfigGet)
+			api.GET("/alert-config", s.handleAlertConfigGet) // admin dışı gizlenmiş döner
 			api.POST("/alert-config", s.handleAlertConfigSave)
 			api.POST("/alert-config/test", s.handleAlertConfigTest)
 			api.GET("/export/results", s.handleExportResults)

@@ -36,6 +36,24 @@
   Test: `TestRenderAndCapture_RejectNonOnion` (7 iç/clearnet hedef reddi + onion geçişi).
 - CSP `script-src 'unsafe-inline'` ödünleşimi sabitin üstünde belgelendi (satır içi
   onclick/script blokları gerektiriyor; kaldırma yolu: harici betik + istek başına nonce).
+- **Webhook sırrı sızıntısı kapatıldı.** Slack/Discord webhook adresleri yolda
+  taşıyıcı-benzeri bir belirteç taşır; üç yerde tam adres açığa çıkıyordu:
+  - **Log:** `scheduler` başarıda tam adresi yazıyordu; başarısızlıkta `%v err`
+    `*url.Error` üzerinden yine tam adresi yazıyordu. `SendWebhook` artık `*url.Error`'ı
+    açıp yalnız alttaki ağ hatasını ve gizlenmiş adresi (`shared.RedactURL`: yalnız
+    şema+ana makine) taşır.
+  - **API:** `GET /api/alert-config` ve `GET /api/scheduled` açık `api` grubundaydı —
+    salt-okunur **viewer** bile sırrı çekebiliyordu. Admin dışı roller artık gizlenmiş
+    adres görür (yapılandırıldığını anlar, sırrı göremez).
+  - **HTML:** `/scheduled` sayfası genel webhook'u `value="…"` olarak gömüyordu; istemci
+    gizleme kaynak görünümünü kapatmaz. Sunucu tarafında admin dışı için gizlenir.
+  - Yerleşik RBAC sözleşmesi korundu (analist alert-config yazabilir). Analist gizlenmiş
+    maskeyi geri gönderip yalnız eşik/etkin değiştirirse gerçek sır **maskeyle ezilmez**
+    (`handleAlertConfigSave` kayıtlı adresi korur); yeni adres normal kaydedilir.
+  - Testler: `TestRedactURL`, `TestWebhookSecret_RedactedForNonAdmin`.
+- Doğrulandı (düzeltme gerekmedi): giriş her seferinde yeni oturum kimliği üretir
+  (`crypto/rand`, fixation kapalı); CSRF `subtle.ConstantTimeCompare`; site profili
+  logu çerez *değerini* değil yalnız varlığını yazar.
 - Güvenlik taramaları (düzeltme gerekmedi, doğrulandı): webhook istemcisi yönlendirme
   takip etmiyor (`ErrUseLastResponse`) ve **bağlantı anında** çözümlenmiş IP'yi
   `net.Dialer.Control` ile reddediyor (DNS rebinding/TOCTOU kapalı), ortam proxy'leri

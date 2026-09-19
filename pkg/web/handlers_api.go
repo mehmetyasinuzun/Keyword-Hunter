@@ -1019,7 +1019,12 @@ func (s *Server) handleAlertConfigGet(c *gin.Context) {
 		respondInternalError(c, "GetAlertConfig", err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"webhookUrl": cfg.WebhookURL, "minCriticality": cfg.MinCriticality, "enabled": cfg.Enabled, "updatedAt": cfg.UpdatedAt, "allowPrivateTargets": notify.AllowPrivateTargets()})
+	// Webhook adresi bir sırdır (Slack/Discord yol belirteci); yalnız admin tam görür.
+	hook := cfg.WebhookURL
+	if roleRank(c.GetString("role")) < roleRank("admin") {
+		hook = shared.RedactURL(hook)
+	}
+	c.JSON(http.StatusOK, gin.H{"webhookUrl": hook, "minCriticality": cfg.MinCriticality, "enabled": cfg.Enabled, "updatedAt": cfg.UpdatedAt, "allowPrivateTargets": notify.AllowPrivateTargets()})
 }
 
 // handleAlertConfigSave bildirim ayarlarını kaydeder
@@ -1041,6 +1046,15 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 		WebhookURL:     strings.TrimSpace(req.WebhookURL),
 		MinCriticality: req.MinCriticality,
 		Enabled:        req.Enabled,
+	}
+	// Admin dışı roller GET/sayfada gizlenmiş adresi görür; maskeyi olduğu gibi
+	// geri gönderirlerse (yalnız eşik/etkin değiştirmek için) gerçek sır
+	// maskeyle EZİLMESİN — kayıtlı adres korunur. Yeni bir adres ise normal kaydedilir.
+	if cfg.WebhookURL != "" {
+		if cur, err := s.db.GetAlertConfig(); err == nil && cur != nil && cur.WebhookURL != "" &&
+			cfg.WebhookURL == shared.RedactURL(cur.WebhookURL) {
+			cfg.WebhookURL = cur.WebhookURL
+		}
 	}
 	if cfg.WebhookURL != "" && !notify.ValidTarget(cfg.WebhookURL) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Webhook yalnızca http(s) ve genel (dahili olmayan) bir adres olabilir"})

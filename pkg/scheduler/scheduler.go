@@ -5,6 +5,7 @@ package scheduler
 
 import (
 	"context"
+	"keywordhunter-mvp/pkg/shared"
 	"strings"
 	"sync"
 	"time"
@@ -188,7 +189,7 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 		if err := notify.SendWebhook(ss.WebhookURL, payload); err != nil {
 			logger.Warn("Scheduler: webhook gönderilemedi: %v", err)
 		} else {
-			logger.Info("Scheduler: webhook gönderildi (%s)", ss.WebhookURL)
+			logger.Info("Scheduler: webhook gönderildi (%s)", shared.RedactURL(ss.WebhookURL))
 		}
 	}
 
