@@ -30,7 +30,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.11.0"
+var Version = "0.12.0"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -111,6 +111,15 @@ func New(cfg Config) (*Server, error) {
 	creds, err := newCredentialStore(cfg.Username, cfg.Password, cfg.PasswordHash)
 	if err != nil {
 		return nil, fmt.Errorf("kimlik deposu oluşturulamadı: %w", err)
+	}
+	// Çoklu kullanıcı: users tablosu boşsa .env admin'ini bootstrap admin olarak taşı.
+	if n, err := cfg.DB.CountUsers(); err == nil && n == 0 {
+		hash, _ := creds.Update("", "") // mevcut hash'i al (parola değiştirmeden)
+		if _, err := cfg.DB.CreateUser(cfg.Username, hash, storage.RoleAdmin); err != nil {
+			logger.Warn("Bootstrap admin oluşturulamadı: %v", err)
+		} else {
+			logger.Info("Bootstrap admin '%s' users tablosuna eklendi (rol: admin)", cfg.Username)
+		}
 	}
 
 	sessionTTL := cfg.SessionTTL
@@ -516,6 +525,7 @@ func (s *Server) setupRoutes() {
 		protected.GET("/watchlist", s.handleWatchlistPage)
 		protected.GET("/monitor", s.handleMonitorPage)
 		protected.GET("/crawl", s.handleCrawlPage)
+		protected.GET("/users", s.requireRole("admin"), s.handleUsersPage)
 		protected.GET("/screenshot/file/:id", s.handleServeScreenshot)
 
 		// SSE Events - Gerçek zamanlı loglar için
@@ -525,7 +535,26 @@ func (s *Server) setupRoutes() {
 
 		api := protected.Group("/api")
 		api.Use(s.csrfMiddleware())
+		// Yazma işlemleri (POST/DELETE) en az analyst; viewer yalnız okur.
+		api.Use(func(c *gin.Context) {
+			if !isSafeMethod(c.Request.Method) && roleRank(c.GetString("role")) < roleRank("analyst") {
+				c.AbortWithStatusJSON(403, gin.H{"error": "Salt-okunur (viewer) rol bu işlemi yapamaz"})
+				return
+			}
+			c.Next()
+		})
 		{
+			// Kullanıcı yönetimi + sistem ayarları: yalnız admin
+			admin := api.Group("", s.requireRole("admin"))
+			admin.GET("/users", s.handleUsersList)
+			admin.POST("/users", s.handleUserCreate)
+			admin.POST("/users/:id", s.handleUserUpdate)
+			admin.POST("/users/:id/delete", s.handleUserDelete)
+
+			// Herkes: kimlik + kendi parolası
+			api.GET("/whoami", s.handleWhoami)
+			api.POST("/me/password", s.handleMyPassword)
+
 			api.POST("/update-criticality", s.handleUpdateCriticality)
 			api.POST("/analyze-result", s.handleAnalyzeResult)
 			api.POST("/auto-tag", s.handleAutoTag)
@@ -557,23 +586,19 @@ func (s *Server) setupRoutes() {
 			// STIX 2.1 export
 			api.GET("/export/stix", s.handleExportSTIX)
 
-			// Site profilleri (çerez/UA/JS render)
-			api.GET("/site-profiles", s.handleSiteProfilesList)
-			api.POST("/site-profiles", s.handleSiteProfileSave)
-			api.POST("/site-profiles/delete", s.handleSiteProfileDelete)
-
-			// Tor devre yenileme
-			api.GET("/tor/status", s.handleTorStatus)
-			api.POST("/tor/newnym", s.handleTorNewNym)
-
 			// Örümcek (site tarama)
 			api.GET("/crawl", s.handleCrawlList)
 			api.POST("/crawl", s.handleCrawlSubmit)
 			api.POST("/crawl/:id/cancel", s.handleCrawlCancel)
 			api.GET("/crawl/:id", s.handleCrawlStatus)
 			api.GET("/artifacts/stats", s.handleArtifactStats)
-			api.GET("/settings/env", s.handleEnvSettingsGet)
-			api.POST("/settings/env", s.handleEnvSettingsUpdate)
+			admin.GET("/settings/env", s.handleEnvSettingsGet)
+			admin.POST("/settings/env", s.handleEnvSettingsUpdate)
+			admin.GET("/site-profiles", s.handleSiteProfilesList)
+			admin.POST("/site-profiles", s.handleSiteProfileSave)
+			admin.POST("/site-profiles/delete", s.handleSiteProfileDelete)
+			admin.GET("/tor/status", s.handleTorStatus)
+			admin.POST("/tor/newnym", s.handleTorNewNym)
 			api.GET("/watchlist", s.handleWatchlistList)
 			api.POST("/watchlist", s.handleWatchlistAdd)
 			api.POST("/watchlist/:id/toggle", s.handleWatchlistToggle)

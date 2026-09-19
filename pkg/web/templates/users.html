@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    {{template "head" .}}
+    <title>KeywordHunter - Kullanıcılar</title>
+</head>
+<body>
+    {{template "navbar" .}}
+    <main class="kh-page" style="max-width:1100px">
+        <div class="kh-header">
+            <div><h1 class="kh-title">Kullanıcılar &amp; Roller</h1><p class="kh-subtitle">Ekip erişimini yönetin: <strong>admin</strong> (tam yetki + yönetim), <strong>analist</strong> (arama/etiketleme/örümcek/izleme), <strong>izleyici</strong> (salt-okunur)</p></div>
+            <div class="kh-actions"><button class="kh-btn primary" onclick="KH.openModal('newUser')">{{icon "plus"}} Yeni Kullanıcı</button></div>
+        </div>
+        <section class="kh-card flush">
+            <div class="kh-table-wrap"><table class="kh-table">
+                <thead><tr><th>Kullanıcı</th><th>Rol</th><th>Durum</th><th>Son Giriş</th><th>Oluşturma</th><th style="text-align:right">İşlemler</th></tr></thead>
+                <tbody id="users-body"><tr><td colspan="6"><div class="kh-skel"></div></td></tr></tbody>
+            </table></div>
+        </section>
+        <div class="kh-alert info" style="margin-top:16px"><span>{{icon "shield"}}</span><div>Parolalar bcrypt ile saklanır. Rol veya parola değiştiğinde ilgili kullanıcının diğer oturumları anında kapanır. Son etkin admin düşürülemez, pasifleştirilemez veya silinemez.</div></div>
+    </main>
+
+    <div class="kh-modal-overlay" id="newUser"><div class="kh-modal">
+        <h2>{{icon "user"}} Yeni Kullanıcı</h2>
+        <form onsubmit="createUser(event)" style="display:grid;gap:14px">
+            <div class="kh-field"><label class="kh-label">Kullanıcı adı</label><input class="kh-input" id="u-name" minlength="3" maxlength="64" required autocomplete="off"></div>
+            <div class="kh-field"><label class="kh-label">Parola</label><input class="kh-input" id="u-pass" type="password" minlength="8" required autocomplete="new-password"></div>
+            <div class="kh-field"><label class="kh-label">Rol</label><select class="kh-select" id="u-role"><option value="analyst">Analist — arama, etiketleme, örümcek, izleme (yazma)</option><option value="viewer">İzleyici — salt-okunur</option><option value="admin">Admin — tam yetki + yönetim</option></select></div>
+            <div class="kh-modal-actions"><button type="button" class="kh-btn subtle" onclick="KH.closeModal('newUser')">Vazgeç</button><button type="submit" class="kh-btn primary" id="u-submit">Oluştur</button></div>
+        </form>
+    </div></div>
+
+    <script>
+        const roleBadge = { admin: 'err', analyst: 'info', viewer: 'neutral' };
+        const roleLabel = { admin: 'Admin', analyst: 'Analist', viewer: 'İzleyici' };
+        let me = '';
+        function render(users) {
+            document.getElementById('users-body').innerHTML = users.length ? users.map(u => {
+                const self = u.username.toLowerCase() === me.toLowerCase();
+                return `<tr>
+                    <td><span class="kh-mono" style="font-weight:600">${KH.esc(u.username)}</span>${self ? ' <span class="kh-badge neutral">siz</span>' : ''}</td>
+                    <td><select class="kh-select sm" style="width:120px" onchange="setRole(${u.id}, this.value)" ${self ? 'disabled title="Kendi rolünüzü değiştiremezsiniz"' : ''}>
+                        ${['admin','analyst','viewer'].map(r => `<option value="${r}" ${u.role===r?'selected':''}>${roleLabel[r]}</option>`).join('')}
+                    </select></td>
+                    <td><span class="kh-badge ${u.enabled?'ok':'neutral'}">${u.enabled?'etkin':'pasif'}</span></td>
+                    <td class="muted kh-mono" style="font-size:.74rem">${u.lastLoginAt && new Date(u.lastLoginAt).getFullYear()>1971 ? KH.ago(u.lastLoginAt) : '—'}</td>
+                    <td class="muted kh-mono" style="font-size:.74rem">${KH.fmtTime(u.createdAt)}</td>
+                    <td style="text-align:right;white-space:nowrap">
+                        <button class="kh-btn xs subtle" onclick="resetPass(${u.id}, '${KH.esc(u.username)}')">Parola</button>
+                        <button class="kh-btn xs subtle" onclick="toggleUser(${u.id}, ${!u.enabled})" ${self?'disabled':''}>${u.enabled?'Pasifleştir':'Etkinleştir'}</button>
+                        <button class="kh-btn xs danger" onclick="delUser(${u.id}, '${KH.esc(u.username)}')" ${self?'disabled':''}>Sil</button>
+                    </td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="6"><div class="kh-empty"><div class="icon">{{icon "user"}}</div><h3>Kullanıcı yok</h3></div></td></tr>';
+        }
+        function load() { KH.api('/api/users').then(d => { me = d.me || ''; render(d.users || []); }).catch(e => document.getElementById('users-body').innerHTML = '<tr><td colspan="6" class="kh-alert err">'+KH.esc(e.message)+'</td></tr>'); }
+        async function createUser(e) {
+            e.preventDefault(); const btn = document.getElementById('u-submit'); KH.busy(btn, true, 'Oluşturuluyor…');
+            try { await KH.api('/api/users', { method:'POST', body:{ username: document.getElementById('u-name').value.trim(), password: document.getElementById('u-pass').value, role: document.getElementById('u-role').value } });
+                KH.toast('Kullanıcı oluşturuldu','ok'); KH.closeModal('newUser'); document.getElementById('u-name').value=''; document.getElementById('u-pass').value=''; load();
+            } catch(err){ KH.toast(err.message,'err'); } finally { KH.busy(btn,false); }
+        }
+        async function setRole(id, role) { try { await KH.api('/api/users/'+id, { method:'POST', body:{ role } }); KH.toast('Rol güncellendi','ok'); load(); } catch(e){ KH.toast(e.message,'err'); load(); } }
+        async function toggleUser(id, enabled) { try { await KH.api('/api/users/'+id, { method:'POST', body:{ enabled } }); KH.toast(enabled?'Etkinleştirildi':'Pasifleştirildi','ok'); load(); } catch(e){ KH.toast(e.message,'err'); } }
+        async function resetPass(id, name) { const p = prompt('"'+name+'" için yeni parola (en az 8 karakter):'); if(!p) return; if(p.length<8){ KH.toast('En az 8 karakter','warn'); return; } try { await KH.api('/api/users/'+id, { method:'POST', body:{ password: p } }); KH.toast('Parola güncellendi; kullanıcının oturumları kapandı','ok'); } catch(e){ KH.toast(e.message,'err'); } }
+        async function delUser(id, name) { if(!await KH.confirm({ title:'Kullanıcıyı sil', message:'"'+name+'" ve oturumları silinecek.', okText:'Sil', danger:true })) return; try { await KH.api('/api/users/'+id+'/delete', { method:'POST', body:{} }); KH.toast('Silindi','ok'); load(); } catch(e){ KH.toast(e.message,'err'); } }
+        load();
+    </script>
+</body>
+</html>

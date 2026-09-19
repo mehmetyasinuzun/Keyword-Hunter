@@ -1,5 +1,25 @@
 # Değişiklik Günlüğü
 
+## v0.12.0 — 2026-09-19
+
+### Çoklu kullanıcı + roller
+- **users** tablosu, üç rol: **admin** (tam yetki + kullanıcı/ayar yönetimi),
+  **analyst** (arama/etiketleme/örümcek/izleme/planlı — yazma), **viewer** (salt-okunur).
+- .env admin'i açılışta users tablosuna bootstrap admin olarak taşınır; giriş artık
+  bcrypt ile DB üzerinden doğrulanır, son giriş zamanı tutulur.
+- Rol her istekte tazelenir (rol/pasif değişikliği anında etkin); parola değişince
+  ilgili kullanıcının diğer oturumları kapanır; son etkin admin düşürülemez/silinemez.
+- Kullanıcı yönetimi sayfası (yalnız admin), kendi parolanı değiştirme (her rol),
+  rol tabanlı navbar gizleme ve viewer için salt-okunur arayüz.
+- API rol kapıları: yazma işlemleri analyst+, yönetim/ayar/tor/site-profil admin.
+
+### Örümcek iyileştirmesi
+- Keşfedilen sayfalar başlık+URL üzerinden CTI ile sınıflandırılarak kaydedilir
+  (artık kritiklik 1'de kalmıyor).
+
+Testler: RBAC uçtan uca (analyst/viewer sınırları, son-admin koruması, pasif giriş).
+`go test -race ./...` 12 paket yeşil.
+
 ## v0.11.0 — 2026-09-19
 
 Kapsam genişletme + özgün tasarım turu.

@@ -91,10 +91,18 @@ func (s *Server) handleLogin(c *gin.Context) {
 		}
 	}
 
-	if s.creds != nil && s.creds.Verify(username, password) {
+	authed := false
+	if u, err := s.db.GetUserByUsername(username); err == nil && u != nil && u.Enabled {
+		authed = verifyBcrypt(u.PasswordHash, password) && subtleEqual(u.Username, username)
+	} else if s.creds != nil {
+		// users tablosunda yoksa bootstrap kimlik deposu (eski kurulum)
+		authed = s.creds.Verify(username, password)
+	}
+	if authed {
 		if s.loginGuard != nil {
 			s.loginGuard.Success(clientIP)
 		}
+		_ = s.db.TouchUserLogin(username)
 		// Session oluştur
 		sessionID := generateSessionID()
 		csrfToken := generateSessionID()

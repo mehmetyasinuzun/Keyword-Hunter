@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"keywordhunter-mvp/pkg/cti"
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/shared"
@@ -250,11 +251,15 @@ func (r *Runner) run(id string) {
 	r.finish(id, "completed", "", pages, found, saved, start)
 }
 
-// savePage keşfedilen bir sayfayı search_results'a yazar (Source="Crawler").
+// savePage keşfedilen bir sayfayı search_results'a yazar (Source="Crawler"),
+// başlık+URL üzerinden CTI sınıflandırması uygulayarak.
 func (r *Runner) savePage(pageURL, query string) (int, error) {
 	title := titleFromURL(pageURL)
-	res := storage.SearchResult{Title: title, URL: pageURL, Source: "Crawler", Query: query}
-	// CTI sınıflandırması title+URL üzerinden (scraper zaten içeriği değerlendirdi)
+	a := cti.Analyze(title, pageURL, query, nil, 0)
+	res := storage.SearchResult{
+		Title: title, URL: pageURL, Source: "Crawler", Query: query,
+		Criticality: a.Criticality, Category: a.Category,
+	}
 	return r.db.SaveResults([]storage.SearchResult{res})
 }
 

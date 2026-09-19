@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/storage"
 )
 
 const (
@@ -70,7 +71,51 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		c.Set("csrfToken", session.CSRFToken)
 		c.Set("username", session.Username)
 
+		// Rol her istekte users tablosundan tazelenir (rol/pasif değişikliği anında etkindir).
+		role := storage.RoleViewer
+		if u, err := s.db.GetUserByUsername(session.Username); err == nil && u != nil {
+			if !u.Enabled {
+				_ = s.db.DeleteSession(sessionID)
+				clearAuthCookies(c, s.cookieSecure)
+				unauthorized(c)
+				c.Abort()
+				return
+			}
+			role = u.Role
+		} else {
+			// users tablosunda yoksa (bootstrap edilmemiş eski oturum) admin varsay
+			role = storage.RoleAdmin
+		}
+		c.Set("role", role)
+
 		c.Next()
+	}
+}
+
+// requireRole verilen minimum rolü şart koşar (admin > analyst > viewer).
+// Yazma uçları analyst+, yönetim uçları admin ister; viewer yalnız okur.
+func (s *Server) requireRole(min string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, _ := c.Get("role")
+		r, _ := role.(string)
+		if roleRank(r) < roleRank(min) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Bu işlem için yetkiniz yok (" + min + " rolü gerekir)"})
+			return
+		}
+		c.Next()
+	}
+}
+
+func roleRank(r string) int {
+	switch r {
+	case storage.RoleAdmin:
+		return 3
+	case storage.RoleAnalyst:
+		return 2
+	case storage.RoleViewer:
+		return 1
+	default:
+		return 0
 	}
 }
 

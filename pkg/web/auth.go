@@ -9,6 +9,25 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// verifyBcrypt hash ile parolayı karşılaştırır (hash boşsa false).
+func verifyBcrypt(hash, password string) bool {
+	if hash == "" {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+// subtleEqual sabit-zamanlı string karşılaştırma.
+func subtleEqual(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// hashPassword bcrypt hash üretir.
+func hashPassword(p string) (string, error) {
+	h, err := bcrypt.GenerateFromPassword([]byte(p), bcrypt.DefaultCost)
+	return string(h), err
+}
+
 // credentialStore çalışma zamanında değiştirilebilen yönetici kimlik bilgileri.
 // Parola her zaman bcrypt hash olarak tutulur; düz metin ADMIN_PASS ile
 // başlatıldıysa açılışta hash'lenir. Böylece login karşılaştırması sabit

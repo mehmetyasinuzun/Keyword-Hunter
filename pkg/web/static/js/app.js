@@ -149,6 +149,18 @@
         const links = document.getElementById('nav-links');
         if (burger && links) burger.addEventListener('click', () => links.classList.toggle('open'));
 
+        // Rol tabanlı gizleme: whoami → body[data-role], admin dışı için admin linklerini kaldır
+        KH.api('/api/whoami').then(w => {
+            document.body.dataset.role = w.role || 'viewer';
+            document.body.dataset.user = w.username || '';
+            if (w.role !== 'admin') {
+                document.querySelectorAll('[data-role="admin"]').forEach(el => el.remove());
+            }
+            if (w.role === 'viewer') {
+                document.body.classList.add('role-viewer');
+            }
+        }).catch(() => { });
+
         const chip = document.getElementById('nav-health');
         if (chip) {
             KH.api('/api/monitor/summary').then(d => {
@@ -169,7 +181,7 @@
             if (e.key === '/') { e.preventDefault(); location.href = '/search'; return; }
             if (e.key === 'g') { g = true; setTimeout(() => g = false, 900); return; }
             if (g) {
-                const map = { d: '/dashboard', r: '/results', h: '/results/graph', a: '/analytics', s: '/search', p: '/scheduled', i: '/watchlist', m: '/monitor', c: '/crawl', y: '/settings' };
+                const map = { d: '/dashboard', r: '/results', h: '/results/graph', a: '/analytics', s: '/search', p: '/scheduled', i: '/watchlist', m: '/monitor', c: '/crawl', u: '/users', y: '/settings' };
                 if (map[e.key]) { g = false; location.href = map[e.key]; }
             }
         });

@@ -230,6 +230,11 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("crawl_jobs şeması başarısız: %w", err)
 	}
 
+	// Kullanıcılar (çoklu kullanıcı + rol)
+	if err := db.EnsureUserSchema(); err != nil {
+		return fmt.Errorf("users şeması başarısız: %w", err)
+	}
+
 	// Eski sürümlerin yazdığı, SQL tarafında parse edilemeyen zaman damgalarını normalize et
 	if err := db.normalizeLegacyTimestamps(); err != nil {
 		return fmt.Errorf("zaman damgası migrasyonu başarısız: %w", err)

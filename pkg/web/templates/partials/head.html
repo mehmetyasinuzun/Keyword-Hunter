@@ -263,6 +263,12 @@
         animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     }
 
+    /* İzleyici (salt-okunur) modunda yazma butonlarını gizle (backend zaten korur) */
+    body.role-viewer .kh-btn.primary:not(.view-ok),
+    body.role-viewer .kh-btn.danger,
+    body.role-viewer .kh-btn.success,
+    body.role-viewer .kh-btn.warn { display: none !important; }
+
     /* ── Özgün ikon sistemi ──────────────────────────────────────────── */
     .ico { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.18em; flex: none; stroke-width: 1.7; }
     .ico.sm { width: 1em; height: 1em; }
