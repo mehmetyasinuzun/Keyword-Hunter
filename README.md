@@ -1,5 +1,8 @@
 # KeywordHunter — Dark Web Cyber Threat Intelligence Platformu
 
+[![CI](https://github.com/mehmetyasinuzun/Keyword-Hunter/actions/workflows/ci.yml/badge.svg)](https://github.com/mehmetyasinuzun/Keyword-Hunter/actions/workflows/ci.yml)
+
+
 KeywordHunter, Tor ağındaki dark web arama motorlarını **eşzamanlı** tarayan, bulguları
 otomatik sınıflandıran (kritiklik 1-5, kategori), sayfa içeriğinden **IOC/artifact**
 (e-posta, kripto cüzdanı, IP, hash, onion adresi…) çıkaran, bilinen onion sitelerini
@@ -41,6 +44,12 @@ git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
 cd Keyword-Hunter
 docker compose up -d --build
 docker compose logs app | grep -A3 "yönetici parolası"   # ilk kurulumda üretilen parola
+```
+
+Hazır imaj (etiketli sürümlerde GHCR'a yayınlanır):
+
+```bash
+docker pull ghcr.io/mehmetyasinuzun/keyword-hunter:latest
 ```
 
 Windows: `temiz_baslat.bat` aynı adımları yapar.
