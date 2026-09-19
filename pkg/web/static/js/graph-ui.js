@@ -276,17 +276,17 @@ function expandNode() {
 
     const node = GraphState.selectedNode;
     if (!node || !node.data || !node.data.url) {
-        showToast('️ Derinleştirilecek node seçilmedi', 'warning');
+        showToast('Derinleştirilecek node seçilmedi', 'warning');
         return;
     }
 
     if (!node.data.url.includes('.onion')) {
-        showToast('️ Derinleştirme yalnızca .onion adreslerinde çalışır', 'warning');
+        showToast('Derinleştirme yalnızca .onion adreslerinde çalışır', 'warning');
         return;
     }
 
     if (node.data.isExpanded) {
-        showToast('ℹ️ Bu node zaten derinleştirilmiş', 'info');
+        showToast('Bu node zaten derinleştirilmiş', 'info');
         return;
     }
 
@@ -347,10 +347,10 @@ function expandNode() {
 function watchNode() {
     closeContextMenu();
     const node = GraphState.selectedNode;
-    if (!node || !node.data || !node.data.url) { showToast('️ Önce bir sonuç düğümü seçin', 'warning'); return; }
+    if (!node || !node.data || !node.data.url) { showToast('Önce bir sonuç düğümü seçin', 'warning'); return; }
     let host = '';
-    try { host = new URL(node.data.url).hostname; } catch (_) { showToast('️ Geçersiz URL', 'warning'); return; }
-    if (!host.endsWith('.onion')) { showToast('️ Yalnızca .onion siteleri izlenebilir', 'warning'); return; }
+    try { host = new URL(node.data.url).hostname; } catch (_) { showToast('Geçersiz URL', 'warning'); return; }
+    if (!host.endsWith('.onion')) { showToast('Yalnızca .onion siteleri izlenebilir', 'warning'); return; }
     fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: (node.data.name || host).slice(0, 100), url: 'http://' + host, category: 'Harita', notes: 'Haritadan eklendi' }) })
         .then(r => r.json()).then(d => { if (d.success) showToast('İzleme listesine eklendi', 'success'); else throw new Error(d.error || 'Eklenemedi'); })
         .catch(e => showToast('' + e.message, 'error'));
@@ -389,7 +389,7 @@ function closeLinkModal() {
 function copyLinkFromModal() {
     const node = GraphState.selectedNode;
     if (!node || !node.data || !node.data.url) {
-        showToast('️ Kopyalanacak link yok', 'warning');
+        showToast('Kopyalanacak link yok', 'warning');
         return;
     }
 

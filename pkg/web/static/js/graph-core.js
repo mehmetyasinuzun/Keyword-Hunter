@@ -128,7 +128,7 @@ async function quickSearch() {
     const query = input.value.trim();
 
     if (!query) {
-        showToast('️ Sorgu girin', 'warning');
+        showToast('Sorgu girin', 'warning');
         return;
     }
 

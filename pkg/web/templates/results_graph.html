@@ -180,16 +180,16 @@
 
     <!-- Context Menu -->
     <div class="context-menu" id="context-menu">
-        <div class="context-menu-item" onclick="copyLink()"> Linki Kopyala</div>
-        <div class="context-menu-item" onclick="copyTitle()"> Başlığı Kopyala</div>
+        <div class="context-menu-item" onclick="copyLink()">{{icon "copy"}} Linki Kopyala</div>
+        <div class="context-menu-item" onclick="copyTitle()">{{icon "copy"}} Başlığı Kopyala</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()"> Derinleştir</div>
-        <div class="context-menu-item" id="watch-menu-item" onclick="watchNode()"> İzleme Listesine Ekle</div>
+        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()">{{icon "target"}} Derinleştir</div>
+        <div class="context-menu-item" id="watch-menu-item" onclick="watchNode()">{{icon "watchlist"}} İzleme Listesine Ekle</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="focusNode()"> Odaklan</div>
-        <div class="context-menu-item" onclick="showLinkInfo()">ℹ️ Detaylar</div>
+        <div class="context-menu-item" onclick="focusNode()">{{icon "eye"}} Odaklan</div>
+        <div class="context-menu-item" onclick="showLinkInfo()">{{icon "info"}} Detaylar</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item danger" onclick="closeContextMenu()">️ Kapat</div>
+        <div class="context-menu-item danger" onclick="closeContextMenu()">{{icon "close"}} Kapat</div>
     </div>
 
     <!-- Toast -->
