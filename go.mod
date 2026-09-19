@@ -1,6 +1,6 @@
 module keywordhunter-mvp
 
-go 1.26.0
+go 1.26.6
 
 require (
 	github.com/chromedp/chromedp v0.16.0
