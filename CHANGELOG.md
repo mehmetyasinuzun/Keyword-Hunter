@@ -27,6 +27,21 @@
     başlatmada **eski parola geri geliyordu** — artık kullanıcıya açıkça bildirilir.
 - `BatchRunner.Submit` artık `ctx` iptalini onurlandırıyor (iptal edilmiş istek yetim
   iş üretmez). `graph_nodes` en-iyi-çaba eklemesi bilinçli olarak belgelendi.
+- **SSRF derinlemesine savunma (`capture.Render` / `capture.Capture`):** headless
+  Chromium `--host-resolver-rules` ile DNS'i Tor'a zorluyordu ama düz IP hedefleri
+  (`http://127.0.0.1:…`, `10.0.0.5`, `169.254.169.254`) DNS gerektirmez; onları yalnız
+  Tor daemon'unun *varsayılan* iç-adres reddi durduruyordu — koruma Tor
+  yapılandırmasına bağımlıydı. `Capture` hiç URL doğrulamıyordu. Her iki fonksiyon
+  artık chromium kontrolünden önce kendi kodumuzda yalnız `.onion` kabul ediyor.
+  Test: `TestRenderAndCapture_RejectNonOnion` (7 iç/clearnet hedef reddi + onion geçişi).
+- CSP `script-src 'unsafe-inline'` ödünleşimi sabitin üstünde belgelendi (satır içi
+  onclick/script blokları gerektiriyor; kaldırma yolu: harici betik + istek başına nonce).
+- Güvenlik taramaları (düzeltme gerekmedi, doğrulandı): webhook istemcisi yönlendirme
+  takip etmiyor (`ErrUseLastResponse`) ve **bağlantı anında** çözümlenmiş IP'yi
+  `net.Dialer.Control` ile reddediyor (DNS rebinding/TOCTOU kapalı), ortam proxy'leri
+  yok sayılıyor; Tor istemcisi yalnız SOCKS5 (hedef için doğrudan geri düşüş yok);
+  izleme listesi + örümcek tohumu `.onion` zorunlu; tek `template.HTML` sitesi kaçışlı;
+  tek dosya servisi (`/screenshots/:id`) yalnız ID→DB kaydı + `filepath.Base`.
 - Tarama sonuçları (düzeltme gerekmedi): `context.With*` üç adayı yanlış pozitif
   (cancel farklı adla çağrılıyor); gerçek DB sorgularının tümü `rows.Close` ediyor;
   15 goroutine lansmanı sınırlı/iptal edilebilir; global 1 MB gövde sınırı

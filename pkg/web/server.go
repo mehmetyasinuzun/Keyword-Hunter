@@ -296,6 +296,11 @@ func (s *Server) startScheduler() {
 // contentSecurityPolicy tüm kaynakları aynı origin'e kilitler. Şablonlar
 // satır içi script/stil kullandığı için 'unsafe-inline' gerekir; buna rağmen
 // harici script/bağlantı/iframe tamamen engellenir (CDN bağımlılığı yok).
+// Bilinen ödünleşim: script-src içindeki 'unsafe-inline' şablonlardaki satır içi
+// onclick= işleyicileri ve <script> blokları için gereklidir; bu, enjekte edilmiş bir
+// satır içi betiğin çalışmasına izin verir. XSS yüzeyi html/template otomatik
+// kaçışıyla kapalı tutulur (tek template.HTML sitesi kaçışlıdır). Kaldırma yolu:
+// tüm satır içi betikleri harici dosyalara taşıyıp istek başına nonce'lu CSP.
 const contentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; " +
 	"base-uri 'self'; form-action 'self'; object-src 'none'"

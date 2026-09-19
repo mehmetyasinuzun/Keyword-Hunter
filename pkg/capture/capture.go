@@ -152,6 +152,10 @@ func (c *Capturer) proxyHost() string {
 
 // Capture verilen URL'nin ekran görüntüsünü Tor üzerinden alır ve PNG olarak kaydeder.
 func (c *Capturer) Capture(ctx context.Context, targetURL string) (*Shot, error) {
+	// Derinlemesine savunma: yalnız .onion hedefleri (bkz. Render açıklaması).
+	if !shared.IsOnionURL(targetURL) {
+		return nil, fmt.Errorf("yalnız .onion hedefleri yakalanabilir")
+	}
 	if !c.Available() {
 		return nil, fmt.Errorf("chromium bulunamadı (chromePath=%q) — ekran görüntüsü devre dışı", c.chromePath)
 	}

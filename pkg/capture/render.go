@@ -3,6 +3,7 @@ package capture
 import (
 	"context"
 	"fmt"
+	"keywordhunter-mvp/pkg/shared"
 	"net/url"
 	"strings"
 	"time"
@@ -28,6 +29,13 @@ const maxRenderHTML = 6 << 20
 // hedef host için çerez olarak enjekte edilir (oturumlu/giriş duvarlı siteler).
 // Chromium yoksa hata döner; çağıran düz HTTP çıktısına geri düşmelidir.
 func (c *Capturer) Render(ctx context.Context, targetURL, cookieHeader, userAgent string) (*RenderResult, error) {
+	// Derinlemesine savunma: yalnız .onion hedefleri. host-resolver-rules DNS'i
+	// Tor'a zorlar ama düz IP (örn. 127.0.0.1) DNS gerektirmez; onu yalnız Tor'un
+	// varsayılan iç-adres reddi durduruyordu. Koruma Tor yapılandırmasına
+	// bağımlı kalmasın diye burada kendimiz reddediyoruz.
+	if !shared.IsOnionURL(targetURL) {
+		return nil, fmt.Errorf("yalnız .onion hedefleri render edilebilir")
+	}
 	if !c.Available() {
 		return nil, fmt.Errorf("chromium bulunamadı — JS render devre dışı")
 	}
