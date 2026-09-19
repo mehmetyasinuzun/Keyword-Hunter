@@ -126,7 +126,7 @@ func (db *DB) GetAllScheduledSearches() ([]ScheduledSearch, error) {
 		}
 		list = append(list, s)
 	}
-	return list, nil
+	return list, rows.Err()
 }
 
 // GetDueScheduledSearches çalışması gereken zamanlanmış taramaları döndürür.
@@ -168,7 +168,7 @@ func (db *DB) GetDueScheduledSearches() ([]ScheduledSearch, error) {
 		}
 		list = append(list, s)
 	}
-	return list, nil
+	return list, rows.Err()
 }
 
 // UpdateScheduledSearchAfterRun tarama tamamlandıktan sonra istatistikleri günceller
@@ -230,5 +230,5 @@ func (db *DB) GetKnownURLsForQuery(query string) (map[string]bool, error) {
 			known[u] = true
 		}
 	}
-	return known, nil
+	return known, rows.Err()
 }

@@ -287,7 +287,7 @@ func (db *DB) GetNewResults(hours int, limit int) ([]SearchResult, error) {
 		}
 		results = append(results, r)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 // GetStats istatistikleri getirir
@@ -361,7 +361,7 @@ func (db *DB) GetQueries() ([]QueryInfo, error) {
 		}
 		queries = append(queries, q)
 	}
-	return queries, nil
+	return queries, rows.Err()
 }
 
 // TagStat etiket istatistiği
@@ -391,6 +391,9 @@ func (db *DB) GetTagStats() ([]TagStat, error) {
 			stats = append(stats, s)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	if len(stats) > 0 {
 		return stats, nil
@@ -417,6 +420,10 @@ func (db *DB) GetTagStats() ([]TagStat, error) {
 				tagCounts[tag]++
 			}
 		}
+	}
+
+	if err := legacyRows.Err(); err != nil {
+		return nil, err
 	}
 
 	for tag, count := range tagCounts {
@@ -471,7 +478,7 @@ func (db *DB) GetResultsByTag(tag string, limit int) ([]SearchResult, error) {
 		results = append(results, r)
 	}
 
-	return results, nil
+	return results, rows.Err()
 }
 
 // GetTaggedResultsCount etiketli sonuç sayısını döndürür
@@ -580,6 +587,10 @@ func (db *DB) DistinctSourcesAndCategories() (sources []string, categories []str
 			sources = append(sources, v)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, nil, err
+	}
 	rows.Close()
 	rows, err = db.conn.Query(`SELECT DISTINCT category FROM search_results WHERE category != '' ORDER BY category`)
 	if err != nil {
@@ -590,6 +601,10 @@ func (db *DB) DistinctSourcesAndCategories() (sources []string, categories []str
 		if rows.Scan(&v) == nil {
 			categories = append(categories, v)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, nil, err
 	}
 	rows.Close()
 	return sources, categories, nil
@@ -706,8 +721,8 @@ func escapeLike(s string) string {
 // EnsureCaseColumns search_results tablosuna vaka yönetimi sütunlarını ekler (idempotent).
 func (db *DB) EnsureCaseColumns() error {
 	// "duplicate column" hatası yutulur
-	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN note TEXT DEFAULT ''`)
-	db.conn.Exec(`ALTER TABLE search_results ADD COLUMN case_status TEXT DEFAULT ''`)
+	_, _ = db.conn.Exec(`ALTER TABLE search_results ADD COLUMN note TEXT DEFAULT ''`)
+	_, _ = db.conn.Exec(`ALTER TABLE search_results ADD COLUMN case_status TEXT DEFAULT ''`)
 	_, _ = db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_search_results_case ON search_results(case_status)`)
 	return nil
 }
@@ -717,8 +732,10 @@ func (db *DB) UpdateResultCase(id int64, status, note string) (int64, error) {
 	if !ValidCaseStatus(status) {
 		return 0, fmt.Errorf("geçersiz vaka durumu")
 	}
-	if len(note) > 4000 {
-		note = note[:4000]
+	// Rune sınırında kes: bayt bazlı kesim Türkçe gibi çok baytlı karakteri
+	// ortadan bölerek geçersiz UTF-8 üretebilir.
+	if r := []rune(note); len(r) > 4000 {
+		note = string(r[:4000])
 	}
 	res, err := db.conn.Exec(`UPDATE search_results SET case_status = ?, note = ? WHERE id = ?`, status, note, id)
 	if err != nil {

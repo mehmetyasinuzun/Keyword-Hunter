@@ -100,7 +100,7 @@ func (db *DB) ListTaggingJobsByStatuses(statuses []string, limit int) ([]Tagging
 		jobs = append(jobs, *job)
 	}
 
-	return jobs, nil
+	return jobs, rows.Err()
 }
 
 // ResetRunningTaggingJobs uygulama kapanmasından kalan running işleri pending'e çeker.

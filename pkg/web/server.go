@@ -30,7 +30,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.14.0"
+var Version = "0.14.1"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -538,7 +538,13 @@ func (s *Server) setupRoutes() {
 		api := protected.Group("/api")
 		api.Use(s.csrfMiddleware())
 		// Yazma işlemleri (POST/DELETE) en az analyst; viewer yalnız okur.
+		// İstisna: kendi parolasını değiştirme öz-hizmettir, her rol yapabilmeli
+		// (aksi halde viewer ele geçirilmiş parolasını asla döndüremez).
 		api.Use(func(c *gin.Context) {
+			if c.FullPath() == "/api/me/password" {
+				c.Next()
+				return
+			}
 			if !isSafeMethod(c.Request.Method) && roleRank(c.GetString("role")) < roleRank("analyst") {
 				c.AbortWithStatusJSON(403, gin.H{"error": "Salt-okunur (viewer) rol bu işlemi yapamaz"})
 				return

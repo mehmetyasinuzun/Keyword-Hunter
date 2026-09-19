@@ -142,7 +142,7 @@ func (db *DB) ArtifactCountByResult(ids []int64) (map[int64]int, error) {
 			out[id] = n
 		}
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 // SearchArtifacts değer içinde arama (IOC pivotu): aynı e-posta/cüzdan hangi bulgularda geçiyor?

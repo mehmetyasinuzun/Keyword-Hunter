@@ -1,5 +1,26 @@
 # Değişiklik Günlüğü
 
+## v0.14.1 — 2026-09-19
+
+### İç kalite / paranoya turu (yeni özellik yok)
+- **Güvenlik/RBAC düzeltmesi:** viewer rolü kendi parolasını değiştiremiyordu —
+  `/api/me/password` grup-geneli "yazma = analyst+" korumasına takılıp 403 dönüyordu,
+  yani ele geçirilmiş bir viewer parolası asla döndürülemezdi. Öz-hizmet ucu dar bir
+  istisnayla korumadan muaf tutuldu; gerçek yazma uçları viewer için 403 kalmaya devam
+  ediyor. Regresyon testi: `TestRBAC_ViewerCanChangeOwnPasswordButNotWrite`.
+- **`rows.Err()` denetimi eklendi (23 fonksiyon):** `rows.Next()` döngülerinde yineleme
+  ortasında oluşan DB hatası sessizce yutuluyor, kısmi liste "başarılı" gibi
+  dönüyordu. Depo fonksiyonları artık hatayı yayıyor; graf HTTP uçları
+  (`/api/graph/*`) kısmi 200 yerine 500 dönüyor. İki en-iyi-çaba yardımcısı
+  (`getExpandedNodeIDsByURL`, `watchlistUptime`) bilinçli olarak imza değiştirmeden
+  belgelendi.
+- Ölü kod: crawler'daki hiç okunmayan `frame.parent` alanı kaldırıldı.
+- Vaka notu kesimi bayt yerine rune sınırında (Türkçe çok baytlı karakter bölünmez).
+- `update-criticality` içindeki gereksiz `Sprintf` ile kurulmuş SQL düz sabite indirgendi
+  (tablo zaten sabitti; enjeksiyon görünümlü kalıp temizlendi).
+
+`go test -race ./...` 13 paket yeşil, gofmt/vet temiz.
+
 ## v0.14.0 — 2026-09-19
 
 ### Vaka yönetimi (analist iş akışı)

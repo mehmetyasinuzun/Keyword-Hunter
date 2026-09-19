@@ -94,7 +94,6 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 		return
 	}
 
-	table := "search_results"
 	if req.Type == "" {
 		req.Type = "result"
 	}
@@ -116,8 +115,9 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 	if req.Category == "" {
 		req.Category = "Genel"
 	}
-	query := fmt.Sprintf("UPDATE %s SET criticality = ?, category = ? WHERE id = ?", table)
-	res, err := s.db.GetDBConn().Exec(query, req.Criticality, req.Category, req.ID)
+	// Tablo sabittir (Type yalnız "result" olabilir); Sprintf ile kurulmuş SQL
+	// gereksiz bir enjeksiyon-görünümlü kalıptı, düz sabite indirgendi.
+	res, err := s.db.GetDBConn().Exec("UPDATE search_results SET criticality = ?, category = ? WHERE id = ?", req.Criticality, req.Category, req.ID)
 	if err != nil {
 		respondInternalError(c, "UpdateCriticality", err)
 		return
@@ -404,6 +404,10 @@ func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
 			items = append(items, q)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		respondInternalError(c, "GraphQueries", err)
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"queries": items})
 }
@@ -447,6 +451,10 @@ func (s *Server) handleGraphEnginesAPI(c *gin.Context) {
 		if err := rows.Scan(&e.Engine, &e.Count); err == nil {
 			items = append(items, e)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		respondInternalError(c, "GraphEngines", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"query": query, "engines": items})
@@ -533,6 +541,10 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 			r.IsExpanded = expandedRaw > 0
 			items = append(items, r)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		respondInternalError(c, "GraphResults", err)
+		return
 	}
 
 	hasMore := len(items) > limit

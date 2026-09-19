@@ -158,5 +158,5 @@ func (db *DB) GetAllEngineStats() ([]EngineStatDB, error) {
 		}
 		stats = append(stats, s)
 	}
-	return stats, nil
+	return stats, rows.Err()
 }

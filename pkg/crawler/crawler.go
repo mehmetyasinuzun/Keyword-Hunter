@@ -152,9 +152,8 @@ func (r *Runner) loop() {
 }
 
 type frame struct {
-	url    string
-	depth  int
-	parent int64 // parent graph node id (0 = kök)
+	url   string
+	depth int
 }
 
 func (r *Runner) run(id string) {
@@ -184,7 +183,7 @@ func (r *Runner) run(id string) {
 
 	seedDomain := shared.ExtractDomain(job.SeedURL)
 	visited := map[string]bool{}
-	queue := []frame{{url: job.SeedURL, depth: 0, parent: 0}}
+	queue := []frame{{url: job.SeedURL, depth: 0}}
 	pages, found, saved := 0, 0, 0
 	start := time.Now()
 
@@ -237,7 +236,7 @@ func (r *Runner) run(id string) {
 				if nu == "" || visited[nu] {
 					continue
 				}
-				queue = append(queue, frame{url: link.URL, depth: f.depth + 1, parent: 0})
+				queue = append(queue, frame{url: link.URL, depth: f.depth + 1})
 			}
 		}
 

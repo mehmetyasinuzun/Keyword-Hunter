@@ -157,7 +157,7 @@ func (db *DB) queryScreenshots(q string, args ...interface{}) ([]Screenshot, err
 		s.Challenge = chInt == 1
 		list = append(list, s)
 	}
-	return list, nil
+	return list, rows.Err()
 }
 
 // LastScreenshotAt bir hedef için son başarılı görüntünün zamanını döndürür

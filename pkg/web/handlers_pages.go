@@ -305,7 +305,7 @@ func (s *Server) getCategoryStats() (map[string]int, error) {
 			stats[cat] = count
 		}
 	}
-	return stats, nil
+	return stats, rows.Err()
 }
 
 // getCriticalityStats kritiklik bazlı sayıları getirir
@@ -322,7 +322,7 @@ func (s *Server) getCriticalityStats() (map[int]int, error) {
 			stats[crit] = count
 		}
 	}
-	return stats, nil
+	return stats, rows.Err()
 }
 
 // handleSearchPage arama sayfası

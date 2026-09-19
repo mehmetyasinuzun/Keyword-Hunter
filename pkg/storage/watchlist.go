@@ -258,6 +258,8 @@ func (db *DB) watchlistUptime(itemID int64) int {
 
 	total := 0
 	up := 0
+	// En-iyi-çaba gösterim metriği (yüzde). Yineleme sırasında hata olursa
+	// yüzde kısmi veriden hesaplanır; imzayı değiştirmeye değmez.
 	for rows.Next() {
 		var status string
 		if err := rows.Scan(&status); err != nil {

@@ -279,6 +279,10 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 
 			engineResults[source] = append(engineResults[source], resultNode)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
 		rows.Close()
 
 		// Engine node'larını oluştur
@@ -318,6 +322,9 @@ func (db *DB) getExpandedNodeIDsByURL() map[string]int64 {
 	defer rows.Close()
 
 	result := make(map[string]int64)
+	// En-iyi-çaba: bu yalnız graf süslemesidir (hangi düğümler açılmış). Kısmi
+	// sonuç yalnızca bazı düğümlerin kapalı görünmesine yol açar, veri bozulmaz;
+	// bu yüzden hata yayılmaz, çağıran GetGraphData akışı sürer.
 	for rows.Next() {
 		var id int64
 		var url string
@@ -488,7 +495,7 @@ func (db *DB) GetGraphChildren(parentID int64) ([]GraphNodeDB, error) {
 		nodes = append(nodes, node)
 	}
 
-	return nodes, nil
+	return nodes, rows.Err()
 }
 
 // MarkNodeExpanded bir node'u expanded olarak işaretler
