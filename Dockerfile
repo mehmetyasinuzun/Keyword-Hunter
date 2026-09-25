@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     -ldflags="-s -w -X keywordhunter-mvp/pkg/web.Version=${VERSION}" \
     -o /out/keywordhunter ./cmd/main.go
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 WORKDIR /app
 
