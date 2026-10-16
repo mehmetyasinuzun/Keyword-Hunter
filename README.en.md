@@ -79,7 +79,8 @@ customisations survive engine list updates.
 | <img src="docs/screenshots/login.jpg" alt="Sign in"> **Sign in** | <img src="docs/screenshots/search.jpg" alt="Search"> **Search** |
 | <img src="docs/screenshots/results.jpg" alt="Findings"> **Findings** | <img src="docs/screenshots/graph.jpg" alt="Map"> **Map** |
 | <img src="docs/screenshots/analytics.jpg" alt="Analytics"> **Analytics** | <img src="docs/screenshots/watchlist.jpg" alt="Watchlist"> **Watchlist** |
-| <img src="docs/screenshots/monitor.jpg" alt="Engines"> **Engines** | <img src="docs/screenshots/palette.jpg" alt="Command palette"> **Command palette** |
+| <img src="docs/screenshots/monitor.jpg" alt="Engines"> **Engines** | <img src="docs/screenshots/scheduled.jpg" alt="Scheduled scans"> **Scheduled scans** |
+| <img src="docs/screenshots/palette.jpg" alt="Command palette"> **Command palette** | <img src="docs/screenshots/dashboard-light.jpg" alt="Light theme"> **Light theme** |
 
 ## 🛡️ Security model
 

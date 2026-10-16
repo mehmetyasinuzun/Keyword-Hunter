@@ -112,7 +112,8 @@ değiştiğinde kullanıcı özelleştirmeleri korunur.
 | <img src="docs/screenshots/login.jpg" alt="Giriş"> **Giriş** — canlı radar, kilitleme geri sayımı | <img src="docs/screenshots/search.jpg" alt="Arama"> **Arama** — eşzamanlı motor taraması |
 | <img src="docs/screenshots/results.jpg" alt="Bulgular"> **Bulgular** — filtre, vaka yönetimi, toplu işlem | <img src="docs/screenshots/graph.jpg" alt="Harita"> **Harita** — ilişki grafiği ve derinleştirme |
 | <img src="docs/screenshots/analytics.jpg" alt="Analiz"> **Analiz** — tema duyarlı grafikler | <img src="docs/screenshots/watchlist.jpg" alt="İzleme"> **İzleme Listesi** — uptime, değişiklik, captcha |
-| <img src="docs/screenshots/monitor.jpg" alt="Motorlar"> **Motorlar** — canlı sağlık ve aç/kapat | <img src="docs/screenshots/palette.jpg" alt="Komut paleti"> **Komut paleti** — <kbd>Ctrl</kbd>+<kbd>K</kbd> |
+| <img src="docs/screenshots/monitor.jpg" alt="Motorlar"> **Motorlar** — canlı sağlık ve aç/kapat | <img src="docs/screenshots/scheduled.jpg" alt="Planlı taramalar"> **Planlı Taramalar** — webhook bildirim merkezi |
+| <img src="docs/screenshots/palette.jpg" alt="Komut paleti"> **Komut paleti** — <kbd>Ctrl</kbd>+<kbd>K</kbd> | <img src="docs/screenshots/dashboard-light.jpg" alt="Açık tema"> **Açık tema** — tek tıkla ya da sistemle uyumlu |
 
 <p align="center"><img src="docs/screenshots/mobile.jpg" alt="Mobil görünüm" width="300"></p>
 
