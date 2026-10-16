@@ -51,7 +51,7 @@ var auditCategories = []struct {
 	Prefixes []string
 }{
 	{"auth", []string{"auth.", "access."}},
-	{"user", []string{"user.", "me.", "token."}},
+	{"user", []string{"user.", "me.", "token.", "2fa."}},
 	{"export", []string{"export."}},
 	{"system", []string{"settings.", "alert.", "engine.", "tor.", "site_profile.", "audit."}},
 	{"data", []string{"results.", "result.", "search.", "tagging.", "watchlist.", "scheduled.", "crawl.", "screenshot.", "graph."}},

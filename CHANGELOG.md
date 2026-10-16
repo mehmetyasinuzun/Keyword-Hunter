@@ -2,6 +2,34 @@
 
 ## Yayımlanmamış
 
+### İki adımlı doğrulama (TOTP, RFC 6238)
+- **Kayıt (Hesabım → İki adımlı doğrulama):** 3 adımlı sihirbaz — sunucuda üretilen
+  QR (PNG data URI, `github.com/skip2/go-qrcode`: saf Go, bağımlılıksız, ISO 18004
+  maske seçimi) + 4'erli gruplanmış base32 anahtar → 6 haneli kod doğrulama → bir kez
+  gösterilen 10 kurtarma kodu (kopyala / `.txt` indir / "kaydettim" onayı). Sihirbaz
+  kapanınca QR, sır ve kodlar DOM'dan silinir.
+- **Kripto (`pkg/totp`):** HMAC-SHA1, 6 hane, 30 sn, ±1 adım, sabit-zamanlı karşılaştırma,
+  RFC 4226/6238 test vektörleri; kalıcı son adımla yeniden oynatma koruması (atomik CAS).
+  Sırlar `APP_SECRET`'tan HKDF-SHA256 ile türetilen anahtarla AES-256-GCM şifreli ve
+  kullanıcıya bağlı (AAD); kurtarma kodlarından yalnız kullanıcıya bağlı SHA-256 özeti.
+- **Giriş:** parola doğruysa oturum açılmaz; 5 dk'lık bekleyen giriş (`/login` kapsamlı,
+  HttpOnly + SameSite=Strict çerez) → `/login/2fa` (otomatik gönderim, kurtarma kodu
+  modu, kalan deneme, kilit geri sayımı, kalan süre, iptal). 5 hatalı kodda bekleyen giriş
+  düşer; kod hataları IP kilidine sayılır. Deneme hakkı (bekleyen giriş + IP) doğrulamadan
+  önce atomik olarak ayrılır: eşzamanlı istekler sınırı aşamaz; parola değişikliği bekleyen
+  girişi düşürür. Oturum, normal girişle aynı `startSession`
+  yolundan açılır. DB hatasında `.env` bootstrap kimliğine düşülmez (2FA atlatılamaz).
+- **Yönetim:** etkinleştirme mevcut parolayı ister; parola + kodla kapatma ve kod yenileme; admin için `/users`'ta 2FA rozeti
+  (açık / eksik / kapalı) ve "2FA'yı sıfırla" (kendi hesabına uygulanamaz).
+- **Zorunluluk:** `REQUIRE_2FA=none|admins|all`; kayıtsız kullanıcı Hesabım'a yönlenir,
+  API `403 {"error":"2FA required"}`, token'ları reddedilir. Politika etkinken `users` dışı
+  `.env` yönetici girişi reddedilir; kalıcı `APP_SECRET` yoksa uygulama başlamaz.
+- **`APP_SECRET`:** yoksa üretilip etkin `.env`'in sonuna eklenir (yorumlar korunur, değer loglanmaz); yazılamazsa
+  2FA kaydı o çalıştırmada kapalıdır.
+- **Denetim:** `2fa.*`, `auth.2fa.challenge|success|failure`; giriş olayında `mfa`.
+- **Giriş sayfası:** sorgu dizgisindeki serbest `message` metni artık yansıtılmaz
+  (yalnız bilinen ileti kodları).
+
 ### Değiştirilemez denetim kaydı (`/audit`)
 - **Hash zinciri:** her olay `sha256(prev_hash || kanonik alanlar)` ile bir öncekine
   bağlanır; `audit_chain_state` çapa (budanan son satır) ve baş (son satır) tutar.

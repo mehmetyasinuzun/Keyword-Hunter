@@ -27,6 +27,7 @@ import (
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tagging"
 	"keywordhunter-mvp/pkg/tor"
+	"keywordhunter-mvp/pkg/totp"
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
@@ -96,6 +97,13 @@ type Server struct {
 	auditNoise         auditThrottle
 	auditWriteFails    atomic.Int64 // son başlatmadan beri yazılamayan olay
 	auditWriteFailAt   atomic.Int64 // son yazma hatası (unix ms)
+
+	// İki adımlı doğrulama: TOTP sırlarını şifreleyen mühürleyici (APP_SECRET
+	// yoksa nil → kayıt kapalı), zorunluluk politikası ve bekleyen girişler.
+	totpSealer         *totp.Sealer
+	appSecretEphemeral bool
+	require2FA         string
+	pendingLogins      *pendingLogins
 }
 
 // Config sunucu yapılandırması
@@ -116,6 +124,13 @@ type Config struct {
 	TorControlPass string
 	// AuditRetentionDays denetim kaydı saklama süresi (gün); 0 = süresiz.
 	AuditRetentionDays int
+	// AppSecret TOTP sırlarını şifreleyen anahtarın kaynağı (64 hex).
+	AppSecret string
+	// AppSecretEphemeral sır .env'e yazılamadı (bu çalıştırmayla sınırlı):
+	// yeni 2FA kaydı kapatılır.
+	AppSecretEphemeral bool
+	// Require2FA none | admins | all.
+	Require2FA string
 }
 
 // New yeni web sunucusu oluşturur
@@ -178,6 +193,19 @@ func New(cfg Config) (*Server, error) {
 		torProxy:      cfg.TorProxy,
 
 		auditRetentionDays: cfg.AuditRetentionDays,
+		appSecretEphemeral: cfg.AppSecretEphemeral,
+		require2FA:         cfg.Require2FA,
+		pendingLogins:      newPendingLogins(),
+	}
+	if cfg.AppSecret != "" {
+		sealer, err := totp.NewSealer(cfg.AppSecret)
+		if err != nil {
+			logger.Error("APP_SECRET geçersiz; 2FA kaydı ve TOTP doğrulaması kapalı: %v", err)
+		} else {
+			s.totpSealer = sealer
+		}
+	} else {
+		logger.Warn("APP_SECRET tanımlı değil; 2FA kaydı ve TOTP doğrulaması kapalı (yalnız kurtarma kodları çalışır)")
 	}
 	if bootstrapped != "" {
 		s.auditSystem("user.bootstrap", "user:"+bootstrapped, map[string]any{"role": storage.RoleAdmin}, true)
@@ -372,6 +400,9 @@ func (s *Server) startSessionCleanup() {
 					s.loginGuard.Cleanup()
 				}
 				s.auditNoise.cleanup(30 * time.Minute)
+				if s.pendingLogins != nil {
+					s.pendingLogins.cleanup()
+				}
 				if _, err := s.db.PurgeStaleAPITokens(time.Now().Add(-tokenRetention)); err != nil {
 					logger.Warn("API token temizliği başarısız: %v", err)
 				}
@@ -487,6 +518,10 @@ func (s *Server) captureAndStore(source string, refID int64, targetURL string) {
 
 // setupRoutes rotaları ayarlar
 func (s *Server) setupRoutes() {
+	if s.pendingLogins == nil {
+		s.pendingLogins = newPendingLogins()
+	}
+
 	// Template'leri yükle (ana sayfalar + partials)
 	tmpl := template.Must(template.New("").Funcs(templateFuncs()).ParseFS(templateFS, "templates/*.html", "templates/partials/*.html"))
 	s.router.SetHTMLTemplate(tmpl)
@@ -509,6 +544,10 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/", s.handleIndex)
 	s.router.GET("/login", s.handleLoginPage)
 	s.router.POST("/login", s.handleLogin)
+	// İkinci adım (2FA): oturum yok; bekleyen giriş çerezi yalnız /login altında geçer.
+	s.router.GET("/login/2fa", s.handleLogin2FAPage)
+	s.router.POST("/login/2fa", s.handleLogin2FA)
+	s.router.GET("/login/2fa/cancel", s.handleLogin2FACancel)
 	s.router.GET("/logout", s.handleLogout)
 	s.router.POST("/logout", s.handleLogout)
 	s.router.GET("/healthz", s.handleHealthz)
@@ -519,7 +558,7 @@ func (s *Server) setupRoutes() {
 
 	// Protected routes
 	protected := s.router.Group("/")
-	protected.Use(s.authMiddleware())
+	protected.Use(s.authMiddleware(), s.twoFactorGate())
 	{
 		protected.GET("/dashboard", s.handleDashboard)
 		protected.GET("/search", s.handleSearchPage)
@@ -573,6 +612,7 @@ func (s *Server) setupRoutes() {
 			admin.POST("/users", s.handleUserCreate)
 			admin.POST("/users/:id", s.handleUserUpdate)
 			admin.POST("/users/:id/delete", s.handleUserDelete)
+			admin.POST("/users/:id/2fa/reset", s.handleUserTwoFAReset)
 
 			// Denetim kaydı (hash zincirli): yalnız admin okur/doğrular/dışa aktarır
 			admin.GET("/audit", s.handleAuditList)
@@ -582,6 +622,13 @@ func (s *Server) setupRoutes() {
 			// Herkes: kimlik + kendi parolası
 			api.GET("/whoami", s.handleWhoami)
 			api.POST("/me/password", s.handleMyPassword)
+
+			// İki adımlı doğrulama (öz-hizmet; yalnız etkileşimli oturum)
+			api.GET("/me/2fa", s.handleTwoFAStatus)
+			api.POST("/me/2fa/setup", s.handleTwoFASetup)
+			api.POST("/me/2fa/enable", s.handleTwoFAEnable)
+			api.POST("/me/2fa/disable", s.handleTwoFADisable)
+			api.POST("/me/2fa/recovery-codes", s.handleTwoFARecoveryCodes)
 
 			// Kişisel API token'ları (yalnız etkileşimli oturum; token ile çağrılamaz)
 			api.GET("/tokens", s.handleTokensList)

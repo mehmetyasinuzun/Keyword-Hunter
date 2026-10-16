@@ -24,6 +24,8 @@ var envWriteOrder = []string{
 	"DB_PATH",
 	"WEB_ADDR",
 	"LOG_DIR",
+	"REQUIRE_2FA",
+	"APP_SECRET",
 }
 
 // EnvStore .env dosyasini okur ve gunceller.
@@ -73,6 +75,65 @@ func (s *EnvStore) Update(updates map[string]string) error {
 	}
 
 	return s.writeUnlocked(current)
+}
+
+// SetPreserving tek bir anahtarı .env'de yazar ve dosyanın geri kalanını
+// (yorumlar, boş satırlar, sıra, bilinmeyen satırlar) olduğu gibi korur.
+// Anahtar varsa ilk geçtiği satır yerinde değiştirilir, yoksa sona eklenir.
+// Update'ten farkı: Update dosyayı anahtar haritasından yeniden üretir ve
+// yorumları atar; başlangıçta (ör. APP_SECRET üretimi) kullanıcının
+// .env.example'dan kopyaladığı açıklamalar sessizce silinmemeli.
+func (s *EnvStore) SetPreserving(key, value string) error {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if key == "" || strings.ContainsAny(key, "=\n\r#") {
+		return fmt.Errorf("gecersiz env anahtari")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	raw, err := os.ReadFile(s.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err != nil {
+		if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil && filepath.Dir(s.path) != "." {
+			return err
+		}
+	}
+	entry := key + "=" + formatEnvValue(value)
+	text := string(raw)
+	lines := strings.SplitAfter(text, "\n")
+	replaced := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		k, _, ok := strings.Cut(trimmed, "=")
+		if !ok || strings.TrimSpace(k) != key {
+			continue
+		}
+		nl := ""
+		if strings.HasSuffix(line, "\n") {
+			nl = "\n"
+		}
+		lines[i] = entry + nl
+		replaced = true
+		break
+	}
+	if replaced {
+		text = strings.Join(lines, "")
+	} else {
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		text += entry + "\n"
+	}
+	if err := os.WriteFile(s.path, []byte(text), 0o600); err != nil {
+		return fmt.Errorf("env dosyasi yazilamadi: %w", err)
+	}
+	return nil
 }
 
 func (s *EnvStore) readUnlocked() (map[string]string, error) {

@@ -9,9 +9,10 @@
 .u-av { --c: var(--primary); width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; font: 800 .74rem var(--font-sans); letter-spacing: .02em; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 34%, transparent); }
 .u-av.r-admin { --c: var(--err); } .u-av.r-analyst { --c: var(--sev-1); } .u-av.r-viewer { --c: var(--violet); }
 .is-self .u-av { background: var(--brand-grad); color: #fff; box-shadow: 0 0 0 2px var(--surface-solid), 0 0 0 3px var(--primary); }
-.u-name { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); max-width: 260px; }
+.u-name { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); max-width: 190px; }
+.u-name .kh-truncate { min-width: 0; }
 .u-sub { font-size: .68rem; color: var(--text-3); margin-top: 1px; }
-.u-table tr.is-disabled .u-cell, .u-table tr.is-disabled td:nth-child(4) { opacity: .55; }
+.u-table tr.is-disabled .u-cell, .u-table tr.is-disabled td:nth-child(5) { opacity: .55; }
 .u-table tr.is-self { background: color-mix(in srgb, var(--primary) 4%, transparent); }
 
 .u-role-sel { width: 132px; font-weight: 650; }
@@ -46,3 +47,11 @@
   .u-stats .kh-stat .value { font-size: 1.5rem; margin-top: 4px; }
   .u-stats .kh-stat .label { font-size: .6rem; letter-spacing: .06em; }
 }
+
+/* Orta genişlikte "Oluşturma" sütunu gizlenir: 2FA sütunuyla tablo kartına sığsın */
+@media (max-width: 1366px) { .u-table .u-created { display: none; } }
+
+/* 2FA durumu */
+.u-2fa { white-space: nowrap; }
+.u-2fa .ico { width: 12px; height: 12px; }
+.u-2fa-low { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 2px; border-radius: 50%; font-size: .62rem; font-weight: 800; color: var(--surface-solid); background: var(--warn); }

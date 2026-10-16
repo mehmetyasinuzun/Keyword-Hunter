@@ -106,6 +106,8 @@ type loginAttempt struct {
 	failures  int
 	firstFail time.Time
 	lockUntil time.Time
+	// inflight Acquire ile başlamış, henüz Release edilmemiş denemeler.
+	inflight int
 }
 
 // loginGuard IP başına ve global başarısız giriş sayacı tutar.
@@ -135,16 +137,81 @@ func (g *loginGuard) Blocked(ip string) (bool, time.Duration) {
 	return false, 0
 }
 
+// Acquire bir kimlik doğrulama denemesini doğrulamadan ÖNCE atomik olarak
+// ayırır. Blocked + sonradan Fail desenindeki yarışı kapatır: aynı IP'den
+// eşzamanlı istekler, sonuçları kaydedilmeden önce kilidin izin verdiğinden
+// fazla doğrulama yaptıramaz. Uçuştaki deneme sayısı, kilide kalan hata
+// hakkıyla sınırlıdır (kilit süresi dolmuş bir IP için 1). Kilitli ya da
+// doygunsa false ve beklenecek süre döner. true dönerse çağıran, sonucu
+// Fail/Success ile bildirdikten sonra Release çağırmalıdır.
+func (g *loginGuard) Acquire(ip string) (bool, time.Duration) {
+	if g == nil {
+		return true, 0
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := g.now()
+	if g.global.lockUntil.After(now) {
+		return false, g.global.lockUntil.Sub(now)
+	}
+	a, ok := g.attempts[ip]
+	if !ok {
+		a = &loginAttempt{}
+		g.attempts[ip] = a
+	}
+	if a.lockUntil.After(now) {
+		return false, a.lockUntil.Sub(now)
+	}
+	failures := a.failures
+	if !a.firstFail.IsZero() && now.Sub(a.firstFail) > loginFailureWindow {
+		failures = 0
+	}
+	limit := loginMaxFailures - failures
+	if limit < 1 {
+		limit = 1
+	}
+	if a.inflight >= limit {
+		// Uçuştaki denemeler sonuçlanana dek bekle (kısa).
+		return false, time.Second
+	}
+	a.inflight++
+	return true, 0
+}
+
+// Release Acquire ile ayrılan denemeyi serbest bırakır.
+func (g *loginGuard) Release(ip string) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	a, ok := g.attempts[ip]
+	if !ok {
+		return
+	}
+	if a.inflight > 0 {
+		a.inflight--
+	}
+	if a.inflight == 0 && a.failures == 0 && !a.lockUntil.After(g.now()) {
+		delete(g.attempts, ip)
+	}
+}
+
 // Fail başarısız denemeyi kaydeder; eşik aşıldıysa üstel kilit uygular.
 func (g *loginGuard) Fail(ip string) {
+	if g == nil {
+		return
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := g.now()
 
 	a, ok := g.attempts[ip]
-	if !ok || now.Sub(a.firstFail) > loginFailureWindow {
+	if !ok {
 		a = &loginAttempt{firstFail: now}
 		g.attempts[ip] = a
+	} else if a.failures == 0 || now.Sub(a.firstFail) > loginFailureWindow {
+		a.failures, a.firstFail = 0, now
 	}
 	a.failures++
 	if a.failures >= loginMaxFailures {
@@ -160,10 +227,21 @@ func (g *loginGuard) Fail(ip string) {
 	}
 }
 
-// Success başarılı girişte IP sayacını sıfırlar.
+// Success başarılı girişte IP sayacını sıfırlar (uçuştaki denemeler korunur).
 func (g *loginGuard) Success(ip string) {
+	if g == nil {
+		return
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	a, ok := g.attempts[ip]
+	if !ok {
+		return
+	}
+	if a.inflight > 0 {
+		a.failures, a.firstFail, a.lockUntil = 0, time.Time{}, time.Time{}
+		return
+	}
 	delete(g.attempts, ip)
 }
 
@@ -173,7 +251,7 @@ func (g *loginGuard) Cleanup() {
 	defer g.mu.Unlock()
 	now := g.now()
 	for ip, a := range g.attempts {
-		if now.Sub(a.firstFail) > loginFailureWindow && !a.lockUntil.After(now) {
+		if a.inflight == 0 && now.Sub(a.firstFail) > loginFailureWindow && !a.lockUntil.After(now) {
 			delete(g.attempts, ip)
 		}
 	}

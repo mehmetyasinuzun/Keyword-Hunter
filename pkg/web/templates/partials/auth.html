@@ -1,0 +1,32 @@
+{{/* Giriş ekranlarının ortak parçaları (parola adımı + 2FA ikinci adımı). */}}
+{{define "auth_hero"}}
+  <section class="auth-hero" aria-hidden="true">
+    <div class="auth-radar"><span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="sweep"></span>
+      <span class="blip b1"></span><span class="blip b2"></span><span class="blip b3"></span><span class="blip b4"></span>
+      <svg class="core"><use href="#i-brand"/></svg>
+    </div>
+    <div class="auth-hero-copy">
+      <div class="kh-eyebrow"><span class="kh-dot up pulse"></span> Dark Web CTI</div>
+      <h2>{{t .Lang "login.hero"}}</h2>
+      <p>{{t .Lang "login.heroLede"}}</p>
+      <ul class="auth-feats kh-stagger">
+        <li>{{icon "search"}} {{t .Lang "login.f1"}}</li>
+        <li>{{icon "dna"}} {{t .Lang "login.f2"}}</li>
+        <li>{{icon "radar"}} {{t .Lang "login.f3"}}</li>
+        <li>{{icon "shield"}} {{t .Lang "login.f4"}}</li>
+      </ul>
+    </div>
+    <div class="auth-ticker"><span>TOR · SOCKS5</span><span>STIX 2.1</span><span>CSP strict</span><span>bcrypt</span><span>SQLite · local</span></div>
+  </section>
+{{end}}
+
+{{define "auth_tools"}}
+    <div class="auth-tools">
+      <button class="kh-iconbtn" type="button" data-action="theme-cycle" aria-label="{{t .Lang "common.theme"}}">
+        <svg class="ico kh-theme-ico auto" aria-hidden="true"><use href="#i-contrast"/></svg>
+        <svg class="ico kh-theme-ico light" aria-hidden="true"><use href="#i-sun"/></svg>
+        <svg class="ico kh-theme-ico dark" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
+    </div>
+{{end}}

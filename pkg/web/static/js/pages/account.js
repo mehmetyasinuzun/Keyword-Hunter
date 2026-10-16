@@ -1,10 +1,12 @@
 /**
- * Hesabım: parola değişikliği + kişisel API token'ları (listele, oluştur,
- * tek seferlik göster, iptal et; admin için "tüm kullanıcılar").
+ * Hesabım: parola değişikliği, iki adımlı doğrulama (2FA) ve kişisel API
+ * token'ları (listele, oluştur, tek seferlik göster, iptal et; admin için
+ * "tüm kullanıcılar").
  *
  * Düz metin token yalnız oluşturma yanıtında gelir ve yalnız gösterim
  * modalında yaşar: modal kapanınca DOM'dan silinir, başka bir yere (bellek,
- * depolama, URL) yazılmaz.
+ * depolama, URL) yazılmaz. Aynı kural 2FA kurulum sırrı ve kurtarma kodları
+ * için de geçerlidir: sihirbaz kapanınca QR, sır ve kodlar DOM'dan silinir.
  */
 (function () {
     'use strict';
@@ -102,6 +104,12 @@
         KH.render(body, KH.html`${list.map(row)}`);
     }
     async function load() {
+        // 2FA zorunlu ve eksik: API yalnız kayıt uçlarına açık; token listesi istenmez.
+        if (main().dataset.need2fa === '1') {
+            $('tok-count').textContent = '—';
+            KH.render($('tok-body'), KH.html`<tr><td colspan="7"><div class="kh-empty"><div class="icon">${KH.raw(KH.icon('lock'))}</div><p>${KH.t('tfa.need.tokens')}</p></div></td></tr>`);
+            return;
+        }
         try {
             const d = await KH.api('/api/tokens' + (showAll ? '?all=1' : ''));
             tokens = d.tokens || [];
@@ -139,13 +147,230 @@
     }
 
     function openCreate() {
-        if (main().dataset.managed !== '1') return;
+        if (main().dataset.managed !== '1' || main().dataset.need2fa === '1') return;
         $('token-form').reset();
         nameValid(true);
         KH.openModal('token-modal');
     }
 
+
+    // ── İki adımlı doğrulama (2FA) ──────────────────────────────────────
+    const tfaSec = () => $('security-2fa');
+    let tfaCodes = [];      // yalnız sihirbaz açıkken bellekte
+    let tfaAuthMode = '';   // 'disable' | 'regen'
+
+    /** Kartın görünür durumunu günceller (sunucu ilk durumu basar). */
+    function tfaApply(st) {
+        const sec = tfaSec();
+        if (!sec) return;
+        if (st.enabled != null) sec.dataset.state = st.enabled ? 'on' : 'off';
+        if (st.enabledAt) KH.render($('tfa-enabled-at'), KH.html`<time datetime="${st.enabledAt}">${KH.fmtTime(st.enabledAt)}</time>`);
+        if (st.remaining != null) {
+            $('tfa-remaining').textContent = String(st.remaining);
+            $('tfa-low').hidden = !(sec.dataset.state === 'on' && st.remaining <= 3);
+        }
+    }
+
+    function tfaStep(n) {
+        const modal = $('tfa-modal');
+        modal.querySelectorAll('.tfa-step').forEach(el => { el.hidden = el.dataset.step !== String(n); });
+        modal.querySelectorAll('#tfa-stepper li').forEach(li => {
+            const k = parseInt(li.dataset.step, 10);
+            li.classList.toggle('on', k === n);
+            li.classList.toggle('done', k < n);
+            if (k === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+        });
+        const focus = n === 1 ? modal.querySelector('[data-action="tfa-goto"][data-step="2"]') : n === 2 ? ($('tfa-pw').value ? $('tfa-code') : $('tfa-pw')) : $('tfa-codes-copy');
+        if (focus) setTimeout(() => focus.focus(), 60);
+    }
+
+    /** Geçersiz alan durumu hem görsel (is-invalid) hem erişilebilir (aria-invalid). */
+    function tfaInvalid(el, on) {
+        el.classList.toggle('is-invalid', on);
+        if (on) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid');
+    }
+
+    function tfaWipe() {
+        $('tfa-qr').removeAttribute('src');
+        $('tfa-secret').textContent = '';
+        $('tfa-secret-copy').dataset.copy = '';
+        $('tfa-code').value = '';
+        tfaInvalid($('tfa-code'), false);
+        $('tfa-pw').value = '';
+        tfaInvalid($('tfa-pw'), false);
+        $('tfa-codes').textContent = '';
+        $('tfa-codes-copy').dataset.copy = '';
+        $('tfa-saved').checked = false;
+        $('tfa-done').disabled = true;
+        tfaCodes = [];
+    }
+
+    /** Kurtarma kodlarını sihirbazın 3. adımında gösterir (etkinleştirme ya da yenileme). */
+    function tfaShowCodes(codes, mode) {
+        tfaCodes = codes.slice();
+        const modal = $('tfa-modal');
+        modal.querySelector('.tfa-modal').dataset.mode = mode;
+        $('tfa-modal-title').textContent = mode === 'codes' ? KH.t('tfa.w.codesTitle') : KH.t('tfa.w.title');
+        KH.render($('tfa-codes'), KH.html`${codes.map(c => KH.html`<li>${c}</li>`)}`);
+        $('tfa-codes-copy').dataset.copy = codes.join('\n');
+        $('tfa-saved').checked = false;
+        $('tfa-done').disabled = true;
+        if (!modal.classList.contains('open')) KH.openModal('tfa-modal', { returnFocus: $('tfa-regen-btn') });
+        tfaStep(3);
+    }
+
+    async function tfaStart() {
+        const sec = tfaSec();
+        if (!sec || sec.dataset.managed !== '1' || sec.dataset.state === 'on') return;
+        if (sec.dataset.available !== '1') { KH.toast(KH.t('tfa.unavailable'), 'warn'); return; }
+        const btn = $('tfa-start-btn');
+        KH.busy(btn, true, btn.dataset.busyText);
+        try {
+            const d = await KH.api('/api/me/2fa/setup', { method: 'POST', body: {} });
+            tfaWipe();
+            const modal = $('tfa-modal');
+            modal.querySelector('.tfa-modal').dataset.mode = 'enroll';
+            $('tfa-modal-title').textContent = KH.t('tfa.w.title');
+            $('tfa-qr').src = d.qrDataURI;
+            const grouped = String(d.secret).replace(/(.{4})(?=.)/g, '$1 ');
+            $('tfa-secret').textContent = grouped;
+            $('tfa-secret-copy').dataset.copy = d.secret;
+            // Kapanınca odak yeni durumda görünür olan düğmeye döner (etkinleştirme
+            // başarılıysa "Başlat" gizlenir; "Kodları yenile" görünür).
+            KH.openModal('tfa-modal', { returnFocus: () => tfaSec().dataset.state === 'on' ? $('tfa-regen-btn') : btn });
+            tfaStep(1);
+        } catch (e) { KH.toast(tfaErr(e), 'err'); }
+        finally { KH.busy(btn, false); }
+    }
+
+    /** Sunucu hata kodlarını arayüz diline çevirir (API metni iki dillidir). */
+    function tfaErr(e) {
+        const code = e && e.data && e.data.code;
+        switch (code) {
+            case 'bad_code': return T('Kod doğrulanamadı. Uygulamadaki güncel kodu girin; reddedilmeye devam ederse telefonunuzun saatini kontrol edin.', 'That code didn’t work. Enter the current code from your app; if it keeps failing, check your phone’s clock.');
+            case 'setup_expired': return T('Kurulumun süresi doldu; lütfen yeniden başlatın.', 'The setup has expired; please start again.');
+            case 'wrong_credentials': return T('Parola ya da doğrulama kodu hatalı.', 'Wrong password or code.');
+            case 'wrong_password': return T('Mevcut parola hatalı.', 'Your current password is incorrect.');
+            case 'rate_limited': return T('Çok fazla hatalı deneme. ' + (e.data.retryAfter || 60) + ' sn sonra tekrar deneyin.', 'Too many failed attempts. Try again in ' + (e.data.retryAfter || 60) + ' s.');
+            case 'unavailable': return KH.t('tfa.unavailable');
+            default: return e.message;
+        }
+    }
+
+    function tfaAuthOpen(mode, returnFocus) {
+        tfaAuthMode = mode;
+        $('tfa-auth-form').reset();
+        $('tfa-auth-title').textContent = mode === 'disable' ? KH.t('tfa.disable') : KH.t('tfa.regen');
+        $('tfa-auth-lead').textContent = mode === 'disable'
+            ? KH.t('tfa.a.disableLead') + (tfaSec().dataset.required === '1' ? ' ' + KH.t('tfa.requiredHint') : '')
+            : KH.t('tfa.a.regenLead');
+        const sub = $('tfa-auth-submit');
+        sub.className = 'kh-btn ' + (mode === 'disable' ? 'danger' : 'primary');
+        sub.textContent = mode === 'disable' ? KH.t('tfa.disable') : KH.t('tfa.a.regenBtn');
+        KH.openModal('tfa-auth', { returnFocus });
+    }
+
+    function tfaDownload() {
+        if (!tfaCodes.length) return;
+        const user = tfaSec().dataset.user || '';
+        const lines = [
+            T('KeywordHunter — 2FA kurtarma kodları', 'KeywordHunter — 2FA recovery codes'),
+            T('Hesap', 'Account') + ': ' + user,
+            T('Oluşturma', 'Generated') + ': ' + KH.fmtTime(new Date().toISOString()),
+            '',
+            ...tfaCodes.map((c, i) => String(i + 1).padStart(2, '0') + '. ' + c),
+            '',
+            T('Her kod girişte yalnızca bir kez kullanılabilir. Yeni kodlar üretildiğinde bu liste geçersiz olur.', 'Each code can be used to sign in only once. Generating new codes invalidates this list.'),
+            ''
+        ];
+        const blob = new Blob([lines.join('\r\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'keywordhunter-recovery-codes-' + user.replace(/[^\w.-]+/g, '_') + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     KH.act({
+        // 2FA
+        'tfa-start': () => tfaStart(),
+        'tfa-goto': (el) => tfaStep(parseInt(el.dataset.step, 10) || 1),
+        'tfa-code-input': (el) => {
+            const digits = el.value.replace(/\D+/g, '').slice(0, 6);
+            if (el.value !== digits) el.value = digits;
+            tfaInvalid(el, false);
+            // Parola girilmişse 6. hanede otomatik doğrula.
+            if (digits.length === 6 && $('tfa-pw').value && !$('tfa-verify-btn').disabled) $('tfa-verify-btn').click();
+        },
+        'tfa-pw-input': (el) => tfaInvalid(el, false),
+        'tfa-verify': async () => {
+            const btn = $('tfa-verify-btn');
+            const code = $('tfa-code').value.trim();
+            const password = $('tfa-pw').value;
+            if (!password) { tfaInvalid($('tfa-pw'), true); $('tfa-pw').focus(); return; }
+            if (code.length !== 6) { tfaInvalid($('tfa-code'), true); $('tfa-code').focus(); return; }
+            if (btn.disabled) return;
+            KH.busy(btn, true, btn.dataset.busyText);
+            try {
+                const d = await KH.api('/api/me/2fa/enable', { method: 'POST', body: { password, code } });
+                $('tfa-pw').value = '';
+                tfaApply({ enabled: true, enabledAt: d.enabledAt, remaining: (d.recoveryCodes || []).length });
+                // Kurulum sırrı artık gereksiz: kodlara geçmeden sil.
+                $('tfa-qr').removeAttribute('src');
+                $('tfa-secret').textContent = '';
+                $('tfa-secret-copy').dataset.copy = '';
+                tfaShowCodes(d.recoveryCodes || [], 'enroll');
+                KH.toast(T('İki adımlı doğrulama etkinleştirildi', 'Two-factor authentication enabled'), 'ok');
+            } catch (e) {
+                const field = e.data && (e.data.code === 'wrong_password' || e.data.code === 'rate_limited') ? $('tfa-pw') : $('tfa-code');
+                field.value = '';
+                tfaInvalid(field, true);
+                field.focus();
+                if (e.data && e.data.code === 'setup_expired') tfaStep(1);
+                KH.toast(tfaErr(e), 'err');
+            } finally { KH.busy(btn, false); }
+        },
+        'tfa-saved': (el) => { $('tfa-done').disabled = !el.checked; },
+        'tfa-download': () => tfaDownload(),
+        'tfa-disable': (btn) => tfaAuthOpen('disable', btn),
+        'tfa-regen': (btn) => tfaAuthOpen('regen', btn),
+        'tfa-auth-submit': async () => {
+            const btn = $('tfa-auth-submit');
+            const password = $('tfa-auth-pw').value;
+            const code = $('tfa-auth-code').value.trim();
+            if (!password) { $('tfa-auth-pw').focus(); return; }
+            if (!code) { $('tfa-auth-code').focus(); return; }
+            KH.busy(btn, true, btn.dataset.busyText);
+            try {
+                if (tfaAuthMode === 'disable') {
+                    const d = await KH.api('/api/me/2fa/disable', { method: 'POST', body: { password, code } });
+                    tfaApply({ enabled: false, remaining: 0 });
+                    // "Kapat" düğmesi artık gizli: odak görünür "Etkinleştir"e döner.
+                    KH.closeModal('tfa-auth', { returnFocus: $('tfa-start-btn') });
+                    if (d && d.required) {
+                        // Politika gereği zorunlu: konsolun geri kalanı yeniden kayıt bekler.
+                        KH.toast(T('2FA kapatıldı. Politika gereği yeniden etkinleştirmeniz gerekiyor.', '2FA turned off. Policy requires you to enable it again.'), 'warn');
+                        setTimeout(() => location.reload(), 1200);
+                    } else {
+                        KH.toast(T('İki adımlı doğrulama kapatıldı', 'Two-factor authentication turned off'), 'ok');
+                    }
+                } else {
+                    const d = await KH.api('/api/me/2fa/recovery-codes', { method: 'POST', body: { password, code } });
+                    KH.closeModal('tfa-auth');
+                    tfaApply({ remaining: (d.recoveryCodes || []).length });
+                    tfaShowCodes(d.recoveryCodes || [], 'codes');
+                    KH.toast(T('Yeni kurtarma kodları üretildi; eskiler geçersiz', 'New recovery codes generated; the old ones no longer work'), 'ok');
+                }
+            } catch (e) {
+                KH.toast(tfaErr(e), 'err');
+                $('tfa-auth-code').value = '';
+                (e.status === 403 ? $('tfa-auth-pw') : $('tfa-auth-code')).focus();
+            } finally { KH.busy(btn, false); }
+        },
+
         // Parola
         'acc-strength': (el) => {
             KH.pwMeter($('pw-meter'), $('pw-meter-l'), el.value);
@@ -243,11 +468,26 @@
         const rv = $('token-reveal');
         new MutationObserver(() => { if (!rv.classList.contains('open')) wipeReveal(); }).observe(rv, { attributes: true, attributeFilter: ['class'] });
 
+        // 2FA sihirbazı kapandığı an QR, sır ve kurtarma kodları DOM'dan silinir;
+        // etkinleştirme sonrası kapanırsa (veya need2fa ise) sayfa yeni durumu yükler.
+        const tm = $('tfa-modal');
+        if (tm) {
+            new MutationObserver(() => {
+                if (tm.classList.contains('open')) return;
+                const enrolled = tm.querySelector('.tfa-modal').dataset.mode === 'enroll' && tfaCodes.length > 0;
+                tfaWipe();
+                if (enrolled && main().dataset.need2fa === '1') location.reload();
+            }).observe(tm, { attributes: true, attributeFilter: ['class'] });
+        }
+
         load();
         // Komut paleti / kısayol bağlantıları: /account#new-token, /account#password
         // (sayfa zaten açıkken paletten gelinirse yalnız hash değişir).
         const onHash = () => {
-            if (location.hash === '#new-token') openCreate();
+            if (location.hash === '#security-2fa') {
+                const sec = tfaSec();
+                if (sec) { sec.scrollIntoView({ block: 'start' }); if (main().dataset.need2fa === '1') $('tfa-start-btn') && $('tfa-start-btn').focus(); }
+            } else if (location.hash === '#new-token') openCreate();
             else if (location.hash === '#password') KH.actions['acc-focus-password']();
         };
         window.addEventListener('hashchange', onHash);

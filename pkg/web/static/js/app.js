@@ -141,11 +141,18 @@
         const prev = returnFocus || doc.activeElement;
         const entry = {
             el: overlay,
+            override: null,
             close: function () {
                 overlay.classList.remove('open');
                 const i = modalStack.indexOf(entry); if (i >= 0) modalStack.splice(i, 1);
                 if (onClose) onClose();
-                if (prev && prev.focus) setTimeout(() => prev.focus(), 0);
+                // returnFocus bir işlev olabilir: hedef kapanış anındaki duruma göre seçilir
+                // (ör. açılıştaki düğme artık gizliyse görünür bir başkası).
+                setTimeout(() => {
+                    let to = entry.override || prev;
+                    if (typeof to === 'function') to = to();
+                    if (to && to.focus) to.focus();
+                }, 0);
             }
         };
         modalStack.push(entry);
@@ -156,17 +163,21 @@
         if (auto) setTimeout(() => auto.focus(), 60);
         return entry;
     }
-    /** opts.returnFocus: kapanınca odağın döneceği öğe (varsayılan: açılıştaki odak). */
+    /** opts.returnFocus: kapanınca odağın döneceği öğe ya da onu döndüren işlev
+     *  (varsayılan: açılıştaki odak). closeModal(id, {returnFocus}) bunu geçersiz kılar. */
     KH.openModal = function (id, opts) {
         const m = typeof id === 'string' ? doc.getElementById(id) : id;
         if (!m || m.classList.contains('open')) return;
         openOverlay(m, null, opts && opts.returnFocus);
     };
-    KH.closeModal = function (id) {
+    KH.closeModal = function (id, opts) {
         const m = typeof id === 'string' ? doc.getElementById(id) : id;
         if (!m) return;
         const entry = modalStack.find(x => x.el === m);
-        if (entry) entry.close(); else m.classList.remove('open');
+        if (entry) {
+            if (opts && opts.returnFocus) entry.override = opts.returnFocus;
+            entry.close();
+        } else m.classList.remove('open');
     };
     doc.addEventListener('mousedown', (e) => {
         if (e.target.classList && e.target.classList.contains('kh-modal-overlay') && !e.target.hasAttribute('data-static')) KH.closeModal(e.target);
@@ -620,6 +631,19 @@
     function refreshHealth() {
         const chip = doc.getElementById('nav-health');
         if (!chip) return;
+        // 2FA kaydı zorunlu ve eksikse API yalnız kayıt uçlarına açıktır (403 gürültüsü yok):
+        // çip "yükleniyor" gibi asılı kalmasın, açık bir "2FA gerekli" durumu göstersin.
+        if (doc.body.dataset.need2fa) {
+            const tip = KH.tr('İki adımlı doğrulama gerekli: önce Hesabım’dan etkinleştirin', 'Two-factor authentication required: enable it in My Account first');
+            chip.querySelector('.kh-dot').className = 'kh-dot warn';
+            chip.querySelector('.txt').textContent = KH.tr('2FA gerekli', '2FA required');
+            chip.title = tip;
+            chip.setAttribute('href', '/account#security-2fa');
+            const sd = doc.getElementById('kh-sys-dot'), st = doc.getElementById('kh-sys-txt');
+            if (sd) sd.className = 'kh-dot warn';
+            if (st) { st.textContent = 'Tor · —'; st.title = tip; }
+            return;
+        }
         KH.api('/api/monitor/summary').then(d => {
             const up = d.enginesActiveUp || 0, total = d.enginesActive || 0;
             const cls = total === 0 ? 'unknown' : up === 0 ? 'down' : (up < total / 2 ? 'warn' : 'up');

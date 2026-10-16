@@ -40,6 +40,27 @@ func main() {
 		logger.Info("ADMIN_PASS duz metin olarak yuklendi; /settings ekranindan parola degistirildiginde bcrypt hash olarak saklanacak")
 	}
 
+	// APP_SECRET: TOTP sırlarını şifreleyen anahtarın kaynağı. Yoksa üretilip
+	// etkin .env'e yazılır (değer ASLA loglanmaz). Yazılamazsa sır bu
+	// çalıştırmayla sınırlıdır; 2FA kaydı kapatılır (yeniden başlatmada
+	// kaydedilen sırlar çözülemezdi).
+	appSecretEphemeral := false
+	if created, err := config.EnsureAppSecret(config.NewEnvStore(appConfig.EnvFilePath), &appConfig); err != nil {
+		appSecretEphemeral = true
+		logger.Error("APP_SECRET kalıcı yazılamadı: %v — 2FA kaydı bu çalıştırmada kapalı; APP_SECRET'ı (64 hex, ör. openssl rand -hex 32) ortamda ya da .env'de tanımlayın", err)
+	} else if created {
+		logger.Info("APP_SECRET bulunamadı; yeni bir sır üretildi ve %s dosyasına yazıldı. Yedekleyin: kaybolursa yöneticilerin kullanıcıların 2FA kaydını sıfırlaması gerekir", appConfig.EnvFilePath)
+	}
+	if appConfig.Require2FA != config.Require2FANone {
+		// Kayıt kapalıyken zorunluluk, kapsamdaki herkesi Hesabım'a hapsederdi
+		// (çıkış yolu yok, token'lar da 403): açıkça başlatmayı reddet.
+		if err := config.CheckRequire2FAStartup(appConfig.Require2FA, !appSecretEphemeral); err != nil {
+			logger.Error("%v", err)
+			os.Exit(1)
+		}
+		logger.Info("REQUIRE_2FA=%s: iki adımlı doğrulama zorunlu; users tablosunda olmayan .env (ADMIN_USER) hesabıyla giriş reddedilir", appConfig.Require2FA)
+	}
+
 	// Graceful shutdown için signal handler
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -102,6 +123,9 @@ func main() {
 		TorControlPass: appConfig.TorControlPass,
 
 		AuditRetentionDays: appConfig.AuditRetentionDays,
+		AppSecret:          appConfig.AppSecret,
+		AppSecretEphemeral: appSecretEphemeral,
+		Require2FA:         appConfig.Require2FA,
 	})
 	if err != nil {
 		logger.Error("Web server could not be initialized: %v", err)

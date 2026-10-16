@@ -51,3 +51,29 @@
   .auth { grid-template-columns: 1fr; }
   .auth-hero { display: none; }
 }
+
+/* İkinci adım (2FA): adım çubuğu, yöntem simgesi, kullanıcı çipi, tek seferlik kod alanı */
+.auth-steps { display: flex; gap: 6px; margin: -16px 0 24px; }
+.auth-steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--border); }
+.auth-steps .done { background: color-mix(in srgb, var(--primary) 45%, transparent); }
+.auth-steps .on { background: var(--brand-grad); }
+.auth-mfa-ic { width: 52px; height: 52px; display: grid; place-items: center; margin-bottom: 16px; border-radius: 14px; color: var(--primary); background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent); }
+.auth-mfa-ic .ico { width: 24px; height: 24px; }
+.auth-2fa .auth-lede { margin-bottom: 14px; }
+.auth-who { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin: 0 0 22px; padding: 6px 14px 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: .84rem; color: var(--text); }
+.auth-who .ico { flex: none; width: 15px; height: 15px; color: var(--text-3); }
+.auth-who .kh-truncate { min-width: 0; font-weight: 600; }
+.auth-who a { flex: none; margin-left: 4px; color: var(--primary); font-weight: 600; font-size: .8rem; }
+.auth-who a:hover { text-decoration: underline; }
+/* Tek alan (çoklu kutu değil): parola yöneticisi / SMS otomatik doldurma ve yapıştırma sorunsuz çalışır */
+.auth-otp { text-align: center; font: 700 1.75rem/1.2 var(--font-mono); letter-spacing: .5em; text-indent: .5em; font-variant-numeric: tabular-nums; }
+.auth-otp::placeholder { color: var(--text-3); opacity: .55; letter-spacing: .5em; }
+.auth-recovery { letter-spacing: .12em; text-transform: lowercase; }
+.auth-alt { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 20px; font-size: .85rem; }
+.auth-alt a { display: inline-flex; align-items: center; gap: 6px; color: var(--primary); font-weight: 600; }
+.auth-alt a:hover { text-decoration: underline; }
+.auth-alt .ico { width: 15px; height: 15px; }
+.auth-alt .auth-cancel { color: var(--text-3); font-weight: 500; }
+.auth-foot .ico { width: 14px; height: 14px; flex: none; }
+.auth-foot strong { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.auth-foot strong.c-warn { color: var(--warn); }

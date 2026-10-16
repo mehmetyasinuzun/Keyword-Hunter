@@ -44,6 +44,10 @@ const (
 var tokenForbiddenRoutes = []string{
 	"/api/tokens",
 	"/api/me",
+	// 2FA yönetimi "/api/me" kökünce de kapsanır; ayrıca yazılıdır ki kök
+	// ileride daraltılırsa (ör. /api/me/profile token'a açılırsa) 2FA uçları
+	// sessizce açılmasın.
+	"/api/me/2fa",
 	"/api/users",
 	"/api/settings",
 	"/api/site-profiles",
@@ -339,11 +343,15 @@ func (s *Server) handleTokenRevoke(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// handleAccountPage "Hesabım": profil, parola değişikliği, API token'ları.
+// handleAccountPage "Hesabım": profil, parola değişikliği, API token'ları, 2FA.
 func (s *Server) handleAccountPage(c *gin.Context) {
 	me := c.GetString("username")
 	profile := gin.H{"username": me, "managed": false}
-	if u, err := s.db.GetUserByUsername(me); err == nil && u != nil {
+	u, err := s.db.GetUserByUsername(me)
+	if err != nil {
+		u = nil
+	}
+	if u != nil {
 		profile["username"] = u.Username
 		profile["managed"] = true
 		profile["createdAt"] = u.CreatedAt
@@ -355,5 +363,9 @@ func (s *Server) handleAccountPage(c *gin.Context) {
 		"ActivePage": "account",
 		"profile":    profile,
 		"tokenMax":   maxActiveTokensPerUser,
+		"twofa":      s.twoFAView(c, u),
+		"need2fa":    c.GetBool("need2FA"),
+		// Kurtarma koduyla girişten sonra 2FA kartında bilgi notu (yalnız sabit kod).
+		"recoveryUsed": c.Query("notice") == "recovery_used" && u != nil,
 	})
 }

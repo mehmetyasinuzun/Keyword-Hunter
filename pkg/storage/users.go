@@ -136,7 +136,7 @@ func (db *DB) SetUserEnabled(id int64, enabled bool) error {
 	return err
 }
 
-// DeleteUser kullanıcıyı, oturumlarını ve API token'larını siler.
+// DeleteUser kullanıcıyı, oturumlarını, API token'larını ve 2FA kaydını siler.
 func (db *DB) DeleteUser(id int64) error {
 	u, err := db.GetUserByID(id)
 	if err != nil {
@@ -148,6 +148,14 @@ func (db *DB) DeleteUser(id int64) error {
 	// API token'ları da silinir: aynı adla yeniden açılan bir hesap eski
 	// token'ları devralmamalı (kimlik doğrulama ayrıca user_id eşleşmesi ister).
 	if _, err := db.conn.Exec(`DELETE FROM api_tokens WHERE user_id = ? OR username = ? COLLATE NOCASE`, u.ID, u.Username); err != nil {
+		return err
+	}
+	// 2FA kaydı ve kurtarma kodları (FOREIGN KEY CASCADE'e ek olarak açıkça:
+	// foreign_keys kapalı açılmış eski bir bağlantıda da artık kalmasın).
+	if _, err := db.conn.Exec(`DELETE FROM user_recovery_codes WHERE user_id = ?`, u.ID); err != nil {
+		return err
+	}
+	if _, err := db.conn.Exec(`DELETE FROM user_2fa WHERE user_id = ?`, u.ID); err != nil {
 		return err
 	}
 	_, err = db.conn.Exec(`DELETE FROM users WHERE id = ?`, id)

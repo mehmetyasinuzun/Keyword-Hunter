@@ -1,0 +1,63 @@
+{{template "doc" .}}
+<title>{{t .Lang "tfa.login.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/login.css?v={{version}}">
+{{template "body" .}}
+{{template "icons" .}}
+<div class="auth">
+  {{template "auth_hero" .}}
+
+  <main class="auth-panel" id="main">
+    {{template "auth_tools" .}}
+
+    <div class="auth-card auth-2fa">
+      <div class="auth-brand">
+        <span class="kh-brand-mark">{{template "logo" .}}</span>
+        <span class="kh-brand-name">KeywordHunter</span>
+      </div>
+      <div class="auth-steps" aria-hidden="true"><span class="done"></span><span class="on"></span></div>
+      <div class="auth-mfa-ic" aria-hidden="true">{{if .recovery}}{{icon "key"}}{{else}}{{icon "phone"}}{{end}}</div>
+      <h1 class="auth-title">{{if .recovery}}{{t .Lang "tfa.login.titleRecovery"}}{{else}}{{t .Lang "tfa.login.title"}}{{end}}</h1>
+      <p class="auth-lede">{{if .recovery}}{{t .Lang "tfa.login.ledeRecovery"}}{{else}}{{t .Lang "tfa.login.lede"}}{{end}}</p>
+      <p class="auth-who">{{icon "user"}}<span class="kh-truncate" title="{{.username}}">{{.username}}</span><a href="/login/2fa/cancel">{{t .Lang "tfa.login.notYou"}}</a></p>
+
+      {{if eq .error "locked"}}
+      <div class="kh-alert err mb-4" role="alert">{{icon "shield"}}<span>{{t .Lang "login.locked"}} <strong id="lock-wait" data-wait="{{.wait}}">{{.wait}}</strong> {{t .Lang "login.lockedWait"}}</span></div>
+      {{else if .error}}
+      <div class="kh-alert err mb-4 auth-shake" role="alert" id="code-err">{{icon "warn"}}<span>{{if .recovery}}{{t .Lang "tfa.login.badRecovery"}}{{else}}{{t .Lang "tfa.login.bad"}}{{end}} {{t .Lang "tfa.login.left"}} <strong>{{.remaining}}</strong></span></div>
+      {{end}}
+
+      <form method="POST" action="/login/2fa" class="auth-form" id="tfa-form" autocomplete="off" novalidate>
+        <input type="hidden" name="mode" value="{{if .recovery}}recovery{{else}}totp{{end}}">
+        {{if .recovery}}
+        <div class="kh-field">
+          <label class="kh-label" for="code">{{t .Lang "tfa.login.recoveryLabel"}}</label>
+          <div class="kh-input-icon">{{icon "key"}}<input class="kh-input lg mono auth-recovery" id="code" name="code" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required autofocus maxlength="20" placeholder="xxxx-xxxx" aria-describedby="{{if and .error (ne .error "locked")}}code-err {{end}}code-h"{{if and .error (ne .error "locked")}} aria-invalid="true"{{end}}></div>
+          <span class="kh-hint" id="code-h">{{t .Lang "tfa.login.recoveryHint"}}</span>
+        </div>
+        {{else}}
+        <div class="kh-field">
+          <label class="kh-label" for="code">{{t .Lang "tfa.login.codeLabel"}}</label>
+          <input class="kh-input lg auth-otp" id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required autofocus maxlength="7" placeholder="••••••" aria-describedby="{{if and .error (ne .error "locked")}}code-err {{end}}code-h"{{if and .error (ne .error "locked")}} aria-invalid="true"{{end}} data-input="otp-input">
+          <span class="kh-hint" id="code-h">{{t .Lang "tfa.login.codeHint"}}</span>
+        </div>
+        {{end}}
+        <button type="submit" class="kh-btn primary lg block" id="tfa-btn" data-busy-text="{{t .Lang "login.signingIn"}}"{{if eq .error "locked"}} disabled{{end}}>{{t .Lang "tfa.login.submit"}} {{icon "arrow-right"}}</button>
+      </form>
+
+      <div class="auth-alt">
+        {{if .recovery}}
+        <a href="/login/2fa">{{icon "phone"}} {{t .Lang "tfa.login.useApp"}}</a>
+        {{else}}
+        <a href="/login/2fa?mode=recovery">{{icon "key"}} {{t .Lang "tfa.login.useRecovery"}}</a>
+        {{end}}
+        <a href="/login/2fa/cancel" class="auth-cancel">{{icon "close"}} {{t .Lang "tfa.login.cancel"}}</a>
+      </div>
+
+      <p class="auth-foot">{{icon "clock"}} <span>{{t .Lang "tfa.login.expires"}} <strong id="tfa-expiry" data-expires="{{.expiresIn}}" data-recovery="{{if .recovery}}1{{else}}0{{end}}">—</strong></span></p>
+    </div>
+  </main>
+</div>
+<div class="kh-toasts" id="kh-toasts" aria-live="polite"></div>
+<script src="/static/js/pages/login_2fa.js?v={{version}}" defer></script>
+</body>
+</html>

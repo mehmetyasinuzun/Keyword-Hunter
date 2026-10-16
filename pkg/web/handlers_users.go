@@ -17,14 +17,35 @@ func (s *Server) handleUsersPage(c *gin.Context) {
 	s.render(c, http.StatusOK, "users.html", gin.H{"ActivePage": "users", "role": c.GetString("role")})
 }
 
-// handleUsersList tüm kullanıcıları döndürür.
+// userView yönetim listesindeki kullanıcı: 2FA özeti (sır yok) ve politika
+// gereği 2FA zorunlu olup olmadığı eklenir.
+type userView struct {
+	storage.User
+	TwoFactor         storage.TwoFactorStatus `json:"twoFactor"`
+	TwoFactorRequired bool                    `json:"twoFactorRequired"`
+}
+
+// handleUsersList tüm kullanıcıları (2FA durumlarıyla) döndürür.
 func (s *Server) handleUsersList(c *gin.Context) {
 	users, err := s.db.ListUsers()
 	if err != nil {
 		respondInternalError(c, "ListUsers", err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"users": users, "me": c.GetString("username")})
+	tfa, err := s.db.ListTwoFactorStatus()
+	if err != nil {
+		respondInternalError(c, "ListTwoFactorStatus", err)
+		return
+	}
+	out := make([]userView, 0, len(users))
+	for _, u := range users {
+		out = append(out, userView{User: u, TwoFactor: tfa[u.ID], TwoFactorRequired: s.twoFactorRequiredFor(u.Role)})
+	}
+	policy := s.require2FA
+	if policy == "" {
+		policy = "none"
+	}
+	c.JSON(http.StatusOK, gin.H{"users": out, "me": c.GetString("username"), "require2fa": policy})
 }
 
 // handleUserCreate yeni kullanıcı ekler.
@@ -131,6 +152,8 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 		}
 		// Admin sıfırlaması bir olay müdahalesi adımıdır: ele geçirilmiş bir
 		// oturumla basılmış API token'ları da sıfırlamadan sağ çıkmamalı.
+		// Eski parolayla başlamış, ikinci adımı bekleyen girişler de düşer.
+		s.pendingLogins.removeUser(target.ID)
 		tokensRevoked, err := s.db.RevokeUserAPITokens(target.ID)
 		if err != nil {
 			logger.Error("API TOKEN REVOKE FAILED (parola sıfırlama, kullanıcı=%s): %v", target.Username, err)
@@ -163,6 +186,9 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 		}
 		changes["enabled"] = *req.Enabled
 		changes["prevEnabled"] = target.Enabled
+		if !*req.Enabled {
+			s.pendingLogins.removeUser(target.ID)
+		}
 	}
 	if req.Role != nil || req.Enabled != nil {
 		s.audit(c, "user.update", "user:"+target.Username, changes, true)
@@ -200,6 +226,7 @@ func (s *Server) handleUserDelete(c *gin.Context) {
 		respondInternalError(c, "DeleteUser", err)
 		return
 	}
+	s.pendingLogins.removeUser(target.ID)
 	logger.Info("USER DELETED: %s — %s tarafından", target.Username, c.GetString("username"))
 	s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"userId": target.ID, "role": target.Role}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true})
@@ -290,6 +317,10 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 		if err := s.db.UpdateUserPassword(u.ID, hash); err != nil {
 			respondInternalError(c, "UpdateUserPassword", err)
 			return
+		}
+		// Eski (belki sızmış) parolayla başlatılmış ikinci adım da düşer.
+		if s.pendingLogins != nil {
+			s.pendingLogins.removeUser(u.ID)
 		}
 	}
 	// Diğer oturumları düşür, mevcut oturumu koru

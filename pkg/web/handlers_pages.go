@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -106,8 +108,10 @@ func (s *Server) handleLogin(c *gin.Context) {
 
 	// Kilit denetimi her şeyden önce: kilitli IP'nin hiçbir denemesi (aşırı
 	// uzun alanlar dahil) dakikada birden fazla denetim satırı üretemez.
+	// Deneme doğrulamadan ÖNCE atomik olarak ayrılır (Acquire): eşzamanlı
+	// istekler kilidin izin verdiğinden fazla parola denemesi yaptıramaz.
 	if s.loginGuard != nil {
-		if blocked, wait := s.loginGuard.Blocked(clientIP); blocked {
+		if ok, wait := s.loginGuard.Acquire(clientIP); !ok {
 			logger.Warn("USER LOGIN BLOCKED: IP=%s kilitli (%s kaldı)", clientIP, wait.Round(time.Second))
 			// Kilitliyken her deneme kaydedilirse saldırgan tabloyu şişirir: IP başına dakikada bir.
 			if s.auditNoise.allow("login-locked:"+clientIP, time.Minute) {
@@ -117,6 +121,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 			c.Redirect(http.StatusFound, "/login?error=locked&wait="+strconv.Itoa(int(wait.Seconds())+1))
 			return
 		}
+		defer s.loginGuard.Release(clientIP)
 	}
 
 	if len(username) > 128 || len(password) > 512 {
@@ -133,44 +138,54 @@ func (s *Server) handleLogin(c *gin.Context) {
 	authed := false
 	role := storage.RoleAdmin // bootstrap kimlik deposu (users tablosu dışı) admin'dir
 	reason := "bad_credentials"
-	if u, err := s.db.GetUserByUsername(username); err == nil && u != nil && u.Enabled {
+	var managed *storage.User
+	u, err := s.db.GetUserByUsername(username)
+	switch {
+	case err == nil && u != nil && u.Enabled:
 		authed = verifyBcrypt(u.PasswordHash, password) && subtleEqual(u.Username, username)
 		role = u.Role
-	} else {
-		if err == nil && u != nil && !u.Enabled {
-			reason = "account_disabled"
-		}
+		managed = u
+	case err == nil && u != nil:
+		reason = "account_disabled"
+		// Pasif hesap: yanıt süresi diğer yollarla aynı kalsın diye bcrypt yine çalışır.
+		_ = verifyBcrypt(u.PasswordHash, password)
+	case errors.Is(err, sql.ErrNoRows):
 		if s.creds != nil {
 			// users tablosunda yoksa bootstrap kimlik deposu (eski kurulum)
 			authed = s.creds.Verify(username, password)
+			if authed && s.twoFactorPolicyActive() {
+				// Bu hesap users tablosunda olmadığından 2FA kaydı yapamaz:
+				// REQUIRE_2FA etkinken ikinci faktörsüz bir admin girişi olmasın.
+				authed = false
+				reason = "bootstrap_blocked_by_2fa_policy"
+				logger.Warn("Login: .env (bootstrap) hesabı '%s' REQUIRE_2FA=%s etkinken reddedildi; users tablosundaki bir hesapla giriş yapın", shared.TruncateRunes(username, 32), s.require2FA)
+			}
 		}
+	default:
+		// DB hatasında bootstrap deposuna DÜŞÜLMEZ: aksi halde geçici bir hata
+		// 2FA'lı bir hesabın .env parolasıyla ikinci adımsız girişine yol açabilirdi.
+		logger.Error("Login: kullanıcı okunamadı: %v", err)
+		c.Redirect(http.StatusFound, "/login?error=1&message=session")
+		return
 	}
 	if authed {
-		if s.loginGuard != nil {
-			s.loginGuard.Success(clientIP)
+		// 2FA etkinse oturum açılmaz: ikinci adım (parola doğrulandıktan SONRA
+		// sorgulanır; giriş sayfası 2FA'nın varlığını parola öncesi sızdırmaz).
+		if managed != nil {
+			on, err := s.db.TwoFactorEnabled(managed.ID)
+			if err != nil {
+				logger.Error("Login: 2FA durumu okunamadı: %v", err)
+				c.Redirect(http.StatusFound, "/login?error=1&message=session")
+				return
+			}
+			if on {
+				s.beginTwoFactorLogin(c, managed)
+				return
+			}
 		}
-		_ = s.db.TouchUserLogin(username)
-		// Session oluştur
-		sessionID := generateSessionID()
-		csrfToken := generateSessionID()
-		expiresAt := time.Now().Add(s.sessionTTL)
-		if err := s.db.CreateSession(sessionID, username, csrfToken, expiresAt); err != nil {
-			logger.Error("Session kaydı oluşturulamadı: %v", err)
-			s.recordAudit(c, storage.AuditEvent{Action: "auth.login.failure", Target: "user:" + username, Actor: username, Role: role,
-				AuthMethod: storage.AuthMethodAnonymous}, map[string]any{"reason": "session_error"})
-			c.Redirect(http.StatusFound, "/login?error=1&message=session")
-			return
+		if s.startSession(c, username, role, nil) {
+			c.Redirect(http.StatusFound, "/dashboard")
 		}
-
-		logger.UserLogin(username, true, clientIP)
-		s.recordAudit(c, storage.AuditEvent{Action: "auth.login.success", Target: "user:" + username, Actor: username, Role: role,
-			AuthMethod: storage.AuthMethodSession, Success: true}, nil)
-
-		maxAge := int(s.sessionTTL.Seconds())
-		c.SetSameSite(http.SameSiteLaxMode)
-		c.SetCookie("session", sessionID, maxAge, "/", "", s.cookieSecure, true)
-		c.SetCookie("csrf_token", csrfToken, maxAge, "/", "", s.cookieSecure, false)
-		c.Redirect(http.StatusFound, "/dashboard")
 		return
 	}
 
@@ -180,6 +195,39 @@ func (s *Server) handleLogin(c *gin.Context) {
 	logger.UserLogin(shared.TruncateRunes(username, 32), false, clientIP)
 	s.audit(c, "auth.login.failure", attempted, map[string]any{"reason": reason}, false)
 	c.Redirect(http.StatusFound, "/login?error=1")
+}
+
+// startSession kimliği tamamen doğrulanmış (parola + gerekiyorsa 2FA)
+// kullanıcı için oturumu açar: IP sayacını sıfırlar, son girişi işler, oturum
+// kaydı + çerezleri (session HttpOnly, csrf_token okunabilir) yazar ve
+// auth.login.success olayını bırakır. Normal giriş ve 2FA ikinci adımı AYNI
+// bu yolu kullanır. Başarısızsa yönlendirmeyi kendisi yapar ve false döner.
+func (s *Server) startSession(c *gin.Context, username, role string, details map[string]any) bool {
+	clientIP := c.ClientIP()
+	if s.loginGuard != nil {
+		s.loginGuard.Success(clientIP)
+	}
+	_ = s.db.TouchUserLogin(username)
+	sessionID := generateSessionID()
+	csrfToken := generateSessionID()
+	expiresAt := time.Now().Add(s.sessionTTL)
+	if err := s.db.CreateSession(sessionID, username, csrfToken, expiresAt); err != nil {
+		logger.Error("Session kaydı oluşturulamadı: %v", err)
+		s.recordAudit(c, storage.AuditEvent{Action: "auth.login.failure", Target: "user:" + username, Actor: username, Role: role,
+			AuthMethod: storage.AuthMethodAnonymous}, map[string]any{"reason": "session_error"})
+		c.Redirect(http.StatusFound, "/login?error=1&message=session")
+		return false
+	}
+
+	logger.UserLogin(username, true, clientIP)
+	s.recordAudit(c, storage.AuditEvent{Action: "auth.login.success", Target: "user:" + username, Actor: username, Role: role,
+		AuthMethod: storage.AuthMethodSession, Success: true}, details)
+
+	maxAge := int(s.sessionTTL.Seconds())
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("session", sessionID, maxAge, "/", "", s.cookieSecure, true)
+	c.SetCookie("csrf_token", csrfToken, maxAge, "/", "", s.cookieSecure, false)
+	return true
 }
 
 // handleLogout çıkış işlemi. GET isteklerinde siteler-arası tetiklemeye

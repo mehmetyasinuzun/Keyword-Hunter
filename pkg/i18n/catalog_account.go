@@ -9,7 +9,7 @@ func init() {
 
 		"acct.title":    "Hesabım",
 		"acct.eyebrow":  "Hesap ve erişim",
-		"acct.subtitle": "Profilinizi görün, parolanızı değiştirin ve otomasyonlar (SOAR, SIEM, betikler) için kişisel API token'larınızı yönetin.",
+		"acct.subtitle": "Profilinizi görün, parolanızı değiştirin, iki adımlı doğrulamayı (2FA) yönetin ve otomasyonlar (SOAR, SIEM, betikler) için kişisel API token'larınızı düzenleyin.",
 
 		"acct.profile":   "Profil",
 		"acct.username":  "Kullanıcı adı",
@@ -87,7 +87,7 @@ func init() {
 
 		"acct.title":    "My Account",
 		"acct.eyebrow":  "Account & access",
-		"acct.subtitle": "View your profile, change your password and manage personal API tokens for automation (SOAR, SIEM, scripts).",
+		"acct.subtitle": "View your profile, change your password, manage two-factor authentication (2FA) and personal API tokens for automation (SOAR, SIEM, scripts).",
 
 		"acct.profile":   "Profile",
 		"acct.username":  "Username",

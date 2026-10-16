@@ -42,7 +42,7 @@
         {{icon "search"}}<span class="txt">{{t .Lang "shell.paletteHint"}}</span><span class="kbds"><kbd>Ctrl</kbd><kbd>K</kbd></span>
       </button>
       <a class="kh-health" href="/monitor" id="nav-health" title="{{t .Lang "nav.monitorLong"}}"><span class="kh-dot unknown"></span><span class="txt">…</span></a>
-      <button class="kh-iconbtn" type="button" data-action="theme-cycle" aria-label="Tema" data-tip="Tema">
+      <button class="kh-iconbtn" type="button" data-action="theme-cycle" aria-label="{{t .Lang "common.theme"}}" data-tip="{{t .Lang "common.theme"}}">
         <svg class="ico kh-theme-ico auto" aria-hidden="true"><use href="#i-contrast"/></svg>
         <svg class="ico kh-theme-ico light" aria-hidden="true"><use href="#i-sun"/></svg>
         <svg class="ico kh-theme-ico dark" aria-hidden="true"><use href="#i-moon"/></svg>
@@ -52,7 +52,7 @@
         <button class="kh-avatar" type="button" data-action="menu-toggle" data-target="kh-user-menu" aria-haspopup="menu" aria-expanded="false" aria-label="{{.User}}">{{initials .User}}</button>
         <div class="kh-menu" id="kh-user-menu" role="menu">
           <div class="kh-menu-head"><div class="u">{{.User}}</div><div class="r">{{t .Lang "shell.signedInAs"}} · {{t .Lang (printf "role.%s" .Role)}}</div></div>
-          <div class="kh-menu-seg" role="group" aria-label="Tema">
+          <div class="kh-menu-seg" role="group" aria-label="{{t .Lang "common.theme"}}">
             <button type="button" data-action="theme-set" data-value="light">{{icon "sun"}}<span>Light</span></button>
             <button type="button" data-action="theme-set" data-value="dark">{{icon "moon"}}<span>Dark</span></button>
             <button type="button" data-action="theme-set" data-value="auto">{{icon "contrast"}}<span>Auto</span></button>

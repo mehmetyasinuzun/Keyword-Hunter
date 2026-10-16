@@ -28,6 +28,9 @@ func (s *Server) render(c *gin.Context, status int, name string, data gin.H) {
 	data["IsAdmin"] = role == "admin"
 	data["CanWrite"] = roleRank(role) >= roleRank("analyst")
 	data["CSRF"] = c.GetString("csrfToken")
+	// REQUIRE_2FA kapsamında kayıtsız oturum (bkz. twoFactorGate): kabuk
+	// arka plan API çağrılarını (403 alacak) yapmaz, Hesabım uyarı gösterir.
+	data["Need2FA"] = c.GetBool("need2FA")
 	_, collapsed := c.Cookie("sb")
 	data["SidebarCollapsed"] = collapsed == nil
 	data["I18n"] = i18n.Catalog(data["Lang"].(string))

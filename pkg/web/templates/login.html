@@ -4,34 +4,10 @@
 {{template "body" .}}
 {{template "icons" .}}
 <div class="auth">
-  <section class="auth-hero" aria-hidden="true">
-    <div class="auth-radar"><span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="sweep"></span>
-      <span class="blip b1"></span><span class="blip b2"></span><span class="blip b3"></span><span class="blip b4"></span>
-      <svg class="core"><use href="#i-brand"/></svg>
-    </div>
-    <div class="auth-hero-copy">
-      <div class="kh-eyebrow"><span class="kh-dot up pulse"></span> Dark Web CTI</div>
-      <h2>{{t .Lang "login.hero"}}</h2>
-      <p>{{t .Lang "login.heroLede"}}</p>
-      <ul class="auth-feats kh-stagger">
-        <li>{{icon "search"}} {{t .Lang "login.f1"}}</li>
-        <li>{{icon "dna"}} {{t .Lang "login.f2"}}</li>
-        <li>{{icon "radar"}} {{t .Lang "login.f3"}}</li>
-        <li>{{icon "shield"}} {{t .Lang "login.f4"}}</li>
-      </ul>
-    </div>
-    <div class="auth-ticker"><span>TOR · SOCKS5</span><span>STIX 2.1</span><span>CSP strict</span><span>bcrypt</span><span>SQLite · local</span></div>
-  </section>
+  {{template "auth_hero" .}}
 
   <main class="auth-panel" id="main">
-    <div class="auth-tools">
-      <button class="kh-iconbtn" type="button" data-action="theme-cycle" aria-label="Tema">
-        <svg class="ico kh-theme-ico auto" aria-hidden="true"><use href="#i-contrast"/></svg>
-        <svg class="ico kh-theme-ico light" aria-hidden="true"><use href="#i-sun"/></svg>
-        <svg class="ico kh-theme-ico dark" aria-hidden="true"><use href="#i-moon"/></svg>
-      </button>
-      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
-    </div>
+    {{template "auth_tools" .}}
 
     <div class="auth-card">
       <div class="auth-brand">
@@ -43,11 +19,19 @@
 
       {{if eq .error "locked"}}
       <div class="kh-alert err mb-4" role="alert">{{icon "shield"}}<span>{{t .Lang "login.locked"}} <strong id="lock-wait" data-wait="{{.wait}}">{{.wait}}</strong> {{t .Lang "login.lockedWait"}}</span></div>
+      {{else if eq .error "2fa_locked"}}
+      <div class="kh-alert err mb-4 auth-shake" role="alert">{{icon "shield"}}<span>{{t .Lang "tfa.login.tooMany"}}</span></div>
       {{else if .error}}
       <div class="kh-alert err mb-4 auth-shake" role="alert">{{icon "warn"}}<span>{{t .Lang "login.error"}}</span></div>
       {{end}}
-      {{if .message}}
-      <div class="kh-alert info mb-4" role="status">{{icon "info"}}<span>{{if eq .message "session"}}{{t .Lang "login.session"}}{{else}}{{.message}}{{end}}</span></div>
+      {{/* Yalnız bilinen ileti kodları basılır: sorgu dizgisindeki serbest metin
+           (ör. sahte "hesabınız askıya alındı" uyarısı) sayfaya yansıtılmaz. */}}
+      {{if eq .message "session"}}
+      <div class="kh-alert info mb-4" role="status">{{icon "info"}}<span>{{t .Lang "login.session"}}</span></div>
+      {{else if eq .message "2fa_expired"}}
+      <div class="kh-alert info mb-4" role="status">{{icon "clock"}}<span>{{t .Lang "tfa.login.expired"}}</span></div>
+      {{else if eq .message "2fa_policy"}}
+      <div class="kh-alert warn mb-4" role="status">{{icon "shield"}}<span>{{t .Lang "tfa.login.bootstrapBlocked"}}</span></div>
       {{end}}
 
       <form method="POST" action="/login" autocomplete="on" class="auth-form" id="login-form">

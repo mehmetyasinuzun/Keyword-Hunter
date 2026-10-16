@@ -73,8 +73,6 @@
 .acc-notes li { display: flex; gap: 10px; align-items: flex-start; font-size: .82rem; color: var(--text-2); line-height: 1.55; }
 .acc-notes li > .ico { flex: none; margin-top: 2px; color: var(--primary); }
 
-/* 2FA ayrılmış alanı: boşken yer kaplamaz */
-.acc-2fa:empty { display: none; }
 
 /* Kapsam seçimi (radyo kartları) */
 .acc-scopes { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
@@ -102,3 +100,74 @@
 .acc-secret .kh-textarea { flex: 1; min-width: 0; min-height: 0; resize: none; field-sizing: content; font-size: .84rem; line-height: 1.5; letter-spacing: .01em; word-break: break-all; color: var(--text); background: color-mix(in srgb, var(--ok) 6%, var(--surface-hover)); border-color: color-mix(in srgb, var(--ok) 40%, var(--border-strong)); }
 .acc-secret .kh-btn { flex: none; }
 @media (max-width: 560px) { .acc-secret { flex-direction: column; } .acc-secret .kh-btn { justify-content: center; } }
+
+/* ── İki adımlı doğrulama (2FA) ───────────────────────────────────────────
+   data-state (on|off) blokları seçer: .tfa-on / .tfa-off. */
+.acc-need2fa, .tfa-used { margin-bottom: 16px; }
+.acc-need2fa > span, .tfa-used > span { flex: 1; min-width: 0; }
+.acc-2fa[data-state="on"] .tfa-off, .acc-2fa[data-state="off"] .tfa-on { display: none !important; }
+.acc-2fa.is-needed { border-color: color-mix(in srgb, var(--warn) 55%, var(--border-strong)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 14%, transparent); }
+.acc-2fa .kh-card-head .end { display: flex; align-items: center; gap: 6px; }
+.tfa-req .ico { width: 12px; height: 12px; }
+.tfa-main { display: flex; gap: 18px; align-items: flex-start; }
+.tfa-ic { --c: var(--text-3); position: relative; width: 56px; height: 56px; flex: none; display: grid; place-items: center; border-radius: 16px; color: var(--c); background: color-mix(in srgb, var(--c) 11%, transparent); border: 1px solid color-mix(in srgb, var(--c) 26%, transparent); }
+.tfa-ic > .ico { width: 26px; height: 26px; }
+.acc-2fa[data-state="on"] .tfa-ic { --c: var(--ok); }
+.tfa-ic-ok { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; display: none; place-items: center; border-radius: 50%; color: #fff; background: var(--ok); box-shadow: 0 0 0 3px var(--surface-solid); }
+.tfa-ic-ok .ico { width: 13px; height: 13px; }
+.acc-2fa[data-state="on"] .tfa-ic-ok { display: grid; }
+.tfa-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.tfa-copy > p { margin: 0; font-size: .86rem; color: var(--text-2); line-height: 1.55; }
+.tfa-copy > p.kh-hint { font-size: .78rem; color: var(--text-3); }
+.tfa-dl { margin-top: 2px; }
+.tfa-rc b { color: var(--text); font-variant-numeric: tabular-nums; }
+.tfa-req-hint { display: flex; gap: 8px; align-items: flex-start; }
+.tfa-req-hint .ico { flex: none; margin-top: 2px; color: var(--warn); }
+.tfa-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+@media (max-width: 560px) {
+  .tfa-main { flex-direction: column; gap: 14px; }
+  .tfa-actions .kh-btn { flex: 1 1 100%; justify-content: center; }
+}
+
+/* Sihirbaz */
+.kh-modal.tfa-modal { width: 600px; }
+.tfa-stepper { list-style: none; display: flex; gap: 6px; margin: 14px 0 18px; padding: 0; counter-reset: none; }
+.tfa-stepper li { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; padding-top: 10px; border-top: 3px solid var(--border); font-size: .76rem; font-weight: 600; color: var(--text-3); }
+.tfa-stepper .n { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 50%; font: 700 .7rem var(--font-mono); border: 1px solid var(--border-strong); }
+.tfa-stepper .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tfa-stepper li.done { border-top-color: color-mix(in srgb, var(--primary) 45%, transparent); color: var(--text-2); }
+.tfa-stepper li.done .n { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+.tfa-stepper li.on { border-top-color: var(--primary); color: var(--text); }
+.tfa-stepper li.on .n { color: #fff; background: var(--primary); border-color: var(--primary); }
+.tfa-modal[data-mode="codes"] .tfa-stepper { display: none; }
+.tfa-qr-wrap { display: flex; gap: 20px; align-items: center; }
+/* QR her temada beyaz zemin üzerine siyah kalır (okunabilirlik) */
+.tfa-qr { flex: none; padding: 8px; border-radius: var(--radius-md); background: #fff; border: 1px solid var(--border-strong); box-shadow: var(--shadow-md); line-height: 0; }
+.tfa-qr img { display: block; width: 200px; height: 200px; image-rendering: pixelated; border-radius: 4px; }
+.tfa-qr img:not([src]) { visibility: hidden; }
+.tfa-manual { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.tfa-secret { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 12px; border-radius: var(--radius-md); background: var(--surface-hover); border: 1px solid var(--border-strong); }
+.tfa-secret code { flex: 1; min-width: 0; font-size: .86rem; font-weight: 600; line-height: 1.6; letter-spacing: .04em; color: var(--text); word-spacing: .15em; overflow-wrap: anywhere; user-select: all; }
+.tfa-params { display: grid; gap: 4px; margin: 2px 0 0; font-size: .76rem; }
+.tfa-params > div { display: flex; gap: 8px; min-width: 0; }
+.tfa-params dt { flex: none; color: var(--text-3); font-weight: 600; min-width: 52px; }
+.tfa-params dd { margin: 0; color: var(--text-2); min-width: 0; }
+.tfa-otp { text-align: center; font: 700 1.6rem/1.2 var(--font-mono); letter-spacing: .5em; text-indent: .5em; font-variant-numeric: tabular-nums; }
+.tfa-otp::placeholder { color: var(--text-3); opacity: .55; }
+.tfa-codes { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 12px; padding: 14px; border-radius: var(--radius-md); background: var(--surface-hover); border: 1px dashed var(--border-strong); counter-reset: rc; }
+.tfa-codes li { counter-increment: rc; display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--surface-solid); border: 1px solid var(--border); font-size: .95rem; font-weight: 700; letter-spacing: .08em; color: var(--text); }
+.tfa-codes li::before { content: counter(rc, decimal-leading-zero); font-size: .66rem; font-weight: 600; letter-spacing: 0; color: var(--text-3); }
+.tfa-code-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tfa-saved { margin-top: 14px; }
+@media (max-width: 560px) {
+  .tfa-qr-wrap { flex-direction: column; align-items: stretch; }
+  .tfa-qr { align-self: center; }
+  .tfa-stepper .l { display: none; }
+  .tfa-stepper li { justify-content: center; }
+  .tfa-codes { gap: 6px; padding: 10px; }
+  .tfa-codes li { gap: 6px; padding: 6px 8px; font-size: .8rem; letter-spacing: .03em; }
+  .tfa-modal .kh-modal-actions .kh-btn { flex: 1; justify-content: center; }
+}
+/* Bağlantıyla gelinen bölümler (#security-2fa, #tokens, #password) yapışkan üst barın altında kalmasın */
+.acc-2fa, #tokens, #password { scroll-margin-top: 84px; }
+.tfa-dl > div { grid-template-columns: minmax(110px, 190px) 1fr; }

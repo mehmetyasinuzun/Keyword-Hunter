@@ -25,5 +25,5 @@
 {{/* </head> kapatır ve gövdeyi açar: sayfa kimliği + rol (CSS/JS rol kancaları) */}}
 {{define "body"}}
 </head>
-<body data-page="{{.ActivePage}}" data-role="{{.Role}}"{{if eq .Role "viewer"}} class="role-viewer"{{end}}>
+<body data-page="{{.ActivePage}}" data-role="{{.Role}}"{{if .Need2FA}} data-need2fa="1"{{end}}{{if eq .Role "viewer"}} class="role-viewer"{{end}}>
 {{end}}

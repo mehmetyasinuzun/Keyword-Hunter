@@ -209,9 +209,13 @@ func hasSessionCookie(c *gin.Context) bool {
 // Ele geçirilmiş parolayı döndürmek ya da sızmış token'ı iptal etmek rol
 // gerektirmemeli. Bu uçlar API token ile çağrılamaz (tokenForbiddenRoute).
 var selfServiceRoutes = map[string]bool{
-	"/api/me/password":       true,
-	"/api/tokens":            true,
-	"/api/tokens/:id/revoke": true,
+	"/api/me/password":           true,
+	"/api/me/2fa/setup":          true,
+	"/api/me/2fa/enable":         true,
+	"/api/me/2fa/disable":        true,
+	"/api/me/2fa/recovery-codes": true,
+	"/api/tokens":                true,
+	"/api/tokens/:id/revoke":     true,
 }
 
 func isSafeMethod(method string) bool {

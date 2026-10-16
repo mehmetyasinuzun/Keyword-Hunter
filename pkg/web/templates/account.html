@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="/static/css/pages/account.css?v={{version}}">
 {{template "body" .}}
 {{template "shell" .}}
-<main id="main" class="kh-page narrow" data-managed="{{if .profile.managed}}1{{else}}0{{end}}" data-admin="{{if .IsAdmin}}1{{else}}0{{end}}" data-can-write="{{if .CanWrite}}1{{else}}0{{end}}">
+<main id="main" class="kh-page narrow" data-managed="{{if .profile.managed}}1{{else}}0{{end}}" data-admin="{{if .IsAdmin}}1{{else}}0{{end}}" data-can-write="{{if .CanWrite}}1{{else}}0{{end}}" data-need2fa="{{if .need2fa}}1{{else}}0{{end}}">
   <header class="kh-header">
     <div>
       <div class="kh-eyebrow">{{icon "user"}} {{t .Lang "acct.eyebrow"}}</div>
@@ -69,6 +69,58 @@
     </section>
   </div>
 
+  {{/* ── İKİ ADIMLI DOĞRULAMA (2FA) ──────────────────────────────────────
+       Bağlantılar /account#security-2fa adresine gelir (zorunluluk yönlendirmesi
+       dahil). data-state (on|off) hangi blokların görüneceğini belirler; JS
+       işlem sonrası yalnız bu özniteliği ve metin alanlarını günceller. Uçlar
+       /api/me/2fa/* altındadır (API token'a kapalı). */}}
+  {{$tf := .twofa}}
+  <section class="kh-card kh-section acc-2fa{{if .need2fa}} is-needed{{end}}" id="security-2fa" aria-labelledby="acc-2fa-t"
+    data-state="{{if $tf.enabled}}on{{else}}off{{end}}" data-available="{{if $tf.available}}1{{else}}0{{end}}" data-managed="{{if $tf.managed}}1{{else}}0{{end}}" data-required="{{if $tf.required}}1{{else}}0{{end}}" data-user="{{.User}}">
+    <div class="kh-card-head">
+      <h2 id="acc-2fa-t">{{icon "shield"}} {{t .Lang "tfa.title"}}</h2>
+      <div class="end">
+        {{if $tf.required}}<span class="kh-badge warn tfa-req">{{icon "lock"}} {{t .Lang "tfa.badge.req"}}</span>{{end}}
+        <span class="kh-badge ok tfa-on"><span class="kh-dot up"></span> {{t .Lang "tfa.badge.on"}}</span>
+        <span class="kh-badge neutral tfa-off">{{t .Lang "tfa.badge.off"}}</span>
+      </div>
+    </div>
+    {{/* Zorunluluk yönlendirmesi bu karta (#security-2fa) iner: uyarı burada görünür. */}}
+    {{if .need2fa}}
+    <div class="kh-alert warn acc-need2fa" role="alert">{{icon "shield"}}<span><b>{{t .Lang "tfa.need.title"}}</b> {{t .Lang "tfa.need.body"}}</span></div>
+    {{end}}
+    {{if and .recoveryUsed $tf.enabled}}
+    <div class="kh-alert info tfa-used" role="status">{{icon "key"}}<span><b>{{t .Lang "tfa.recoveryUsed"}}</b> {{t .Lang "tfa.recoveryUsedLeft"}} <b>{{$tf.recoveryRemaining}}/{{$tf.recoveryTotal}}</b>. {{t .Lang "tfa.recoveryUsedHint"}}</span></div>
+    {{end}}
+    <div class="tfa-main">
+      <div class="tfa-ic" aria-hidden="true">{{icon "phone"}}<span class="tfa-ic-ok">{{icon "check"}}</span></div>
+      <div class="tfa-copy">
+        <p class="tfa-off">{{t .Lang "tfa.lead.off"}}</p>
+        <p class="tfa-on">{{t .Lang "tfa.lead.on"}}</p>
+        <p class="kh-hint tfa-off">{{t .Lang "tfa.apps"}}</p>
+        <dl class="acc-dl tfa-dl tfa-on">
+          <div><dt>{{t .Lang "tfa.method"}}</dt><dd>{{t .Lang "tfa.methodVal"}}</dd></div>
+          <div><dt>{{t .Lang "tfa.enabledAt"}}</dt><dd id="tfa-enabled-at">{{with $tf.enabledAt}}<time datetime="{{isoTime .}}">{{formatTime .}}</time>{{else}}—{{end}}</dd></div>
+          <div><dt>{{t .Lang "tfa.recovery"}}</dt><dd><span class="tfa-rc"><b id="tfa-remaining">{{$tf.recoveryRemaining}}</b>/{{$tf.recoveryTotal}} {{t .Lang "tfa.recoveryLeft"}}</span></dd></div>
+        </dl>
+        <div class="kh-alert warn tfa-low" id="tfa-low"{{if or (not $tf.enabled) (gt $tf.recoveryRemaining 3)}} hidden{{end}}>{{icon "warn"}}<span>{{t .Lang "tfa.recoveryLow"}}</span></div>
+        {{if not $tf.managed}}
+        <div class="kh-alert info">{{icon "info"}}<span>{{t .Lang "tfa.unmanaged"}}</span></div>
+        {{else if not $tf.available}}
+        <div class="kh-alert warn tfa-off">{{icon "warn"}}<span>{{t .Lang "tfa.unavailable"}}</span></div>
+        {{end}}
+        {{if $tf.required}}<p class="kh-hint tfa-on tfa-req-hint">{{icon "lock"}} {{t .Lang "tfa.requiredHint"}}</p>{{end}}
+      </div>
+    </div>
+    {{if $tf.managed}}
+    <div class="tfa-actions">
+      <button type="button" class="kh-btn primary tfa-off" id="tfa-start-btn" data-action="tfa-start" data-busy-text="{{t .Lang "tfa.w.verifying"}}"{{if not $tf.available}} disabled{{end}}>{{icon "lock"}} {{t .Lang "tfa.enable"}}</button>
+      <button type="button" class="kh-btn subtle tfa-on" id="tfa-regen-btn" data-action="tfa-regen">{{icon "refresh"}} {{t .Lang "tfa.regen"}}</button>
+      <button type="button" class="kh-btn danger tfa-on" id="tfa-disable-btn" data-action="tfa-disable">{{icon "close"}} {{t .Lang "tfa.disable"}}</button>
+    </div>
+    {{end}}
+  </section>
+
   <section class="kh-card flush kh-section" id="tokens" aria-labelledby="acc-tok-t">
     <div class="kh-card-head">
       <h2 id="acc-tok-t">{{icon "key"}} {{t .Lang "acct.tok.title"}} <span class="kh-badge neutral mono" id="tok-count">…</span></h2>
@@ -79,7 +131,7 @@
           <span id="tok-all-l">{{t .Lang "acct.tok.allUsers"}}</span>
         </span>
         {{end}}
-        {{if .profile.managed}}<button type="button" class="kh-btn sm primary" id="tok-new-btn" data-action="tok-new">{{icon "plus"}} {{t .Lang "acct.tok.new"}}</button>{{end}}
+        {{if and .profile.managed (not .need2fa)}}<button type="button" class="kh-btn sm primary" id="tok-new-btn" data-action="tok-new">{{icon "plus"}} {{t .Lang "acct.tok.new"}}</button>{{end}}
       </div>
     </div>
     <p class="acc-lead">{{t .Lang "acct.tok.lead"}}</p>
@@ -114,12 +166,6 @@
     </ul>
   </section>
 
-  {{/* ── İKİ ADIMLI DOĞRULAMA (2FA) — AYRILMIŞ ALAN ──────────────────────────
-       Bir sonraki geliştirici 2FA (TOTP) yönetimini bu bölüme ekler. Bağlantılar
-       /account#security-2fa adresine gelir. 2FA uçları /api/me/2fa/* altında
-       olmalıdır: böylece tokenForbiddenRoutes ("/api/me") onları API token'a
-       karşı otomatik kapatır. Boş bırakıldığında görünür bir şey basmaz. */}}
-  <section id="security-2fa" class="acc-2fa" data-reserved="2fa"></section>
 </main>
 
 <div class="kh-modal-overlay" id="token-modal">
@@ -193,6 +239,105 @@
     <div class="kh-modal-actions">
       <button type="button" class="kh-btn primary" data-action="modal-close">{{icon "check"}} {{t .Lang "acct.r.done"}}</button>
     </div>
+  </div>
+</div>
+
+{{/* 2FA kurulum sihirbazı. data-static: QR/sır ve tek seferlik kurtarma kodları
+     yanlışlıkla (arka plan tıklaması / Esc) kapanmasın; kapanınca hepsi DOM'dan silinir. */}}
+<div class="kh-modal-overlay" id="tfa-modal" data-static>
+  <div class="kh-modal tfa-modal" role="dialog" aria-modal="true" aria-labelledby="tfa-modal-t">
+    <h2 id="tfa-modal-t">{{icon "shield"}} <span id="tfa-modal-title">{{t .Lang "tfa.w.title"}}</span></h2>
+    <ol class="tfa-stepper" id="tfa-stepper">
+      <li data-step="1"><span class="n">1</span><span class="l">{{t .Lang "tfa.w.s1"}}</span></li>
+      <li data-step="2"><span class="n">2</span><span class="l">{{t .Lang "tfa.w.s2"}}</span></li>
+      <li data-step="3"><span class="n">3</span><span class="l">{{t .Lang "tfa.w.s3"}}</span></li>
+    </ol>
+
+    <div class="tfa-step" data-step="1">
+      <p class="lead">{{t .Lang "tfa.w.scanLead"}}</p>
+      <div class="tfa-qr-wrap">
+        <div class="tfa-qr"><img id="tfa-qr" alt="{{t .Lang "tfa.w.qrAlt"}}" width="216" height="216"></div>
+        <div class="tfa-manual">
+          <span class="kh-label">{{t .Lang "tfa.w.manual"}}</span>
+          <div class="tfa-secret">
+            <code id="tfa-secret" class="mono" tabindex="0"></code>
+            <button type="button" class="kh-btn xs icon subtle" id="tfa-secret-copy" data-action="copy" data-copy="" aria-label="{{t .Lang "common.copy"}}" data-tip="{{t .Lang "common.copy"}}" data-tip-end>{{icon "copy"}}</button>
+          </div>
+          <dl class="tfa-params">
+            <div><dt>{{t .Lang "tfa.w.account"}}</dt><dd class="kh-truncate" title="KeywordHunter:{{.User}}">KeywordHunter:{{.User}}</dd></div>
+            <div><dt>{{t .Lang "tfa.w.type"}}</dt><dd>{{t .Lang "tfa.w.typeVal"}}</dd></div>
+          </dl>
+        </div>
+      </div>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.cancel"}}</button>
+        <button type="button" class="kh-btn primary" data-action="tfa-goto" data-step="2">{{t .Lang "tfa.w.next"}} {{icon "arrow-right"}}</button>
+      </div>
+    </div>
+
+    <form class="tfa-step" data-step="2" data-submit="tfa-verify" novalidate hidden>
+      <p class="lead">{{t .Lang "tfa.w.verifyLead"}}</p>
+      <div class="kh-modal-body">
+      <div class="kh-field">
+        <label class="kh-label" for="tfa-pw">{{t .Lang "tfa.a.password"}}</label>
+        <div class="kh-input-icon kh-pw">{{icon "lock"}}<input class="kh-input" id="tfa-pw" type="password" maxlength="256" required autocomplete="current-password" aria-describedby="tfa-pw-h" data-input="tfa-pw-input">
+          <button type="button" class="kh-iconbtn kh-pw-eye" data-action="pw-eye" data-target="tfa-pw" aria-label="{{t .Lang "acct.pw.show"}}" aria-pressed="false">{{icon "eye"}}</button>
+        </div>
+        <span class="kh-hint" id="tfa-pw-h">{{t .Lang "tfa.w.pwHint"}}</span>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="tfa-code">{{t .Lang "tfa.login.codeLabel"}}</label>
+        <input class="kh-input lg tfa-otp" id="tfa-code" type="text" inputmode="numeric" pattern="[0-9 ]*" maxlength="7" autocomplete="one-time-code" placeholder="••••••" aria-describedby="tfa-code-h" data-input="tfa-code-input">
+        <span class="kh-hint" id="tfa-code-h">{{t .Lang "tfa.w.codeHint"}}</span>
+      </div>
+      </div>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn subtle" data-action="tfa-goto" data-step="1">{{t .Lang "tfa.w.back"}}</button>
+        <button type="submit" class="kh-btn primary" id="tfa-verify-btn" data-busy-text="{{t .Lang "tfa.w.verifying"}}">{{icon "check"}} {{t .Lang "tfa.w.verify"}}</button>
+      </div>
+    </form>
+
+    <div class="tfa-step" data-step="3" hidden>
+      <div class="kh-alert warn">{{icon "warn"}}<span>{{t .Lang "tfa.w.codesWarn"}}</span></div>
+      <ol class="tfa-codes mono" id="tfa-codes" aria-label="{{t .Lang "tfa.w.codesTitle"}}"></ol>
+      <div class="tfa-code-actions">
+        <button type="button" class="kh-btn sm subtle" id="tfa-codes-copy" data-action="copy" data-copy="">{{icon "copy"}} {{t .Lang "tfa.w.copyAll"}}</button>
+        <button type="button" class="kh-btn sm subtle" data-action="tfa-download">{{icon "download"}} {{t .Lang "tfa.w.download"}}</button>
+      </div>
+      <label class="kh-check tfa-saved"><input type="checkbox" id="tfa-saved" data-change="tfa-saved"> {{t .Lang "tfa.w.saved"}}</label>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn primary" id="tfa-done" data-action="modal-close" disabled>{{icon "check"}} {{t .Lang "tfa.w.done"}}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{/* Parola + kod ile yeniden doğrulama: 2FA'yı kapatma ve kurtarma kodlarını yenileme */}}
+<div class="kh-modal-overlay" id="tfa-auth">
+  <div class="kh-modal sm" role="dialog" aria-modal="true" aria-labelledby="tfa-auth-t">
+    <button type="button" class="kh-iconbtn kh-modal-x" data-action="modal-close" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+    <h2 id="tfa-auth-t">{{icon "shield"}} <span id="tfa-auth-title"></span></h2>
+    <p class="lead" id="tfa-auth-lead"></p>
+    <form id="tfa-auth-form" data-submit="tfa-auth-submit" novalidate>
+      <input type="text" name="username" value="{{.User}}" autocomplete="username" hidden>
+      <div class="kh-modal-body">
+        <div class="kh-field">
+          <label class="kh-label" for="tfa-auth-pw">{{t .Lang "tfa.a.password"}}</label>
+          <div class="kh-input-icon kh-pw">{{icon "lock"}}<input class="kh-input" id="tfa-auth-pw" type="password" maxlength="256" required autocomplete="current-password" autofocus>
+            <button type="button" class="kh-iconbtn kh-pw-eye" data-action="pw-eye" data-target="tfa-auth-pw" aria-label="{{t .Lang "acct.pw.show"}}" aria-pressed="false">{{icon "eye"}}</button>
+          </div>
+        </div>
+        <div class="kh-field">
+          <label class="kh-label" for="tfa-auth-code">{{t .Lang "tfa.a.code"}}</label>
+          <div class="kh-input-icon">{{icon "phone"}}<input class="kh-input mono" id="tfa-auth-code" type="text" maxlength="20" required autocomplete="one-time-code" autocapitalize="none" spellcheck="false" aria-describedby="tfa-auth-code-h"></div>
+          <span class="kh-hint" id="tfa-auth-code-h">{{t .Lang "tfa.a.codeHint"}}</span>
+        </div>
+      </div>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.cancel"}}</button>
+        <button type="submit" class="kh-btn danger" id="tfa-auth-submit" data-busy-text="{{t .Lang "tfa.w.verifying"}}"></button>
+      </div>
+    </form>
   </div>
 </div>
 {{template "shell_end" .}}

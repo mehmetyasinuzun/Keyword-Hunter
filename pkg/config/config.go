@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -41,7 +43,22 @@ type AppConfig struct {
 	RateLimitBurst  int
 	// AuditRetentionDays denetim kaydının saklanacağı gün; 0 = süresiz sakla.
 	AuditRetentionDays int
+	// AppSecret uygulama ana sırrı (64 hex = 32 bayt). TOTP sırlarını
+	// şifreleyen anahtar bundan türetilir. Boşsa EnsureAppSecret üretir.
+	AppSecret string
+	// Require2FA iki adımlı doğrulama zorunluluğu: none | admins | all.
+	Require2FA string
 }
+
+// REQUIRE_2FA değerleri.
+const (
+	Require2FANone   = "none"
+	Require2FAAdmins = "admins"
+	Require2FAAll    = "all"
+)
+
+// appSecretLen APP_SECRET'ın hex karakter uzunluğu (32 bayt).
+const appSecretLen = 64
 
 // Load .env + process environment kaynaklarindan ayarlari yukler.
 func Load(envFilePath string) (AppConfig, error) {
@@ -97,6 +114,15 @@ func Load(envFilePath string) (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
+	appSecret := get("APP_SECRET", "")
+	if appSecret != "" && !validAppSecret(appSecret) {
+		return AppConfig{}, fmt.Errorf("APP_SECRET 64 onaltilik (hex) karakter olmalidir (32 bayt); uretmek icin: openssl rand -hex 32")
+	}
+	require2FA, err := parseRequire2FA(get("REQUIRE_2FA", Require2FANone))
+	if err != nil {
+		return AppConfig{}, err
+	}
+
 	logLevel, err := parseLogLevel(get("LOG_LEVEL", defaultLogLevel))
 	if err != nil {
 		return AppConfig{}, err
@@ -128,9 +154,64 @@ func Load(envFilePath string) (AppConfig, error) {
 		RateLimitBurst:  rateLimitBurst,
 
 		AuditRetentionDays: auditRetention,
+		AppSecret:          strings.ToLower(appSecret),
+		Require2FA:         require2FA,
 	}
 
 	return cfg, nil
+}
+
+// EnsureAppSecret APP_SECRET yoksa crypto/rand ile üretir ve etkin .env
+// dosyasına kalıcı yazar (cfg.AppSecret güncellenir). created true ise yeni
+// sır üretilmiştir; çağıran bunu loglar (değeri ASLA loglanmaz). Yazma
+// başarısız olursa üretilen sır yine cfg'ye konur ve hata döner: çağıran sırrın
+// bu çalıştırmayla sınırlı (geçici) olduğunu bilir ve 2FA kaydını kapatır,
+// yoksa yeniden başlatmada kaydedilen 2FA sırları çözülemez hâle gelirdi.
+func EnsureAppSecret(store *EnvStore, cfg *AppConfig) (created bool, err error) {
+	if cfg.AppSecret != "" {
+		return false, nil
+	}
+	buf := make([]byte, appSecretLen/2)
+	if _, err := rand.Read(buf); err != nil {
+		return false, fmt.Errorf("APP_SECRET uretilemedi: %w", err)
+	}
+	cfg.AppSecret = hex.EncodeToString(buf)
+	if store == nil {
+		return true, fmt.Errorf("APP_SECRET kalici yazilamadi: env deposu yok")
+	}
+	// Yalnız APP_SECRET satırı eklenir/değiştirilir: kullanıcının .env'indeki
+	// yorumlar ve diğer satırlar korunur (Update dosyayı yeniden üretirdi).
+	if err := store.SetPreserving("APP_SECRET", cfg.AppSecret); err != nil {
+		return true, fmt.Errorf("APP_SECRET kalici yazilamadi (%s): %w", store.Path(), err)
+	}
+	return true, nil
+}
+
+// CheckRequire2FAStartup REQUIRE_2FA ile APP_SECRET durumunun uyumunu denetler.
+// Zorunluluk etkinken sır kalıcı değilse 2FA kaydı kapalı olur ve kapsamdaki
+// herkes çıkışı olmayan bir kayıt sayfasına hapsolur: başlatma reddedilmeli.
+func CheckRequire2FAStartup(policy string, appSecretPersisted bool) error {
+	if policy == "" || policy == Require2FANone || appSecretPersisted {
+		return nil
+	}
+	return fmt.Errorf("REQUIRE_2FA=%s kalici bir APP_SECRET gerektirir: APP_SECRET'i (64 hex) ortamda ya da yazilabilir .env'de tanimlayin veya REQUIRE_2FA=none yapin", policy)
+}
+
+func validAppSecret(s string) bool {
+	if len(s) != appSecretLen {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
+func parseRequire2FA(raw string) (string, error) {
+	switch v := strings.ToLower(strings.TrimSpace(raw)); v {
+	case Require2FANone, Require2FAAdmins, Require2FAAll:
+		return v, nil
+	default:
+		return "", fmt.Errorf("REQUIRE_2FA gecersiz deger: %s (none/admins/all)", raw)
+	}
 }
 
 func parseBool(raw string) bool {

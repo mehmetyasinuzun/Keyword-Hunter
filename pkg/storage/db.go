@@ -240,6 +240,11 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("users şeması başarısız: %w", err)
 	}
 
+	// İki adımlı doğrulama (şifreli TOTP sırları + kurtarma kodu özetleri)
+	if err := db.EnsureTwoFactorSchema(); err != nil {
+		return fmt.Errorf("user_2fa şeması başarısız: %w", err)
+	}
+
 	// Kişisel API token'ları (yalnız SHA-256 özeti saklanır)
 	if err := db.EnsureAPITokenSchema(); err != nil {
 		return fmt.Errorf("api_tokens şeması başarısız: %w", err)

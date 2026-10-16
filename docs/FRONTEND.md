@@ -52,6 +52,10 @@ gereken sözleşmeyi tanımlar.
 </html>
 ```
 
+Giriş ekranları (`login.html`, `login_2fa.html`) kabuğu kullanmaz; ortak bölünmüş
+ekran parçaları `partials/auth.html` içindedir (`{{template "auth_hero" .}}`,
+`{{template "auth_tools" .}}`) ve stilleri `static/css/pages/login.css`'tedir.
+
 Şablon yardımcıları: `t`, `pct` (dil duyarlı yüzde), `tags`, `truncate`, `formatTime`,
 `isoTime`, `initials`, `icon`. Hata sayfaları için `s.renderError(c, 404|403)`.
 
@@ -95,7 +99,7 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 | `KH.toast(msg, 'ok'\|'err'\|'warn'\|'info')` | Bildirim |
 | `KH.confirm({title, message, danger})` | `Promise<boolean>` |
 | `KH.prompt({title, label, value, type, multiline})` | `window.prompt` yerine; `Promise<string\|null>` |
-| `KH.openModal(id, {returnFocus})` / `KH.closeModal(id)` | Odak tuzaklı modal; `returnFocus` kapanınca odağın döneceği öğe (varsayılan: açılıştaki odak). Overlay'de `data-static` varsa arka plan tıklaması ve Esc kapatmaz (yalnız açık bir `modal-close` düğmesi; ör. bir kez gösterilen gizli değerler) |
+| `KH.openModal(id, {returnFocus})` / `KH.closeModal(id, {returnFocus})` | Odak tuzaklı modal; `returnFocus` kapanınca odağın döneceği öğe ya da onu kapanışta döndüren işlev (varsayılan: açılıştaki odak). Akış sonunda açılış düğmesi gizleniyorsa görünür bir hedef verin (ör. `closeModal(id, {returnFocus: $('x')})`); odak asla `<body>`'ye düşmemeli. Overlay'de `data-static` varsa arka plan tıklaması ve Esc kapatmaz (yalnız açık bir `modal-close` düğmesi; ör. bir kez gösterilen gizli değerler) |
 | `KH.esc`, `KH.html\`…\``, `KH.raw`, `KH.render(el, html)` | Güvenli HTML |
 | `KH.icon(name, cls)` | Sprite ikonu |
 | `KH.sev(n)`, `KH.tags(str)`, `KH.fmtTime`, `KH.ago`, `KH.num`, `KH.short`, `KH.pctText(n)` | Biçimleme (dil duyarlı) |
