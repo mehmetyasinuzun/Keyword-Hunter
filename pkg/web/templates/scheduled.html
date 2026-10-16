@@ -1,117 +1,169 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Planlı Taramalar</title>
-    <style>
-        .sc-card { position: relative; }
-        .sc-card.disabled { opacity: .55; }
-        .sc-query { font-family: var(--font-mono); font-weight: 700; font-size: 1rem; word-break: break-all; }
-        .sc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
-        .sc-stat { background: rgba(7,8,13,.4); border-radius: 8px; padding: 8px; text-align: center; }
-        .sc-stat .v { font-family: var(--font-mono); font-weight: 800; font-size: 1.25rem; }
-        .sc-stat .l { font-size: .62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
-        .sc-meta { font-size: .76rem; color: var(--text-muted); display: grid; gap: 3px; }
-        .sc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(99,179,237,.06); }
-        .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-    </style>
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page">
-        <div class="kh-header">
-            <div><h1 class="kh-title">Planlı Taramalar &amp; Bildirimler</h1><p class="kh-subtitle">Sorguları periyodik tara, yalnızca <em>yeni</em> bulguları tespit et, eşik üstünü webhook ile bildir</p></div>
-            <div class="kh-actions"><button class="kh-btn primary" onclick="KH.openModal('newModal')">{{icon "plus"}} Yeni Tarama Planla</button></div>
+{{template "doc" .}}
+<title>{{t .Lang "sch.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/scheduled.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "scheduled"}} {{t .Lang "sch.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "sch.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "sch.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <button type="button" class="kh-btn primary" data-action="sc-new" data-write>{{icon "plus"}} {{t .Lang "sch.new"}}</button>
+    </div>
+  </header>
+
+  {{/* ── Genel bildirim merkezi ───────────────────────────────────────── */}}
+  {{$cfg := .alertConfig}}
+  <section class="kh-card accent kh-section nc" id="alert-card" aria-labelledby="nc-title" data-on="{{if and $cfg $cfg.Enabled}}1{{else}}0{{end}}">
+    <div class="kh-card-title">
+      <span class="nc-icon">{{icon "bell"}}</span>
+      <span id="nc-title">{{t .Lang "sch.nc.title"}}</span>
+      <span class="hint">{{t .Lang "sch.nc.hint"}}</span>
+      <span class="end">
+        <span class="kh-badge ok nc-state-on"><span class="kh-dot up pulse"></span> {{t .Lang "sch.nc.on"}}</span>
+        <span class="kh-badge neutral nc-state-off">{{t .Lang "sch.nc.off"}}</span>
+      </span>
+    </div>
+    <form class="nc-form" id="alert-form" data-submit="alert-save" novalidate>
+      <div class="kh-field nc-url">
+        <label class="kh-label" for="alert-url">{{t .Lang "sch.nc.url"}}</label>
+        <div class="kh-input-icon">{{icon "webhook"}}<input class="kh-input mono" id="alert-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" placeholder="https://discord.com/api/webhooks/…" value="{{if $cfg}}{{$cfg.WebhookURL}}{{end}}"{{if not .CanWrite}} disabled{{end}}></div>
+        {{if and (not .IsAdmin) $cfg}}{{if $cfg.WebhookURL}}<span class="kh-hint">{{icon "lock"}} {{t .Lang "sch.nc.masked"}}</span>{{end}}{{end}}
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="alert-min">{{t .Lang "sch.nc.min"}}</label>
+        <select class="kh-select" id="alert-min"{{if not .CanWrite}} disabled{{end}}>
+          {{$m := 3}}{{if $cfg}}{{$m = $cfg.MinCriticality}}{{end}}
+          {{range $v := (seq 1 5)}}<option value="{{$v}}"{{if eq $v $m}} selected{{end}}>SEV {{$v}}+ · {{t $.Lang (printf "sch.sev%d" $v)}}</option>{{end}}
+        </select>
+      </div>
+      <div class="nc-foot">
+        <div class="nc-switch">
+          <button type="button" class="kh-switch" role="switch" id="alert-enabled" aria-checked="{{if and $cfg $cfg.Enabled}}true{{else}}false{{end}}" aria-labelledby="alert-enabled-l" data-action="toggle-switch"{{if not .CanWrite}} disabled aria-disabled="true"{{end}}></button>
+          <span id="alert-enabled-l">{{t .Lang "sch.nc.enable"}}</span>
+        </div>
+        <div class="kh-inline nc-btns" data-write>
+          <button type="button" class="kh-btn subtle" data-action="alert-test" data-busy-text="{{t .Lang "sch.nc.testing"}}">{{icon "webhook"}} {{t .Lang "sch.nc.test"}}</button>
+          <button type="submit" class="kh-btn primary" id="alert-save" data-busy-text="{{t .Lang "sch.saving"}}">{{icon "check"}} {{t .Lang "common.save"}}</button>
+        </div>
+      </div>
+    </form>
+    <p class="kh-hint nc-note">{{icon "shield"}} {{t .Lang "sch.nc.note"}}</p>
+  </section>
+
+  {{/* ── Planlı taramalar ─────────────────────────────────────────────── */}}
+  <section class="kh-section" aria-labelledby="sc-list-title">
+    <div class="sc-bar">
+      <h2 id="sc-list-title">{{icon "radar"}} {{t .Lang "sch.list"}}</h2>
+      <span class="kh-badge neutral mono" id="sc-count" {{if not .searches}}hidden{{end}}></span>
+      <span class="kh-badge ok" id="sc-active" {{if not .searches}}hidden{{end}}></span>
+      <span class="sc-next kh-muted text-xs" id="sc-next"></span>
+    </div>
+
+    <div class="sc-grid" id="sc-grid">
+      {{range .searches}}
+      <article class="kh-card sc-card{{if not .Enabled}} is-paused{{end}}" id="sc-{{.ID}}" data-id="{{.ID}}">
+        <header class="sc-head">
+          <div class="min-w-0">
+            <h3 class="sc-query" title="{{.Query}}">{{.Query}}</h3>
+            <div class="sc-badges">
+              <span class="kh-badge ok st-on"><span class="kh-dot up pulse"></span> {{t $.Lang "sch.active"}}</span>
+              <span class="kh-badge neutral st-off">{{icon "pause"}} {{t $.Lang "sch.paused"}}</span>
+              <span class="kh-badge sev-{{.AlertThreshold}}" title="{{t $.Lang "sch.thresholdTip"}}">SEV {{.AlertThreshold}}+</span>
+              {{if .WebhookURL}}<span class="kh-badge violet" title="{{t $.Lang "sch.ownHookTip"}}">{{icon "webhook"}} {{t $.Lang "sch.ownHook"}}</span>{{end}}
+            </div>
+          </div>
+          <button type="button" class="kh-switch" role="switch" aria-checked="{{if .Enabled}}true{{else}}false{{end}}" aria-label="{{t $.Lang "sch.toggle"}}: {{.Query}}" data-action="sc-toggle" data-id="{{.ID}}" data-write></button>
+        </header>
+
+        <div class="sc-interval">{{icon "refresh"}} <span data-interval="{{.IntervalMinutes}}">{{.IntervalMinutes}} dk</span></div>
+
+        <div class="sc-stats">
+          <div class="sc-stat"><b data-countup data-k="runs">{{.TotalRuns}}</b><span>{{t $.Lang "sch.runs"}}</span></div>
+          <div class="sc-stat tone-primary"><b data-countup data-k="last">{{.LastResultCount}}</b><span>{{t $.Lang "sch.lastResults"}}</span></div>
+          <div class="sc-stat{{if gt .LastNewCount 0}} tone-ok{{end}}" data-k="newbox"><b data-countup data-k="new">{{.LastNewCount}}</b><span>{{t $.Lang "sch.lastNew"}}</span></div>
         </div>
 
-        <section class="kh-card accent" style="margin-bottom:18px" id="alert-card">
-            <div class="kh-card-title">{{icon "bell"}} Genel Bildirim Merkezi <span class="hint">tüm manuel ve planlı aramalar için tek webhook</span></div>
-            <div class="kh-grid cols-3" style="align-items:end">
-                <div class="kh-field" style="grid-column: span 2"><label class="kh-label">Webhook URL (Slack / Discord / Teams / özel)</label><input class="kh-input mono" id="alert-url" placeholder="https://discord.com/api/webhooks/…" value="{{if .alertConfig}}{{.alertConfig.WebhookURL}}{{end}}"></div>
-                <div class="kh-field"><label class="kh-label">Minimum kritiklik</label><select class="kh-select" id="alert-min">{{$m := 3}}{{if .alertConfig}}{{$m = .alertConfig.MinCriticality}}{{end}}{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $m}}selected{{end}}>Seviye {{$v}}+</option>{{end}}</select></div>
-            </div>
-            <div class="kh-inline" style="margin-top:12px;justify-content:space-between">
-                <label class="kh-inline" style="cursor:pointer"><span class="kh-switch {{if and .alertConfig .alertConfig.Enabled}}on{{end}}" id="alert-enabled" role="switch" onclick="this.classList.toggle('on')"></span><span style="font-size:.86rem">Bildirimleri etkinleştir</span></label>
-                <div class="kh-inline"><button class="kh-btn subtle" onclick="testAlert()">{{icon "webhook"}} Test Gönder</button><button class="kh-btn primary" onclick="saveAlert(this)">Kaydet</button></div>
-            </div>
-            <p class="kh-hint" style="margin-top:8px">Yalnızca genel (dahili olmayan) http(s) adresleri kabul edilir; yönlendirme takip edilmez. Bildirimler eşik üstü <strong>yeni</strong> bulgular varsa gönderilir.</p>
-        </section>
+        <dl class="sc-times">
+          <div><dt>{{icon "clock"}} {{t $.Lang "sch.lastRun"}}</dt><dd data-k="lastRun"{{if .LastRunAt}} data-ago="{{isoTime .LastRunAt}}"{{end}}>{{if .LastRunAt}}{{formatTime .LastRunAt}}{{else}}{{t $.Lang "sch.never"}}{{end}}</dd></div>
+          <div><dt>{{icon "arrow-right"}} {{t $.Lang "sch.nextRun"}}</dt><dd data-k="nextRun" class="c-primary"{{if .NextRunAt}} data-ago="{{isoTime .NextRunAt}}"{{end}}>{{if .NextRunAt}}{{formatTime .NextRunAt}}{{else}}—{{end}}</dd></div>
+        </dl>
 
-        <div id="schedulesContainer">
-            {{if .searches}}
-            <div class="kh-grid auto" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr))">
-                {{range .searches}}
-                <div class="kh-card sc-card {{if not .Enabled}}disabled{{end}}" id="sc-{{.ID}}">
-                    <div class="kh-inline" style="justify-content:space-between;align-items:flex-start">
-                        <div><div class="sc-query">{{.Query}}</div><div class="kh-inline" style="margin-top:6px">{{if .Enabled}}<span class="kh-badge ok">● aktif</span>{{else}}<span class="kh-badge neutral">⏸ durduruldu</span>{{end}}{{if .WebhookURL}}<span class="kh-badge info" title="Tarama-özel webhook"></span>{{end}}<span class="kh-badge sev-{{.AlertThreshold}}">eşik {{.AlertThreshold}}+</span></div></div>
-                        <div style="text-align:right;font-size:.78rem;color:var(--text-muted)">her <strong style="color:var(--accent-primary)">{{.IntervalMinutes}} dk</strong></div>
-                    </div>
-                    <div class="sc-stats">
-                        <div class="sc-stat"><div class="v">{{.TotalRuns}}</div><div class="l">çalışma</div></div>
-                        <div class="sc-stat"><div class="v" style="color:var(--accent-primary)">{{.LastResultCount}}</div><div class="l">son sonuç</div></div>
-                        <div class="sc-stat"><div class="v" style="{{if gt .LastNewCount 0}}color:#68d391{{end}}">{{.LastNewCount}}</div><div class="l">son yeni</div></div>
-                    </div>
-                    <div class="sc-meta">
-                        <span>⏱ Son: {{if .LastRunAt}}{{formatTime .LastRunAt}}{{else}}henüz çalışmadı{{end}}</span>
-                        {{if .NextRunAt}}<span>⏭ Sonraki: <span class="kh-mono" style="color:var(--accent-primary)">{{formatTime .NextRunAt}}</span></span>{{end}}
-                    </div>
-                    <div class="sc-actions">
-                        <button class="kh-btn sm ghost" onclick="runNow({{.ID}}, this)">{{icon "play"}} Şimdi</button>
-                        <button class="kh-btn sm {{if .Enabled}}warn{{else}}success{{end}}" onclick="toggleSchedule({{.ID}})">{{if .Enabled}}{{icon "pause"}} Durdur{{else}}{{icon "play"}} Aktif Et{{end}}</button>
-                        <a class="kh-btn sm subtle" href="/results?q={{.Query}}">Bulgular</a>
-                        <button class="kh-btn sm danger" style="margin-left:auto" onclick="deleteSchedule({{.ID}}, {{.Query}})">Sil</button>
-                    </div>
-                </div>
-                {{end}}
-            </div>
-            {{else}}
-            <section class="kh-card"><div class="kh-empty"><div class="icon">{{icon "scheduled"}}</div><h3>Henüz planlı tarama yok</h3><p>Bir sorguyu düzenli aralıklarla taratın; yeni bulgular diff ile tespit edilir ve eşik üstü olanlar bildirilir.</p><button class="kh-btn primary" style="margin-top:12px" onclick="KH.openModal('newModal')">{{icon "plus"}} İlk Taramayı Planla</button></div></section>
-            {{end}}
+        <footer class="sc-actions">
+          <button type="button" class="kh-btn sm ghost" data-action="sc-run" data-id="{{.ID}}" data-busy-text="{{t $.Lang "sch.starting"}}" data-write>{{icon "play"}} {{t $.Lang "sch.runNow"}}</button>
+          <a class="kh-btn sm subtle" href="/results?q={{.Query}}">{{icon "results"}} {{t $.Lang "sch.findings"}}</a>
+          <button type="button" class="kh-btn sm icon danger ml-auto" data-action="sc-delete" data-id="{{.ID}}" data-name="{{.Query}}" aria-label="{{t $.Lang "common.delete"}}: {{.Query}}" data-tip="{{t $.Lang "common.delete"}}" data-write>{{icon "trash"}}</button>
+        </footer>
+      </article>
+      {{end}}
+    </div>
+
+    <div class="kh-card sc-empty" id="sc-empty"{{if .searches}} hidden{{end}}>
+      <div class="kh-empty">
+        <div class="icon">{{icon "scheduled"}}</div>
+        <h3>{{t .Lang "sch.empty"}}</h3>
+        <p>{{t .Lang "sch.emptyS"}}</p>
+        <div class="kh-inline"><button type="button" class="kh-btn primary" data-action="sc-new" data-write>{{icon "plus"}} {{t .Lang "sch.emptyCta"}}</button></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="kh-alert info">{{icon "info"}}<span>{{t .Lang "sch.info"}}</span></div>
+</main>
+
+<div class="kh-modal-overlay" id="new-modal">
+  <div class="kh-modal" role="dialog" aria-modal="true" aria-labelledby="new-modal-t">
+    <button type="button" class="kh-iconbtn kh-modal-x" data-action="modal-close" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+    <h2 id="new-modal-t">{{icon "scheduled"}} {{t .Lang "sch.m.title"}}</h2>
+    <p class="lead">{{t .Lang "sch.m.lead"}}</p>
+    <form id="new-form" data-submit="sc-create" novalidate>
+      <div class="kh-modal-body">
+        <div class="kh-field">
+          <label class="kh-label" for="new-query">{{t .Lang "sch.m.query"}} <span class="req">*</span></label>
+          <div class="kh-input-icon">{{icon "search"}}<input class="kh-input" id="new-query" required maxlength="200" autocomplete="off" placeholder="{{t .Lang "sch.m.queryPh"}}" autofocus></div>
         </div>
-        <div class="kh-alert info" style="margin-top:16px"><span></span><div>Zamanlayıcı her dakika süresi gelen taramaları kontrol eder; aynı anda <strong>tek</strong> tarama çalışır (Tor kaynak koruması). "Şimdi" çalıştırma da bu kuyruğa uyar. Sonuçlar Bulgular ekranına eklenir, yalnızca daha önce görülmemiş URL'ler "yeni" sayılır.</div></div>
-    </main>
-
-    <div class="kh-modal-overlay" id="newModal"><div class="kh-modal">
-        <h2>⏰ Yeni Planlı Tarama</h2>
-        <form onsubmit="createSchedule(event)" style="display:grid;gap:14px">
-            <div class="kh-field"><label class="kh-label">Arama sorgusu <span class="req">*</span></label><input class="kh-input" id="newQuery" placeholder="örn: şirketadı, tc kimlik, ransomware türkiye" required maxlength="200"></div>
-            <div class="kh-field"><label class="kh-label">Aralık (dakika)</label><input class="kh-input" type="number" id="newInterval" value="60" min="5" max="1440">
-                <div class="presets">{{range $m := (split "15,60,360,720,1440" ",")}}<button type="button" class="kh-chip" onclick="setIntervalPreset(this, {{$m}})">{{$m}} dk</button>{{end}}</div>
-                <span class="kh-hint">5–1440 dakika. 15 dakikanın altı Tor bağlantısını yorar.</span></div>
-            <div class="kh-field"><label class="kh-label">Uyarı eşiği</label><select class="kh-select" id="newThreshold"><option value="1">Seviye 1+ (her şey)</option><option value="2">Seviye 2+</option><option value="3" selected>Seviye 3+ (önerilen)</option><option value="4">Seviye 4+</option><option value="5">Sadece Seviye 5</option></select></div>
-            <div class="kh-field"><label class="kh-label">Tarama-özel webhook (opsiyonel)</label><input class="kh-input mono" type="url" id="newWebhook" placeholder="https://hooks.slack.com/…"><span class="kh-hint">Boş bırakılırsa yalnızca genel bildirim merkezi kullanılır.</span></div>
-            <div class="kh-modal-actions"><button type="button" class="kh-btn subtle" onclick="KH.closeModal('newModal')">Vazgeç</button><button type="submit" class="kh-btn primary" id="createBtn">Planla</button></div>
-        </form>
-    </div></div>
-
-    <script>
-        function setIntervalPreset(btn, m) { document.getElementById('newInterval').value = m; document.querySelectorAll('.presets .kh-chip').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-        async function createSchedule(e) {
-            e.preventDefault(); const btn = document.getElementById('createBtn'); KH.busy(btn, true, 'Oluşturuluyor…');
-            try { await KH.api('/api/scheduled', { method: 'POST', body: { query: document.getElementById('newQuery').value.trim(), intervalMinutes: parseInt(document.getElementById('newInterval').value), alertThreshold: parseInt(document.getElementById('newThreshold').value), webhookUrl: document.getElementById('newWebhook').value.trim() } }); KH.toast('Tarama planlandı', 'ok'); setTimeout(() => location.reload(), 500); }
-            catch (err) { KH.toast(err.message, 'err'); KH.busy(btn, false); }
-        }
-        async function toggleSchedule(id) { try { const d = await KH.api('/api/scheduled/' + id + '/toggle', { method: 'POST', body: {} }); KH.toast(d.enabled ? 'Aktif edildi' : 'Durduruldu', 'ok'); setTimeout(() => location.reload(), 400); } catch (e) { KH.toast(e.message, 'err'); } }
-        async function deleteSchedule(id, q) {
-            if (!await KH.confirm({ title: 'Planlı taramayı sil', message: '"' + q + '" taraması silinecek. Bulgular korunur.', okText: 'Sil', danger: true })) return;
-            try { await fetch('/api/scheduled/' + id, { method: 'DELETE' }).then(r => { if (!r.ok) throw new Error('Silinemedi'); }); document.getElementById('sc-' + id)?.remove(); KH.toast('Silindi', 'ok'); if (!document.querySelector('.sc-card')) location.reload(); } catch (e) { KH.toast(e.message, 'err'); }
-        }
-        async function runNow(id, btn) {
-            KH.busy(btn, true, 'Başlatılıyor…');
-            try { await KH.api('/api/scheduled/' + id + '/run-now', { method: 'POST', body: {} }); KH.toast('Tarama başlatıldı — bitince bulgular ve sayaçlar güncellenir', 'ok'); setTimeout(() => location.reload(), 4000); }
-            catch (e) { KH.toast(e.status === 409 ? 'Başka bir tarama sürüyor; bitince tekrar deneyin' : e.message, 'warn'); }
-            finally { KH.busy(btn, false); }
-        }
-        async function saveAlert(btn) {
-            KH.busy(btn, true, 'Kaydediliyor…');
-            try { await KH.api('/api/alert-config', { method: 'POST', body: { webhookUrl: document.getElementById('alert-url').value.trim(), minCriticality: parseInt(document.getElementById('alert-min').value), enabled: document.getElementById('alert-enabled').classList.contains('on') } }); KH.toast('Bildirim ayarları kaydedildi', 'ok'); }
-            catch (e) { KH.toast(e.message, 'err'); } finally { KH.busy(btn, false); }
-        }
-        async function testAlert() {
-            const url = document.getElementById('alert-url').value.trim(); if (!url) { KH.toast('Önce webhook adresi girin', 'warn'); return; }
-            try { await KH.api('/api/alert-config/test', { method: 'POST', body: { webhookUrl: url } }); KH.toast('Test bildirimi gönderildi — kanalı kontrol edin', 'ok'); } catch (e) { KH.toast(e.message, 'err'); }
-        }
-        if (location.hash === '#new') KH.openModal('newModal');
-    </script>
+        <div class="kh-field">
+          <span class="kh-label" id="new-interval-l">{{t .Lang "sch.m.interval"}}</span>
+          <div class="sc-interval-pick">
+            <div class="kh-segment" role="group" aria-labelledby="new-interval-l" id="interval-presets">
+              <button type="button" data-action="sc-preset" data-min="15" aria-pressed="false">15 {{t .Lang "sch.u.min"}}</button>
+              <button type="button" data-action="sc-preset" data-min="60" aria-pressed="true">1 {{t .Lang "sch.u.hour"}}</button>
+              <button type="button" data-action="sc-preset" data-min="360" aria-pressed="false">6 {{t .Lang "sch.u.hour"}}</button>
+              <button type="button" data-action="sc-preset" data-min="720" aria-pressed="false">12 {{t .Lang "sch.u.hour"}}</button>
+              <button type="button" data-action="sc-preset" data-min="1440" aria-pressed="false">24 {{t .Lang "sch.u.hour"}}</button>
+            </div>
+            <div class="sc-interval-num">
+              <input class="kh-input mono" type="number" id="new-interval" value="60" min="5" max="1440" step="1" data-input="sc-interval" aria-describedby="new-interval-h" aria-label="{{t .Lang "sch.m.intervalMin"}}">
+              <span class="kh-muted text-sm">{{t .Lang "sch.u.min"}}</span>
+            </div>
+          </div>
+          <span class="kh-hint" id="new-interval-h">{{t .Lang "sch.m.intervalHint"}}</span>
+        </div>
+        <div class="kh-form-grid">
+          <div class="kh-field">
+            <label class="kh-label" for="new-threshold">{{t .Lang "sch.m.threshold"}}</label>
+            <select class="kh-select" id="new-threshold">
+              {{range $v := (seq 1 5)}}<option value="{{$v}}"{{if eq $v 3}} selected{{end}}>SEV {{$v}}+ · {{t $.Lang (printf "sch.sev%d" $v)}}</option>{{end}}
+            </select>
+          </div>
+        </div>
+        <div class="kh-field">
+          <label class="kh-label" for="new-webhook">{{t .Lang "sch.m.webhook"}} <span class="opt">({{t .Lang "sch.optional"}})</span></label>
+          <div class="kh-input-icon">{{icon "webhook"}}<input class="kh-input mono" type="text" inputmode="url" id="new-webhook" maxlength="2048" autocomplete="off" spellcheck="false" placeholder="https://hooks.slack.com/…"></div>
+          <span class="kh-hint">{{t .Lang "sch.m.webhookHint"}}</span>
+        </div>
+      </div>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.cancel"}}</button>
+        <button type="submit" class="kh-btn primary" id="new-submit" data-busy-text="{{t .Lang "sch.m.creating"}}">{{icon "check"}} {{t .Lang "sch.m.submit"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{template "shell_end" .}}
+<script src="/static/js/pages/scheduled.js?v={{version}}" defer></script>
 </body>
 </html>

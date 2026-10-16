@@ -735,3 +735,13 @@ details.kh-details[open] > summary::before { transform: rotate(90deg); }
 
 /* Tam ekran sayfalar (harita) altbilgi göstermez */
 .kh-main:has(.kh-page.full) > .kh-footer { display: none; }
+
+/* Form doğrulama durumları */
+.kh-input.is-invalid, .kh-select.is-invalid, .kh-textarea.is-invalid { border-color: var(--err); box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 14%, transparent); }
+.kh-input.is-valid { border-color: color-mix(in srgb, var(--ok) 60%, var(--border-strong)); }
+/* Sağ kenardaki ipuçları taşmasın */
+[data-tip][data-tip-end]::after { left: auto; right: 0; transform: translateY(4px); }
+[data-tip][data-tip-end]:hover::after, [data-tip][data-tip-end]:focus-visible::after { transform: none; }
+/* Filtre olarak kullanılan istatistik kutusu */
+button.kh-stat { display: block; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+button.kh-stat[aria-pressed="true"] { border-color: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent); }

@@ -502,7 +502,7 @@ func (s *Server) setupRoutes() {
 		protected.POST("/search", s.requireRole("analyst"), s.csrfMiddleware(), s.handleSearch)
 		protected.GET("/results", s.handleResults)
 		protected.GET("/results/graph", s.handleResultsGraph)
-		protected.GET("/settings", s.handleSettingsPage)
+		protected.GET("/settings", s.requireRole("admin"), s.handleSettingsPage)
 		protected.GET("/scheduled", s.handleScheduledPage)
 		protected.GET("/watchlist", s.handleWatchlistPage)
 		protected.GET("/monitor", s.handleMonitorPage)

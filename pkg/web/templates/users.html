@@ -1,70 +1,113 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Kullanıcılar</title>
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page" style="max-width:1100px">
-        <div class="kh-header">
-            <div><h1 class="kh-title">Kullanıcılar &amp; Roller</h1><p class="kh-subtitle">Ekip erişimini yönetin: <strong>admin</strong> (tam yetki + yönetim), <strong>analist</strong> (arama/etiketleme/örümcek/izleme), <strong>izleyici</strong> (salt-okunur)</p></div>
-            <div class="kh-actions"><button class="kh-btn primary" onclick="KH.openModal('newUser')">{{icon "plus"}} Yeni Kullanıcı</button></div>
+{{template "doc" .}}
+<title>{{t .Lang "usr.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/users.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page narrow">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "shield"}} {{t .Lang "usr.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "usr.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "usr.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <button type="button" class="kh-btn primary" data-action="u-new">{{icon "plus"}} {{t .Lang "usr.new"}}</button>
+    </div>
+  </header>
+
+  <section class="kh-grid cols-3 kh-section u-stats" aria-label="{{t .Lang "usr.roles"}}">
+    <div class="kh-stat red">
+      <div class="label">{{t .Lang "role.admin"}}</div>
+      <div class="value" id="c-admin">—</div>
+      <div class="sub">{{t .Lang "usr.r.adminS"}}</div>
+      <div class="icon">{{icon "key"}}</div>
+    </div>
+    <div class="kh-stat blue">
+      <div class="label">{{t .Lang "role.analyst"}}</div>
+      <div class="value" id="c-analyst">—</div>
+      <div class="sub">{{t .Lang "usr.r.analystS"}}</div>
+      <div class="icon">{{icon "search"}}</div>
+    </div>
+    <div class="kh-stat purple">
+      <div class="label">{{t .Lang "role.viewer"}}</div>
+      <div class="value" id="c-viewer">—</div>
+      <div class="sub">{{t .Lang "usr.r.viewerS"}}</div>
+      <div class="icon">{{icon "eye"}}</div>
+    </div>
+  </section>
+
+  <section class="kh-card flush kh-section" aria-labelledby="u-list-t">
+    <div class="kh-card-head">
+      <h2 id="u-list-t">{{icon "user"}} {{t .Lang "usr.team"}} <span class="kh-badge neutral mono" id="u-count">…</span></h2>
+      <div class="end"><div class="kh-input-icon u-filter">{{icon "filter"}}<input class="kh-input sm" id="u-filter" type="search" placeholder="{{t .Lang "usr.filterPh"}}" aria-label="{{t .Lang "common.filter"}}" data-input="u-filter"></div></div>
+    </div>
+    <div class="kh-table-wrap">
+      <table class="kh-table u-table">
+        <thead><tr>
+          <th>{{t .Lang "usr.c.user"}}</th>
+          <th>{{t .Lang "usr.c.role"}}</th>
+          <th>{{t .Lang "common.status"}}</th>
+          <th>{{t .Lang "usr.c.lastLogin"}}</th>
+          <th class="hide-sm">{{t .Lang "usr.c.created"}}</th>
+          <th class="right">{{t .Lang "common.actions"}}</th>
+        </tr></thead>
+        <tbody id="users-body">
+          <tr><td colspan="6"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="kh-alert info">{{icon "shield"}}<span>{{t .Lang "usr.info"}}</span></div>
+</main>
+
+<div class="kh-modal-overlay" id="user-modal">
+  <div class="kh-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-t">
+    <button type="button" class="kh-iconbtn kh-modal-x" data-action="modal-close" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+    <h2 id="user-modal-t">{{icon "user"}} {{t .Lang "usr.m.title"}}</h2>
+    <p class="lead">{{t .Lang "usr.m.lead"}}</p>
+    <form id="user-form" data-submit="u-create" novalidate>
+      <div class="kh-modal-body">
+        <div class="kh-field">
+          <label class="kh-label" for="u-name">{{t .Lang "usr.m.username"}} <span class="req">*</span></label>
+          <div class="kh-input-icon">{{icon "user"}}<input class="kh-input" id="u-name" minlength="3" maxlength="64" required autocomplete="off" autocapitalize="none" spellcheck="false" autofocus></div>
+          <span class="kh-hint">{{t .Lang "usr.m.usernameHint"}}</span>
         </div>
-        <section class="kh-card flush">
-            <div class="kh-table-wrap"><table class="kh-table">
-                <thead><tr><th>Kullanıcı</th><th>Rol</th><th>Durum</th><th>Son Giriş</th><th>Oluşturma</th><th style="text-align:right">İşlemler</th></tr></thead>
-                <tbody id="users-body"><tr><td colspan="6"><div class="kh-skel"></div></td></tr></tbody>
-            </table></div>
-        </section>
-        <div class="kh-alert info" style="margin-top:16px"><span>{{icon "shield"}}</span><div>Parolalar bcrypt ile saklanır. Rol veya parola değiştiğinde ilgili kullanıcının diğer oturumları anında kapanır. Son etkin admin düşürülemez, pasifleştirilemez veya silinemez.</div></div>
-    </main>
-
-    <div class="kh-modal-overlay" id="newUser"><div class="kh-modal">
-        <h2>{{icon "user"}} Yeni Kullanıcı</h2>
-        <form onsubmit="createUser(event)" style="display:grid;gap:14px">
-            <div class="kh-field"><label class="kh-label">Kullanıcı adı</label><input class="kh-input" id="u-name" minlength="3" maxlength="64" required autocomplete="off"></div>
-            <div class="kh-field"><label class="kh-label">Parola</label><input class="kh-input" id="u-pass" type="password" minlength="8" required autocomplete="new-password"></div>
-            <div class="kh-field"><label class="kh-label">Rol</label><select class="kh-select" id="u-role"><option value="analyst">Analist — arama, etiketleme, örümcek, izleme (yazma)</option><option value="viewer">İzleyici — salt-okunur</option><option value="admin">Admin — tam yetki + yönetim</option></select></div>
-            <div class="kh-modal-actions"><button type="button" class="kh-btn subtle" onclick="KH.closeModal('newUser')">Vazgeç</button><button type="submit" class="kh-btn primary" id="u-submit">Oluştur</button></div>
-        </form>
-    </div></div>
-
-    <script>
-        const roleBadge = { admin: 'err', analyst: 'info', viewer: 'neutral' };
-        const roleLabel = { admin: 'Admin', analyst: 'Analist', viewer: 'İzleyici' };
-        let me = '';
-        function render(users) {
-            document.getElementById('users-body').innerHTML = users.length ? users.map(u => {
-                const self = u.username.toLowerCase() === me.toLowerCase();
-                return `<tr>
-                    <td><span class="kh-mono" style="font-weight:600">${KH.esc(u.username)}</span>${self ? ' <span class="kh-badge neutral">siz</span>' : ''}</td>
-                    <td><select class="kh-select sm" style="width:120px" onchange="setRole(${u.id}, this.value)" ${self ? 'disabled title="Kendi rolünüzü değiştiremezsiniz"' : ''}>
-                        ${['admin','analyst','viewer'].map(r => `<option value="${r}" ${u.role===r?'selected':''}>${roleLabel[r]}</option>`).join('')}
-                    </select></td>
-                    <td><span class="kh-badge ${u.enabled?'ok':'neutral'}">${u.enabled?'etkin':'pasif'}</span></td>
-                    <td class="muted kh-mono" style="font-size:.74rem">${u.lastLoginAt && new Date(u.lastLoginAt).getFullYear()>1971 ? KH.ago(u.lastLoginAt) : '—'}</td>
-                    <td class="muted kh-mono" style="font-size:.74rem">${KH.fmtTime(u.createdAt)}</td>
-                    <td style="text-align:right;white-space:nowrap">
-                        <button class="kh-btn xs subtle" onclick="resetPass(${u.id}, '${KH.esc(u.username)}')">Parola</button>
-                        <button class="kh-btn xs subtle" onclick="toggleUser(${u.id}, ${!u.enabled})" ${self?'disabled':''}>${u.enabled?'Pasifleştir':'Etkinleştir'}</button>
-                        <button class="kh-btn xs danger" onclick="delUser(${u.id}, '${KH.esc(u.username)}')" ${self?'disabled':''}>Sil</button>
-                    </td>
-                </tr>`;
-            }).join('') : '<tr><td colspan="6"><div class="kh-empty"><div class="icon">{{icon "user"}}</div><h3>Kullanıcı yok</h3></div></td></tr>';
-        }
-        function load() { KH.api('/api/users').then(d => { me = d.me || ''; render(d.users || []); }).catch(e => document.getElementById('users-body').innerHTML = '<tr><td colspan="6" class="kh-alert err">'+KH.esc(e.message)+'</td></tr>'); }
-        async function createUser(e) {
-            e.preventDefault(); const btn = document.getElementById('u-submit'); KH.busy(btn, true, 'Oluşturuluyor…');
-            try { await KH.api('/api/users', { method:'POST', body:{ username: document.getElementById('u-name').value.trim(), password: document.getElementById('u-pass').value, role: document.getElementById('u-role').value } });
-                KH.toast('Kullanıcı oluşturuldu','ok'); KH.closeModal('newUser'); document.getElementById('u-name').value=''; document.getElementById('u-pass').value=''; load();
-            } catch(err){ KH.toast(err.message,'err'); } finally { KH.busy(btn,false); }
-        }
-        async function setRole(id, role) { try { await KH.api('/api/users/'+id, { method:'POST', body:{ role } }); KH.toast('Rol güncellendi','ok'); load(); } catch(e){ KH.toast(e.message,'err'); load(); } }
-        async function toggleUser(id, enabled) { try { await KH.api('/api/users/'+id, { method:'POST', body:{ enabled } }); KH.toast(enabled?'Etkinleştirildi':'Pasifleştirildi','ok'); load(); } catch(e){ KH.toast(e.message,'err'); } }
-        async function resetPass(id, name) { const p = prompt('"'+name+'" için yeni parola (en az 8 karakter):'); if(!p) return; if(p.length<8){ KH.toast('En az 8 karakter','warn'); return; } try { await KH.api('/api/users/'+id, { method:'POST', body:{ password: p } }); KH.toast('Parola güncellendi; kullanıcının oturumları kapandı','ok'); } catch(e){ KH.toast(e.message,'err'); } }
-        async function delUser(id, name) { if(!await KH.confirm({ title:'Kullanıcıyı sil', message:'"'+name+'" ve oturumları silinecek.', okText:'Sil', danger:true })) return; try { await KH.api('/api/users/'+id+'/delete', { method:'POST', body:{} }); KH.toast('Silindi','ok'); load(); } catch(e){ KH.toast(e.message,'err'); } }
-        load();
-    </script>
+        <div class="kh-field">
+          <label class="kh-label" for="u-pass">{{t .Lang "usr.m.password"}} <span class="req">*</span></label>
+          <div class="kh-input-icon u-pw">{{icon "lock"}}<input class="kh-input" id="u-pass" type="password" minlength="8" maxlength="256" required autocomplete="new-password" data-input="u-strength">
+            <button type="button" class="kh-iconbtn u-eye" data-action="u-eye" data-target="u-pass" aria-label="{{t .Lang "usr.m.show"}}" aria-pressed="false">{{icon "eye"}}</button>
+          </div>
+          <div class="pw-meter" id="u-meter" data-level="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <span class="kh-hint" id="u-meter-l">{{t .Lang "usr.m.passwordHint"}}</span>
+        </div>
+        <fieldset class="u-roles">
+          <legend class="kh-label">{{t .Lang "usr.c.role"}}</legend>
+          <label class="u-role-opt r-analyst">
+            <input type="radio" name="u-role" value="analyst" checked>
+            <span class="u-role-ic">{{icon "search"}}</span>
+            <span class="u-role-txt"><b>{{t .Lang "role.analyst"}}</b><small>{{t .Lang "usr.r.analyst"}}</small></span>
+          </label>
+          <label class="u-role-opt r-viewer">
+            <input type="radio" name="u-role" value="viewer">
+            <span class="u-role-ic">{{icon "eye"}}</span>
+            <span class="u-role-txt"><b>{{t .Lang "role.viewer"}}</b><small>{{t .Lang "usr.r.viewer"}}</small></span>
+          </label>
+          <label class="u-role-opt r-admin">
+            <input type="radio" name="u-role" value="admin">
+            <span class="u-role-ic">{{icon "key"}}</span>
+            <span class="u-role-txt"><b>{{t .Lang "role.admin"}}</b><small>{{t .Lang "usr.r.admin"}}</small></span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.cancel"}}</button>
+        <button type="submit" class="kh-btn primary" id="u-submit" data-busy-text="{{t .Lang "usr.m.creating"}}">{{icon "check"}} {{t .Lang "usr.m.submit"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{template "shell_end" .}}
+<script src="/static/js/pages/users.js?v={{version}}" defer></script>
 </body>
 </html>

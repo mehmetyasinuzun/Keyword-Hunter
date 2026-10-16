@@ -1,0 +1,61 @@
+/* Kullanıcılar — avatar hücresi, rol renkleri, rol kartları, parola gücü */
+.u-filter { width: 200px; }
+.u-filter .kh-input { padding-left: 34px; }
+.u-filter > .ico { left: 11px; width: 14px; height: 14px; }
+@media (max-width: 560px) { .u-filter { width: 100%; } .kh-card-head .end { margin-left: 0; width: 100%; } }
+
+.u-table td { vertical-align: middle; }
+.u-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.u-av { --c: var(--primary); width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; font: 800 .74rem var(--font-sans); letter-spacing: .02em; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 34%, transparent); }
+.u-av.r-admin { --c: var(--err); } .u-av.r-analyst { --c: var(--sev-1); } .u-av.r-viewer { --c: var(--violet); }
+.is-self .u-av { background: var(--brand-grad); color: #fff; box-shadow: 0 0 0 2px var(--surface-solid), 0 0 0 3px var(--primary); }
+.u-name { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); max-width: 260px; }
+.u-sub { font-size: .68rem; color: var(--text-3); margin-top: 1px; }
+.u-table tr.is-disabled .u-cell, .u-table tr.is-disabled td:nth-child(4) { opacity: .55; }
+.u-table tr.is-self { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+
+.u-role-sel { width: 132px; font-weight: 650; }
+.u-role-sel.r-admin { color: var(--err); } .u-role-sel.r-analyst { color: var(--sev-1); } .u-role-sel.r-viewer { color: var(--violet); }
+.u-role-sel:disabled { opacity: .75; cursor: not-allowed; }
+.u-actions { opacity: .8; }
+.u-actions .kh-btn:last-child[data-tip]::after { left: auto; right: 0; transform: translateY(4px); }
+.u-actions .kh-btn:last-child[data-tip]:hover::after, .u-actions .kh-btn:last-child[data-tip]:focus-visible::after { transform: none; }
+.u-actions .kh-btn:disabled[data-tip] { pointer-events: auto; }
+
+/* Parola alanı */
+.u-pw .kh-input { padding-right: 46px; }
+.u-eye { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; }
+.u-eye[aria-pressed="true"] { color: var(--primary); }
+.pw-meter { --c: var(--border-strong); display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 2px; }
+.pw-meter i { height: 5px; border-radius: 999px; background: var(--surface-3); position: relative; overflow: hidden; }
+.pw-meter i::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--c); transform: scaleX(0); transform-origin: left; transition: transform var(--dur-3) var(--ease-out), background var(--dur-3); }
+.pw-meter[data-level="1"] { --c: var(--err); } .pw-meter[data-level="2"] { --c: var(--warn); } .pw-meter[data-level="3"] { --c: var(--ok); } .pw-meter[data-level="4"] { --c: var(--sev-2); }
+.pw-meter[data-level="1"] i:nth-child(-n+1)::after, .pw-meter[data-level="2"] i:nth-child(-n+2)::after,
+.pw-meter[data-level="3"] i:nth-child(-n+3)::after, .pw-meter[data-level="4"] i::after { transform: scaleX(1); }
+.pw-meter i:nth-child(2)::after { transition-delay: 40ms; } .pw-meter i:nth-child(3)::after { transition-delay: 80ms; } .pw-meter i:nth-child(4)::after { transition-delay: 120ms; }
+.pw-label.lv-1 { color: var(--err); } .pw-label.lv-2 { color: var(--warn); } .pw-label.lv-3 { color: var(--ok); } .pw-label.lv-4 { color: var(--sev-2); }
+
+/* Rol seçimi */
+.u-roles { border: 0; display: grid; gap: 8px; }
+.u-roles legend { margin-bottom: 8px; }
+.u-role-opt { --c: var(--primary); position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--surface-hover); cursor: pointer; transition: border-color var(--dur-2), background var(--dur-2), box-shadow var(--dur-2); }
+.u-role-opt.r-admin { --c: var(--err); } .u-role-opt.r-analyst { --c: var(--sev-1); } .u-role-opt.r-viewer { --c: var(--violet); }
+.u-role-opt:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--border-strong)); }
+.u-role-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.u-role-opt:has(input:checked) { border-color: var(--c); background: color-mix(in srgb, var(--c) 9%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 14%, transparent); }
+.u-role-opt:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.u-role-ic { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); }
+.u-role-txt { display: flex; flex-direction: column; min-width: 0; }
+.u-role-txt b { font-size: .88rem; color: var(--text); }
+.u-role-txt small { font-size: .76rem; color: var(--text-2); line-height: 1.4; }
+.u-role-opt::after { content: ''; margin-left: auto; width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid var(--border-strong); transition: border var(--dur-2), background var(--dur-2); }
+.u-role-opt:has(input:checked)::after { border: 5px solid var(--c); background: var(--surface-solid); }
+
+/* Mobil: rol sayaçları tek satırda, kompakt */
+@media (max-width: 720px) {
+  .kh-grid.u-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .u-stats .kh-stat { padding: 12px 12px; }
+  .u-stats .kh-stat .sub, .u-stats .kh-stat .icon { display: none; }
+  .u-stats .kh-stat .value { font-size: 1.5rem; margin-top: 4px; }
+  .u-stats .kh-stat .label { font-size: .6rem; letter-spacing: .06em; }
+}

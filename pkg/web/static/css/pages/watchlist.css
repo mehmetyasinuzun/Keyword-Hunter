@@ -1,0 +1,86 @@
+/* İzleme listesi — KPI süzgeçleri, ekleme formu, tablo hücreleri, görüntü zaman çizelgesi */
+
+/* KPI kutuları süzgeç düğmesidir */
+.wl-kpi { display: block; width: 100%; text-align: left; color: inherit; cursor: pointer; font: inherit; }
+.wl-kpi > span { display: block; }
+.wl-kpi .icon { display: grid; }
+.wl-kpi[aria-pressed="true"] { border-color: color-mix(in srgb, var(--tone) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent), var(--shadow-md); }
+
+/* Ekleme formu */
+.wl-add { display: grid; gap: 14px 16px; grid-template-columns: minmax(150px, 1.1fr) minmax(130px, .9fr) minmax(260px, 2.2fr) minmax(160px, 1.4fr) auto; align-items: start; }
+.wl-add-btn { padding-top: 26px; }
+.wl-add-btn .kh-btn { height: 40px; }
+.wl-url-msg { min-height: 1.1em; transition: color var(--dur-2); }
+.wl-url-msg.is-ok { color: var(--ok); }
+.wl-url-msg.is-err { color: var(--err); }
+.kh-input.is-invalid { border-color: var(--err); box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 14%, transparent); }
+.kh-input.is-valid { border-color: color-mix(in srgb, var(--ok) 60%, var(--border-strong)); }
+.kh-card-title + .wl-add { margin-top: -2px; }
+p.kh-hint .ico { width: 13px; height: 13px; vertical-align: -2px; }
+@media (max-width: 1200px) {
+  .wl-add { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wl-add .wl-url { grid-column: 1 / -1; grid-row: 2; }
+  .wl-add-btn { padding-top: 0; grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+}
+@media (max-width: 560px) {
+  .wl-add { grid-template-columns: minmax(0, 1fr); }
+  .wl-add .wl-url { grid-row: auto; }
+  .wl-add-btn .kh-btn { width: 100%; }
+}
+
+/* Tablo başlığı ve araçlar */
+.wl-head h2 .kh-badge { margin-left: 2px; }
+.wl-tools { flex-wrap: wrap; justify-content: flex-end; }
+.wl-tools .kh-segment .kh-dot { width: 7px; height: 7px; box-shadow: none; }
+.wl-filter { width: 220px; }
+.wl-filter .kh-input { padding-left: 34px; }
+.wl-filter > .ico { left: 11px; width: 14px; height: 14px; }
+@media (max-width: 1100px) {
+  .wl-head .end { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .wl-tools .kh-segment { overflow-x: auto; max-width: 100%; }
+  .wl-filter { flex: 1; min-width: 160px; }
+}
+
+/* Hücreler */
+.wl-table td { vertical-align: middle; }
+.wl-table tbody tr.is-paused > td:not(:last-child) { opacity: .5; }
+.wl-status { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.wl-site .title { max-width: 280px; }
+.wl-site .meta { flex-wrap: nowrap; max-width: 340px; gap: 6px; }
+.wl-site .meta .kh-badge { height: 19px; font-size: .62rem; padding: 0 7px; }
+.wl-table th, .wl-table td { padding-left: 12px; padding-right: 12px; }
+.wl-note { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--text-3); }
+.wl-lat { font-weight: 700; }
+.wl-code { display: block; font-size: .66rem; color: var(--text-3); margin-top: 2px; }
+.wl-up { --c: var(--ok); display: grid; grid-template-columns: 60px 3.4em; align-items: center; gap: 8px; font: 700 .76rem var(--font-mono); color: var(--c); }
+.wl-up.mid { --c: var(--warn); } .wl-up.bad { --c: var(--err); }
+.wl-up .kh-progress > div { width: 0; background: var(--c); transition: width 1s var(--ease-out); }
+.wl-actions { opacity: .8; }
+.wl-actions .kh-btn:last-child[data-tip]::after { left: auto; right: 0; transform: translateY(4px); }
+.wl-actions .kh-btn:last-child[data-tip]:hover::after, .wl-actions .kh-btn:last-child[data-tip]:focus-visible::after { transform: none; }
+
+/* Görüntü zaman çizelgesi */
+.wl-shot-sub { margin-bottom: 14px; }
+.wl-timeline { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.wl-timeline .kh-skel.block { margin: 0; height: 130px; }
+.wl-shot { display: flex; flex-direction: column; gap: 6px; animation: kh-rise var(--dur-4) var(--ease-out) both; }
+.wl-shot:nth-child(2) { animation-delay: 40ms; } .wl-shot:nth-child(3) { animation-delay: 80ms; } .wl-shot:nth-child(n+4) { animation-delay: 120ms; }
+.wl-shot a { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border); transition: border-color var(--dur-2), box-shadow var(--dur-2); }
+.wl-shot a:hover { border-color: var(--primary); box-shadow: var(--shadow-glow); }
+.wl-shot.latest a { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
+.wl-shot img { width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform .6s var(--ease-out); }
+.wl-shot a:hover img { transform: scale(1.05); }
+.wl-shot .wl-latest { position: absolute; left: 8px; top: 8px; background: var(--surface-solid); }
+.wl-shot .wl-chal { position: absolute; right: 8px; bottom: 8px; background: var(--surface-solid); }
+.wl-shot .cap { display: flex; justify-content: space-between; gap: 8px; font-size: .72rem; color: var(--text-2); padding: 0 2px; }
+.wl-shot .cap .kh-mono { color: var(--text-3); }
+
+/* Mobil: KPI kutuları 2×2 */
+@media (max-width: 720px) {
+  .kh-grid#wl-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  #wl-kpi .kh-stat { padding: 14px; }
+  #wl-kpi .kh-stat .icon { width: 30px; height: 30px; right: 10px; top: 10px; }
+  #wl-kpi .kh-stat .value { font-size: 1.6rem; }
+  #wl-kpi .kh-stat .label { font-size: .6rem; padding-right: 30px; }
+  #wl-kpi .kh-stat .sub { font-size: .7rem; }
+}
