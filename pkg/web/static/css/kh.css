@@ -432,7 +432,7 @@ svg.kh-theme-ico { display: none; }
 .kh-stat::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--tone), transparent); opacity: .7; }
 .kh-stat:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--tone) 35%, var(--border)); box-shadow: var(--shadow-md); }
 a.kh-stat { color: inherit; text-decoration: none !important; display: block; }
-.kh-stat .label { font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.kh-stat .label { padding-right: 46px; font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
 .kh-stat .value { font: 800 2rem/1.1 var(--font-mono); letter-spacing: -.03em; margin-top: 8px; color: var(--tone); font-variant-numeric: tabular-nums; }
 .kh-stat .sub { font-size: .78rem; color: var(--text-2); margin-top: 6px; }
 .kh-stat .icon { position: absolute; right: 16px; top: 16px; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, transparent); font-size: 1.15rem; }

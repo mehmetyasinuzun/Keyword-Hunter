@@ -1,5 +1,73 @@
 # Değişiklik Günlüğü
 
+## v0.15.0 — 2026-10-16 · "Nightwatch"
+
+Arayüzün baştan yeniden tasarımı, sıkı CSP'ye geçiş ve bu süreçte bulunan
+güvenlik/işlev hatalarının düzeltilmesi.
+
+### Arayüz ve deneyim
+- **Nightwatch tasarım sistemi** (`static/css/kh.css`): tek kaynaklı token'lar,
+  **açık / koyu / sistem teması** (sunucu tarafında `<html data-theme>` olarak
+  basılır; ilk boyamada doğru tema, yanıp sönme yok), bileşen kütüphanesi ve hareket
+  katmanı (sayfalar arası görünüm geçişleri, kademeli giriş, sayaç animasyonları,
+  imleç takipli ışık, iskelet yükleyiciler; `prefers-reduced-motion` tam desteklenir).
+- **Uygulama kabuğu:** 1440px'te iki satıra taşan 13 öğeli üst menü yerine gruplu,
+  daraltılabilir yan menü (mobilde çekmece), konum göstergeli üst bar, motor sağlığı
+  çipi, tema/dil düğmeleri ve kullanıcı menüsü (parola değiştirme, kısayollar, çıkış).
+- **Komut paleti** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd>) ve kısayol yardımı (<kbd>?</kbd>).
+- **Yeni marka işareti "Onion Reticle"**: Tor soğan katmanları + nişangah; animasyonlu
+  SVG (katmanlar çizilerek belirir, radar ping, tarama yayı). Favicon, giriş ekranı,
+  yan menü ve README banner'ı güncellendi.
+- **Tüm sayfalar yeniden yazıldı:** giriş (canlı radar, kilit geri sayımı, Caps Lock
+  uyarısı), panel, arama (canlı motor çipleri, durdurma), bulgular (12 sütunlu filtre,
+  toplu işlem çubuğu, mobilde kart görünümü), harita (tema duyarlı D3, cam paneller),
+  analiz (tema duyarlı Chart.js), planlı taramalar, izleme listesi, motorlar, örümcek,
+  kullanıcılar, ayarlar; markalı 404/403 sayfaları.
+- **Sunucu tarafı i18n:** dil, rol ve menü ilk baytta doğru gelir; çeviriler ekran
+  bazlı `pkg/i18n/catalog_*.go` dosyalarına ayrıldı (TR + EN eksiksiz).
+- Kullanılmayan 165 KB Tailwind derlemesi ve eski `app.css`/`graph.css`/`analytics.css`
+  kaldırıldı.
+
+### Güvenlik
+- **CSP sıkılaştırıldı: `script-src 'self'`** (`'unsafe-inline'` kaldırıldı). Şablonlarda
+  satır içi betik / `on*=` işleyici / `javascript:` URL'si yoktur; `templates_csp_test.go`
+  bunu her şablon ve JS dosyası için zorlar. Davranış `data-action` delegasyonu ile
+  bağlanır, sayfa verisi çalıştırılmayan JSON bloklarıyla taşınır.
+- **Enjeksiyon kalıpları kaldırıldı:** dark web ya da kullanıcı kaynaklı değerler
+  (sorgu, motor/iş adı, izleme sitesi adı/URL'si, kullanıcı adı, site profili host'u,
+  IOC değeri) satır içi `onclick` dizgilerine gömülüyordu; öznitelik içinde HTML kaçışı
+  çözüldüğü için tırnak içeren bir değer betik bağlamından çıkabiliyordu. Hepsi
+  `data-*` öznitelikleriyle değiştirildi.
+- **POST /search** artık CSRF token'ı ve en az analist rolü ister (önceden ikisi de
+  yoktu; izleyici rolü arama başlatabiliyordu).
+- **/settings sayfası yalnız admin** (rota + handler); önceden her rol URL ile açabiliyordu.
+- Menü rol bazında sunucuda süzülür (izleyici admin bağlantılarını HTML'de hiç almaz).
+- Tema çerezi doğrulanır (beyaz liste); webhook testi analist için kayıtlı URL'yi
+  kullanır, sır tarayıcıya taşınmaz; tohum/izleme URL'leri yalnız http(s) ise bağlantı olur.
+- `/api/expand`: geçersiz onion adresi Tor'a gitmeden 400 ile reddedilir.
+
+### Hata düzeltmeleri
+- Dışa aktarma (CSV/JSON/STIX) ve sayfalama bağlantıları filtreleri düşürüyordu
+  (html/template sorgu dizesindeki `&`/`=` karakterlerini kaçışlıyordu).
+- Etiketler `"a,b"` biçiminde saklandığında bölünmüyordu (`tags` şablon fonksiyonu).
+- Aramada SSE bağlanmadan istek başladığı için ilk motor olayları kayboluyordu.
+- Giriş sayfasında yanlış "Oturum süresi doldu" bildirimi çıkıyordu.
+- Başlangıç logunda dinleme adresi `http://localhost127.0.0.1:8080` olarak basılıyordu.
+- Haritada lejant renkleri düğümlerle uyuşmuyordu, kök etiketi dikey yazılıyordu,
+  yazı boyutu ayarı etkisizdi, bazı düğümler kontrollerin altında kalıyordu.
+- Motor aç/kapat anahtarı tek beyaz nokta olarak görünüyordu.
+- Çok baytlı (Türkçe) başlıklarla "izlemeye ekle" reddediliyordu.
+- Planlı tarama oluşturulduktan sonra modal yeniden açılıyordu; "şimdi çalıştır"
+  sonucu körlemesine yeniden yükleme yerine izlenerek güncellenir.
+
+### Proje
+- README yeniden yazıldı (TR) + `README.en.md`; tema duyarlı animasyonlu banner,
+  mimari diyagramı, ekran görüntüsü galerisi.
+- `docs/FRONTEND.md` (ön yüz sözleşmesi), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
+  issue/PR şablonları; CI'a JS sözdizimi kontrolü.
+- Yeni testler: CSP regresyonu, sunucu tarafı rol/tema/dil, hata sayfaları, arama
+  CSRF/rol, admin sayfa erişimi, log URL biçimi.
+
 ## v0.14.1 — 2026-09-19
 
 ### İç kalite / paranoya turu (yeni özellik yok)

@@ -52,6 +52,9 @@ gereken sözleşmeyi tanımlar.
 </html>
 ```
 
+Şablon yardımcıları: `t`, `pct` (dil duyarlı yüzde), `tags`, `truncate`, `formatTime`,
+`isoTime`, `initials`, `icon`. Hata sayfaları için `s.renderError(c, 404|403)`.
+
 Handler'lar `c.HTML` yerine **`s.render(c, status, "x.html", gin.H{...})`**
 çağırır; bu `Lang`, `Theme`, `User`, `Role`, `IsAdmin`, `CanWrite`, `CSRF`,
 `Nav`, `Crumb`, `I18n` alanlarını ekler. Menü yapısı `pkg/web/render.go`
@@ -94,7 +97,7 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 | `KH.openModal(id)` / `KH.closeModal(id)` | Odak tuzaklı modal |
 | `KH.esc`, `KH.html\`…\``, `KH.raw`, `KH.render(el, html)` | Güvenli HTML |
 | `KH.icon(name, cls)` | Sprite ikonu |
-| `KH.sev(n)`, `KH.tags(str)`, `KH.fmtTime`, `KH.ago`, `KH.num`, `KH.short` | Biçimleme |
+| `KH.sev(n)`, `KH.tags(str)`, `KH.fmtTime`, `KH.ago`, `KH.num`, `KH.short`, `KH.pctText(n)` | Biçimleme (dil duyarlı) |
 | `KH.busy(btn, on, text)` | Buton meşgul durumu |
 | `KH.data(id)` | `<script type="application/json">` sayfa verisi |
 | `KH.t(key)`, `KH.tr(tr, en)`, `KH.lang` | i18n |
@@ -111,7 +114,7 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 `kh-field/kh-label/kh-input/kh-select/kh-textarea/kh-hint/kh-check/kh-switch` ·
 `kh-form-grid` · `kh-table` (+`.num .center .right .muted .title .meta .link`) ·
 `kh-rowactions` · `kh-empty` · `kh-skel` · `kh-progress` (`.thin .active`) ·
-`kh-meter` · `kh-alert` (`.ok .warn .err .info`) · `kh-modal-overlay > kh-modal`
+`kh-meter` · `kh-menu` (`.at-cursor`) · `kh-alert` (`.ok .warn .err .info`) · `kh-modal-overlay > kh-modal`
 (`.sm .lg`) · `kh-ring` · `kh-feed` · `kh-log` · `kh-engine-chip` · `kh-kbd` ·
 `[data-tip]` ipucu · yardımcılar (`mt-*`, `mb-*`, `gap-*`, `flex`, `items-center`,
 `justify-between`, `text-xs`, `c-ok`, `c-sev-3`, …).

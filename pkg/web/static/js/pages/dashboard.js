@@ -41,7 +41,7 @@
                 '<div class="kh-inline mb-3"><span class="kh-badge ok">' + up + ' ' + KH.esc(T('ayakta', 'up')) + '</span><span class="kh-badge err">' + down + ' ' + KH.esc(T('kapalı', 'down')) + '</span><span class="kh-badge warn">' + blocked + ' ' + KH.esc(T('engel', 'blocked')) + '</span>' +
                 (changed ? '<span class="kh-badge info">' + changed + ' ' + KH.esc(T('değişti', 'changed')) + '</span>' : '') + '</div>' +
                 '<div class="kh-progress"><div data-bar="' + pct + '" style="width:0"></div></div>' +
-                '<div class="flex justify-between mt-2 text-xs kh-muted"><span>' + KH.esc(T('Erişilebilirlik', 'Availability')) + ' %' + pct + '</span><a href="/watchlist">' + KH.esc(T('Detay', 'Details')) + ' →</a></div>';
+                '<div class="flex justify-between mt-2 text-xs kh-muted"><span>' + KH.esc(T('Erişilebilirlik', 'Availability')) + ' ' + KH.pctText(pct) + '</span><a href="/watchlist">' + KH.esc(T('Detay', 'Details')) + ' →</a></div>';
             KH.enhance(box);
         }).catch(() => { box.innerHTML = '<p class="kh-hint">' + KH.esc(T('Alınamadı.', 'Unavailable.')) + '</p>'; });
     }

@@ -2,6 +2,7 @@ package web
 
 import (
 	"html/template"
+	"strconv"
 	"strings"
 	"time"
 
@@ -158,6 +159,13 @@ func templateFuncs() template.FuncMap {
 		},
 		"eq": func(a, b interface{}) bool {
 			return a == b
+		},
+		// pct yüzdeyi dile göre biçimler: TR "%60", EN "60%".
+		"pct": func(lang string, n int) string {
+			if lang == "en" {
+				return strconv.Itoa(n) + "%"
+			}
+			return "%" + strconv.Itoa(n)
 		},
 		// t çeviri anahtarını verilen dilde döndürür: {{t .Lang "nav.search"}}
 		"t": func(lang, key string) string { return i18n.T(lang, key) },

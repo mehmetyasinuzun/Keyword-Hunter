@@ -294,6 +294,8 @@
     KH.short = function (s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
     KH.num = function (n) { return Number(n || 0).toLocaleString(locale()); };
     KH.pct = function (a, b) { return b > 0 ? Math.round(a / b * 100) : 0; };
+    /** Yüzde metni dile göre: TR "%60", EN "60%" */
+    KH.pctText = function (n) { return KH.lang === 'en' ? n + '%' : '%' + n; };
     KH.debounce = function (fn, ms) { let t; return function () { const a = arguments, c = this; clearTimeout(t); t = setTimeout(() => fn.apply(c, a), ms || 200); }; };
 
     // ── Buton meşgul durumu ─────────────────────────────────────────────

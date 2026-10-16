@@ -55,7 +55,7 @@
         <a class="sev-cell s{{.Level}}" href="/results?minCriticality={{.Level}}" title="{{.Desc}}">
           <span class="n" data-countup>{{.Count}}</span>
           <span class="l">SEV {{.Level}}</span>
-          <span class="p">{{.Pct}}%</span>
+          <span class="p">{{pct $.Lang .Pct}}</span>
         </a>
         {{end}}
       </div>
@@ -75,11 +75,11 @@
     <div class="kh-card">
       <div class="kh-card-title">{{icon "lab"}} {{t .Lang "dash.health"}}</div>
       <div class="health">
-        <div class="kh-ring tone-{{.healthColor}}" data-ring="{{.healthScore}}"><span>%{{.healthScore}}</span></div>
+        <div class="kh-ring tone-{{.healthColor}}" data-ring="{{.healthScore}}"><span>{{pct .Lang .healthScore}}</span></div>
         <dl class="health-list">
-          <div><dt>{{t .Lang "dash.classified"}}</dt><dd>%{{.classificationRate}} <small>({{.classifiedCount}}/{{.totalResults}})</small></dd></div>
+          <div><dt>{{t .Lang "dash.classified"}}</dt><dd>{{pct .Lang .classificationRate}} <small>({{.classifiedCount}}/{{.totalResults}})</small></dd></div>
           <div><dt>{{t .Lang "dash.diversity"}}</dt><dd>{{.usedLevels}}/5</dd></div>
-          <div><dt>{{t .Lang "dash.highRiskRate"}}</dt><dd>%{{.highRiskRate}}</dd></div>
+          <div><dt>{{t .Lang "dash.highRiskRate"}}</dt><dd>{{pct .Lang .highRiskRate}}</dd></div>
           <div><dt>{{t .Lang "dash.generic"}}</dt><dd>{{.genelCount}}</dd></div>
         </dl>
       </div>
