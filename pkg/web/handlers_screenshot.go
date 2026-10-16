@@ -22,6 +22,7 @@ const captureMaxWait = 90 * time.Second
 // DB'ye 'error' kaydı düşülür — sessiz yutma yok.
 func (s *Server) handleCaptureNow(c *gin.Context) {
 	if s.capturer == nil || !s.capturer.Available() {
+		s.audit(c, "screenshot.capture", "", map[string]any{"error": "unavailable"}, false)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ekran görüntüsü bu ortamda kullanılamıyor (chromium yok)"})
 		return
 	}
@@ -37,6 +38,7 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 	}
 	req.TargetURL = strings.TrimSpace(req.TargetURL)
 	if !isCaptureURL(req.TargetURL) {
+		s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"error": "invalid_target"}, false)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Hedef yalnızca genel bir http(s) veya .onion adresi olabilir"})
 		return
 	}
@@ -50,6 +52,7 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 	shot, err := s.capturer.Capture(ctx, req.TargetURL)
 	if err != nil {
 		logger.Warn("Ekran görüntüsü hatası (%s): %v", req.TargetURL, err)
+		s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"source": req.Source, "error": "capture_failed"}, false)
 		_, _ = s.db.SaveScreenshot(storage.Screenshot{
 			TargetURL: req.TargetURL, Source: req.Source, RefID: req.RefID,
 			Status: "error", ErrorMsg: truncateErr(err.Error()),
@@ -67,9 +70,11 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 		TakenAt: shot.TakenAt,
 	})
 	if dbErr != nil {
+		s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"source": req.Source, "error": "internal"}, false)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Kayıt başarısız"})
 		return
 	}
+	s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"screenshotId": id, "source": req.Source, "sha256": shot.SHA256, "challenge": shot.Challenge}, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":       true,

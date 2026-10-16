@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
@@ -13,6 +14,10 @@ import (
 // DB veritabanı bağlantısı
 type DB struct {
 	conn *sql.DB
+
+	// auditMu denetim zincirine eklemeyi ve budamayı sıralar: her satırın
+	// prev_hash'i bir öncekinin hash'ine bağlı olduğundan iki ekleme yarışamaz.
+	auditMu sync.Mutex
 }
 
 // New yeni veritabanı bağlantısı oluşturur
@@ -238,6 +243,11 @@ func (db *DB) createTables() error {
 	// Vaka yönetimi sütunları (not + durum)
 	if err := db.EnsureCaseColumns(); err != nil {
 		return err
+	}
+
+	// Değiştirilemez (hash zincirli) denetim kaydı
+	if err := db.EnsureAuditSchema(); err != nil {
+		return fmt.Errorf("audit_events şeması başarısız: %w", err)
 	}
 
 	// Eski sürümlerin yazdığı, SQL tarafında parse edilemeyen zaman damgalarını normalize et

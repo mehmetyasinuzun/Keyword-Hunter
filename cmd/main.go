@@ -100,6 +100,8 @@ func main() {
 		TorProxy:       appConfig.TorProxy,
 		TorControlAddr: appConfig.TorControlAddr,
 		TorControlPass: appConfig.TorControlPass,
+
+		AuditRetentionDays: appConfig.AuditRetentionDays,
 	})
 	if err != nil {
 		logger.Error("Web server could not be initialized: %v", err)

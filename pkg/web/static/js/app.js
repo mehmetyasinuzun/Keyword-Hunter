@@ -510,7 +510,7 @@
         if (!o) {
             o = doc.createElement('div'); o.id = 'kh-kbd-help'; o.className = 'kh-modal-overlay';
             const rows = [
-                ['Ctrl / ⌘ + K', KH.t('kbd.palette')], ['/', KH.t('kbd.search')], ['G → D · R · H · A · P · I · C · M · U · Y', KH.t('kbd.goto')],
+                ['Ctrl / ⌘ + K', KH.t('kbd.palette')], ['/', KH.t('kbd.search')], ['G → D · R · H · A · P · I · C · M · U · L · Y', KH.t('kbd.goto')],
                 ['?', KH.t('kbd.help')], ['Esc', KH.t('kbd.close')]
             ];
             o.innerHTML = '<div class="kh-modal sm" role="dialog" aria-modal="true"><h2>' + KH.icon('keyboard') + KH.esc(KH.t('kbd.title')) + '</h2>' +
@@ -598,7 +598,7 @@
 
     // ── Klavye ──────────────────────────────────────────────────────────
     let gPending = false, gTimer = null;
-    const gMap = { d: '/dashboard', r: '/results', h: '/results/graph', a: '/analytics', s: '/search', p: '/scheduled', i: '/watchlist', m: '/monitor', c: '/crawl', u: '/users', y: '/settings' };
+    const gMap = { d: '/dashboard', r: '/results', h: '/results/graph', a: '/analytics', s: '/search', p: '/scheduled', i: '/watchlist', m: '/monitor', c: '/crawl', u: '/users', l: '/audit', y: '/settings' };
     doc.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); Palette.open(); return; }
         const tag = (e.target.tagName || '').toLowerCase();

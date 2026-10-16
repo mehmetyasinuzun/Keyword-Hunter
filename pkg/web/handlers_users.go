@@ -58,6 +58,7 @@ func (s *Server) handleUserCreate(c *gin.Context) {
 	}
 	u, err := s.db.CreateUser(req.Username, hash, req.Role)
 	if err != nil {
+		s.audit(c, "user.create", "user:"+req.Username, map[string]any{"role": req.Role, "error": auditErrKind(err, storage.ErrUserExists, "exists")}, false)
 		if err == storage.ErrUserExists {
 			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Bu kullanıcı adı zaten var"})
 			return
@@ -66,6 +67,7 @@ func (s *Server) handleUserCreate(c *gin.Context) {
 		return
 	}
 	logger.Info("USER CREATED: %s (rol: %s) — %s tarafından", u.Username, u.Role, c.GetString("username"))
+	s.audit(c, "user.create", "user:"+u.Username, map[string]any{"role": u.Role, "userId": u.ID}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true, "user": u})
 }
 
@@ -97,6 +99,7 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 		disabling := req.Enabled != nil && !*req.Enabled
 		if demoting || disabling {
 			if n, _ := s.db.CountAdmins(); n <= 1 {
+				s.audit(c, "user.update", "user:"+target.Username, map[string]any{"error": "last_admin", "demote": demoting, "disable": disabling}, false)
 				c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Son etkin admin düşürülemez/pasifleştirilemez"})
 				return
 			}
@@ -114,30 +117,49 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 			return
 		}
 		if err := s.db.UpdateUserPassword(id, hash); err != nil {
+			s.audit(c, "user.password.reset", "user:"+target.Username, map[string]any{"error": "internal"}, false)
 			respondInternalError(c, "UpdateUserPassword", err)
 			return
 		}
 		// Parola değişince o kullanıcının diğer oturumları düşer. Bu başarısız
 		// olursa eski oturumlar canlı kalır — sessizce yutulmamalı.
-		if _, err := s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE`, target.Username); err != nil {
+		revoked := int64(0)
+		if res, err := s.db.GetDBConn().Exec(`DELETE FROM sessions WHERE username = ? COLLATE NOCASE`, target.Username); err != nil {
 			logger.Error("SESSION REVOKE FAILED (parola sıfırlama, kullanıcı=%s): %v", target.Username, err)
+		} else {
+			revoked, _ = res.RowsAffected()
 		}
+		s.audit(c, "user.password.reset", "user:"+target.Username, map[string]any{"userId": target.ID, "sessionsRevoked": revoked}, true)
 	}
+	changes := map[string]any{"userId": target.ID}
 	if req.Role != nil {
 		if !storage.ValidRole(*req.Role) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz rol"})
 			return
 		}
 		if err := s.db.UpdateUserRole(id, *req.Role); err != nil {
+			changes["requestedRole"] = *req.Role
+			changes["error"] = "internal"
+			s.audit(c, "user.update", "user:"+target.Username, changes, false)
 			respondInternalError(c, "UpdateUserRole", err)
 			return
 		}
+		changes["role"] = *req.Role
+		changes["prevRole"] = target.Role
 	}
 	if req.Enabled != nil {
 		if err := s.db.SetUserEnabled(id, *req.Enabled); err != nil {
+			// Rol değişikliği uygulanmış olabilir: başarısız olay onu da taşır.
+			changes["error"] = "internal"
+			s.audit(c, "user.update", "user:"+target.Username, changes, false)
 			respondInternalError(c, "SetUserEnabled", err)
 			return
 		}
+		changes["enabled"] = *req.Enabled
+		changes["prevEnabled"] = target.Enabled
+	}
+	if req.Role != nil || req.Enabled != nil {
+		s.audit(c, "user.update", "user:"+target.Username, changes, true)
 	}
 	logger.Info("USER UPDATED: %s — %s tarafından", target.Username, c.GetString("username"))
 	c.JSON(http.StatusOK, gin.H{"success": true})
@@ -156,21 +178,34 @@ func (s *Server) handleUserDelete(c *gin.Context) {
 		return
 	}
 	if strings.EqualFold(target.Username, c.GetString("username")) {
+		s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"error": "self"}, false)
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kendinizi silemezsiniz"})
 		return
 	}
 	if target.Role == storage.RoleAdmin {
 		if n, _ := s.db.CountAdmins(); n <= 1 {
+			s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"error": "last_admin"}, false)
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Son admin silinemez"})
 			return
 		}
 	}
 	if err := s.db.DeleteUser(id); err != nil {
+		s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"error": "internal"}, false)
 		respondInternalError(c, "DeleteUser", err)
 		return
 	}
 	logger.Info("USER DELETED: %s — %s tarafından", target.Username, c.GetString("username"))
+	s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"userId": target.ID, "role": target.Role}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// auditErrKind denetim ayrıntısı için hatayı kaba bir türe indirger: ham hata
+// metni (SQL ayrıntısı, dosya yolu) kayda taşınmaz.
+func auditErrKind(err, known error, kind string) string {
+	if err == known {
+		return kind
+	}
+	return "internal"
 }
 
 // handleWhoami mevcut oturumun kullanıcı adı ve rolünü döndürür (UI yetki gizleme).
@@ -200,6 +235,7 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 	if err != nil || u == nil {
 		// bootstrap kimlik deposu (users tablosunda yoksa)
 		if s.creds == nil || !s.creds.Verify(username, req.Current) {
+			s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "wrong_current"}, false)
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Mevcut parola yanlış"})
 			return
 		}
@@ -217,6 +253,7 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 			// başlatmada ESKİ parola geri gelir. Kullanıcı bunu bilmeli.
 			if err := s.envStore.Update(map[string]string{"ADMIN_PASS_HASH": hash, "ADMIN_PASS": ""}); err != nil {
 				logger.Error("ENV PERSIST FAILED (admin parola): %v", err)
+				s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "env_persist"}, false)
 				c.JSON(http.StatusInternalServerError, gin.H{"success": false,
 					"error": "Parola bu oturum için değişti ancak .env dosyasına kalıcı yazılamadı; yeniden başlatmada eski parola geri gelir. Dosya izinlerini kontrol edin."})
 				return
@@ -224,6 +261,7 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 		}
 	} else {
 		if !verifyBcrypt(u.PasswordHash, req.Current) {
+			s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "wrong_current"}, false)
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Mevcut parola yanlış"})
 			return
 		}
@@ -248,5 +286,6 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 		}
 	}
 	logger.Info("SELF PASSWORD CHANGE: %s", username)
+	s.audit(c, "me.password.change", "user:"+username, nil, true)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

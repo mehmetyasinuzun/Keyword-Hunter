@@ -89,6 +89,7 @@ The tool visits hostile sites and displays their text, so the UI assumes **untru
 - **Strict CSP** — `script-src 'self'`: no inline scripts or `on*=` handlers anywhere, enforced by an automated test over every template and JS file. Even if dark-web text slipped into the HTML, the browser would not execute it.
 - bcrypt, per-IP and global login lockout, sliding + absolute session lifetime, session revocation on password change.
 - RBAC (admin / analyst / viewer) enforced server-side; navigation filtered server-side.
+- Tamper-evident audit log: every state-changing action (sign-ins, denied access, user/settings changes, deletions, exports) is recorded as "who did what, when, from where" in an append-only, SHA-256 hash-chained table; the admin-only `/audit` page shows where the chain breaks if a row is altered, deleted or truncated. Secrets (passwords, cookies, tokens, webhook paths) are never stored; retention via `AUDIT_RETENTION_DAYS` (default 365, `0` = forever) keeps the chain verifiable through an anchor.
 - CSRF on every write endpoint (including the search form); Fetch-Metadata-protected `GET /logout`.
 - SSRF guards: expand / analyze / watch / render are `.onion`-only; webhook and screenshot targets cannot resolve to internal addresses; redirects are not followed.
 - Secrets masked in logs, API and HTML; CSV export protected against formula injection.

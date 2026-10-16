@@ -37,3 +37,29 @@ func TestNormalizeAndCatalog(t *testing.T) {
 		t.Fatalf("katalog TR ile aynı anahtar sayısında olmalı: en=%d tr=%d", len(c), len(catalog["tr"]))
 	}
 }
+
+// Denetim kaydı kataloğu TR ve EN'de birebir aynı anahtar kümesine sahip olmalı
+// (EN'de eksik anahtar sessizce Türkçe'ye düşerdi).
+func TestAuditCatalog_KeyParity(t *testing.T) {
+	isAudit := func(k string) bool { return k == "nav.audit" || len(k) > 6 && k[:6] == "audit." }
+	n := 0
+	for k := range catalog["tr"] {
+		if !isAudit(k) {
+			continue
+		}
+		n++
+		if _, ok := catalog["en"][k]; !ok {
+			t.Errorf("EN eksik: %s", k)
+		}
+	}
+	for k := range catalog["en"] {
+		if isAudit(k) {
+			if _, ok := catalog["tr"][k]; !ok {
+				t.Errorf("TR eksik: %s", k)
+			}
+		}
+	}
+	if n < 50 {
+		t.Fatalf("denetim kataloğu beklenenden küçük: %d", n)
+	}
+}

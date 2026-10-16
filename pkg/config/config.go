@@ -17,6 +17,8 @@ const (
 	defaultSessionTTL     = 24
 	defaultRateLimitRPS   = 25
 	defaultRateLimitBurst = 80
+	// defaultAuditRetentionDays denetim kaydı saklama süresi (0 = süresiz).
+	defaultAuditRetentionDays = 365
 )
 
 // AppConfig uygulama genel ayarlari.
@@ -37,6 +39,8 @@ type AppConfig struct {
 	SessionTTLHours int
 	RateLimitRPS    float64
 	RateLimitBurst  int
+	// AuditRetentionDays denetim kaydının saklanacağı gün; 0 = süresiz sakla.
+	AuditRetentionDays int
 }
 
 // Load .env + process environment kaynaklarindan ayarlari yukler.
@@ -88,6 +92,11 @@ func Load(envFilePath string) (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
+	auditRetention, err := parseInt(get("AUDIT_RETENTION_DAYS", strconv.Itoa(defaultAuditRetentionDays)), 0, 36500, "AUDIT_RETENTION_DAYS")
+	if err != nil {
+		return AppConfig{}, err
+	}
+
 	logLevel, err := parseLogLevel(get("LOG_LEVEL", defaultLogLevel))
 	if err != nil {
 		return AppConfig{}, err
@@ -117,6 +126,8 @@ func Load(envFilePath string) (AppConfig, error) {
 		SessionTTLHours: sessionHours,
 		RateLimitRPS:    rateLimitRPS,
 		RateLimitBurst:  rateLimitBurst,
+
+		AuditRetentionDays: auditRetention,
 	}
 
 	return cfg, nil

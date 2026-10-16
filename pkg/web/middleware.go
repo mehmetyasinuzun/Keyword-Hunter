@@ -70,6 +70,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		c.Set("sessionID", session.ID)
 		c.Set("csrfToken", session.CSRFToken)
 		c.Set("username", session.Username)
+		c.Set("authMethod", storage.AuthMethodSession)
 
 		// Rol her istekte users tablosundan tazelenir (rol/pasif değişikliği anında etkindir).
 		role := storage.RoleViewer
@@ -99,6 +100,7 @@ func (s *Server) requireRole(min string) gin.HandlerFunc {
 		role, _ := c.Get("role")
 		r, _ := role.(string)
 		if roleRank(r) < roleRank(min) {
+			s.auditDenied(c, "role", min)
 			// Sayfa istekleri markalı 403 sayfası, API/form istekleri JSON alır.
 			if c.Request.Method == http.MethodGet && !strings.HasPrefix(c.Request.URL.Path, "/api/") {
 				s.renderError(c, http.StatusForbidden)
@@ -132,11 +134,27 @@ func (s *Server) csrfMiddleware() gin.HandlerFunc {
 			return
 		}
 		if !s.csrfValid(c) {
+			s.auditDenied(c, "csrf", "")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CSRF dogrulamasi basarisiz"})
 			return
 		}
 		c.Next()
 	}
+}
+
+// auditDenied yetki/CSRF reddini denetim kaydına yazar: "kim neyi denedi".
+// Hedef rota kalıbıdır (/api/users/:id) — ham yol değil, ki sorgu dizgisi ya da
+// kimlik numaraları gibi değişken parçalar kayda taşınmasın.
+func (s *Server) auditDenied(c *gin.Context, reason, required string) {
+	route := c.FullPath()
+	if route == "" {
+		route = c.Request.URL.Path
+	}
+	details := map[string]any{"reason": reason, "method": c.Request.Method}
+	if required != "" {
+		details["required"] = required
+	}
+	s.audit(c, "access.denied", route, details, false)
 }
 
 // csrfValid X-CSRF-Token başlığını veya _csrf form alanını oturumun token'ıyla karşılaştırır.

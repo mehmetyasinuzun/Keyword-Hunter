@@ -1,0 +1,125 @@
+{{template "doc" .}}
+<title>{{t .Lang "audit.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/audit.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "shield"}} {{t .Lang "audit.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "audit.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "audit.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <button type="button" class="kh-btn ghost" id="a-verify" data-action="a-verify" data-busy-text="{{t .Lang "audit.verifying"}}">{{icon "shield"}} {{t .Lang "audit.verify"}}</button>
+      <div class="kh-btn-group" role="group" aria-label="{{t .Lang "common.export"}}">
+        <a id="a-export-csv" href="/api/audit/export?format=csv" class="kh-btn subtle" title="{{t .Lang "audit.exportHint"}}" download>{{icon "download"}} CSV</a>
+        <a id="a-export-json" href="/api/audit/export?format=json" class="kh-btn subtle" title="{{t .Lang "audit.jsonHint"}}" download>JSON</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="kh-alert err kh-section" id="a-wfail" role="alert"{{if not .writeFails}} hidden{{end}}>{{icon "warn"}}<span><strong>{{t .Lang "audit.writeFail"}}: <span class="kh-mono" id="a-wfail-n">{{.writeFails}}</span></strong> · {{t .Lang "audit.writeFailS"}}</span></div>
+
+  <section class="kh-grid cols-4 kh-section a-stats" aria-label="{{t .Lang "audit.chain"}}">
+    <div class="kh-stat a-chain {{if .chainErr}}amber{{else if .chain.OK}}green{{else}}red{{end}}" id="a-chain" title="{{t .Lang "audit.headHash"}}: {{.chain.HeadHash}}">
+      <div class="label">{{t .Lang "audit.chain"}}</div>
+      <div class="value" id="a-chain-v">{{if .chainErr}}{{t .Lang "audit.chainErr"}}{{else if .chain.OK}}{{iconc "check" "a-chain-ic"}}{{t .Lang "audit.chainOk"}}{{else}}{{iconc "warn" "a-chain-ic"}}{{t .Lang "audit.chainBroken"}} #{{.chain.BrokenAt}}{{end}}</div>
+      <div class="sub" id="a-chain-s">{{if .chainErr}}—{{else if .chain.OK}}<span class="kh-mono">{{.chain.Checked}}</span> {{t .Lang "audit.checked"}}{{else}}{{t .Lang "audit.brokenAt"}} #{{.chain.BrokenAt}} · {{t .Lang (printf "audit.reason.%s" .chain.Reason)}}{{end}}</div>
+      <div class="icon">{{icon "audit"}}</div>
+    </div>
+    <div class="kh-stat blue">
+      <div class="label">{{t .Lang "audit.stat.total"}}</div>
+      <div class="value" id="a-total" data-countup>{{.stats.Total}}</div>
+      <div class="sub" id="a-keep">{{if .retentionDays}}{{t .Lang "audit.keepPre"}}{{.retentionDays}}{{t .Lang "audit.keepPost"}}{{else}}{{t .Lang "audit.keepForever"}}{{end}}</div>
+      <div class="icon">{{icon "database"}}</div>
+    </div>
+    <div class="kh-stat {{if .stats.Failures24}}red{{else}}cyan{{end}}" id="a-fail-card">
+      <div class="label">{{t .Lang "audit.stat.fail"}}</div>
+      <div class="value" id="a-fail" data-countup>{{.stats.Failures24}}</div>
+      <div class="sub">{{t .Lang "audit.stat.failSub"}}</div>
+      <div class="icon">{{icon "siren"}}</div>
+    </div>
+    <div class="kh-stat purple">
+      <div class="label">{{t .Lang "audit.stat.actors"}}</div>
+      <div class="value" id="a-actors" data-countup>{{.stats.Actors24}}</div>
+      <div class="sub">{{t .Lang "audit.stat.actorsSub"}}</div>
+      <div class="icon">{{icon "user"}}</div>
+    </div>
+  </section>
+
+  <section class="kh-card a-filter-card kh-section" aria-labelledby="a-filters-h">
+    <h2 id="a-filters-h" class="kh-sr">{{t .Lang "audit.filters"}}</h2>
+    <form class="a-filters" id="a-filters" data-submit="a-filter" novalidate>
+      <div class="kh-field a-f-actor">
+        <label class="kh-label" for="a-actor">{{t .Lang "audit.f.actor"}}</label>
+        <div class="kh-input-icon">{{icon "user"}}<input class="kh-input sm" id="a-actor" name="actor" list="a-actor-list" maxlength="128" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="{{t .Lang "audit.f.actorPh"}}" data-change="a-filter"></div>
+        <datalist id="a-actor-list"></datalist>
+      </div>
+      <div class="kh-field a-f-cat">
+        <label class="kh-label" for="a-category">{{t .Lang "common.category"}}</label>
+        <select class="kh-select sm" id="a-category" name="category" data-change="a-filter">
+          <option value="">{{t .Lang "common.all"}}</option>
+          <option value="auth">{{t .Lang "audit.cat.auth"}}</option>
+          <option value="user">{{t .Lang "audit.cat.user"}}</option>
+          <option value="data">{{t .Lang "audit.cat.data"}}</option>
+          <option value="system">{{t .Lang "audit.cat.system"}}</option>
+          <option value="export">{{t .Lang "audit.cat.export"}}</option>
+        </select>
+      </div>
+      <div class="kh-field a-f-result">
+        <span class="kh-label" id="a-result-l">{{t .Lang "audit.f.result"}}</span>
+        <div class="kh-segment a-seg" role="group" aria-labelledby="a-result-l">
+          <button type="button" data-action="a-result" data-value="" aria-pressed="true">{{t .Lang "common.all"}}</button>
+          <button type="button" data-action="a-result" data-value="success" aria-pressed="false"><span class="kh-dot up" aria-hidden="true"></span>{{t .Lang "audit.f.success"}}</button>
+          <button type="button" data-action="a-result" data-value="failure" aria-pressed="false"><span class="kh-dot down" aria-hidden="true"></span>{{t .Lang "audit.f.failure"}}</button>
+        </div>
+      </div>
+      <div class="kh-field a-f-date">
+        <label class="kh-label" for="a-from">{{t .Lang "audit.f.from"}}</label>
+        <input class="kh-input sm" id="a-from" name="from" type="date" data-change="a-filter">
+      </div>
+      <div class="kh-field a-f-date">
+        <label class="kh-label" for="a-to">{{t .Lang "audit.f.to"}}</label>
+        <input class="kh-input sm" id="a-to" name="to" type="date" data-change="a-filter">
+      </div>
+      <div class="kh-field a-f-text">
+        <label class="kh-label" for="a-q">{{t .Lang "audit.f.text"}}</label>
+        <div class="kh-input-icon">{{icon "search"}}<input class="kh-input sm" id="a-q" name="q" type="search" maxlength="200" autocomplete="off" spellcheck="false" placeholder="{{t .Lang "audit.f.textPh"}}" data-input="a-filter-soon"></div>
+      </div>
+      <div class="a-f-actions">
+        <button type="button" class="kh-btn subtle sm" data-action="a-clear">{{icon "close"}} {{t .Lang "audit.f.clear"}}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="kh-card flush kh-section a-card" aria-labelledby="a-list-t">
+    <div class="kh-card-head">
+      <h2 id="a-list-t">{{icon "activity"}} {{t .Lang "audit.events"}} <span class="kh-badge neutral mono" id="a-count">…</span></h2>
+      <div class="end"><span class="kh-mono text-xs kh-muted" id="a-range"></span></div>
+    </div>
+    <div class="kh-table-wrap">
+      <table class="kh-table a-table">
+        <thead><tr>
+          <th class="a-c-exp"><span class="kh-sr">{{t .Lang "audit.c.expand"}}</span></th>
+          <th class="a-c-time">{{t .Lang "audit.c.time"}}</th>
+          <th class="a-c-actor">{{t .Lang "audit.c.actor"}}</th>
+          <th class="a-c-action">{{t .Lang "audit.c.action"}}</th>
+          <th class="a-c-target">{{t .Lang "audit.c.target"}}</th>
+          <th class="a-c-ip">{{t .Lang "audit.c.ip"}}</th>
+          <th class="a-c-method">{{t .Lang "audit.c.method"}}</th>
+        </tr></thead>
+        <tbody id="a-body">
+          <tr><td colspan="7"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <nav class="kh-pagination" id="a-pager" aria-label="{{t .Lang "audit.pageLbl"}}" hidden></nav>
+  </section>
+
+  <div class="kh-alert info">{{icon "shield"}}<span>{{t .Lang "audit.info"}}</span></div>
+</main>
+{{template "shell_end" .}}
+<script src="/static/js/pages/audit.js?v={{version}}" defer></script>
+</body>
+</html>

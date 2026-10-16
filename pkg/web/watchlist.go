@@ -152,9 +152,11 @@ func (s *Server) handleWatchlistAdd(c *gin.Context) {
 
 	id, err := s.db.AddWatchlistItem(req.Name, req.URL, req.Category, req.Notes)
 	if err != nil {
+		s.audit(c, "watchlist.add", auditURL(req.URL), map[string]any{"name": req.Name, "error": "internal"}, false)
 		respondInternalError(c, "AddWatchlistItem", err)
 		return
 	}
+	s.audit(c, "watchlist.add", auditURL(req.URL), map[string]any{"watchlistId": id, "name": req.Name, "category": req.Category}, true)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "id": id})
 }
@@ -174,9 +176,11 @@ func (s *Server) handleWatchlistToggle(c *gin.Context) {
 	}
 
 	if err := s.db.SetWatchlistEnabled(id, !item.Enabled); err != nil {
+		s.audit(c, "watchlist.toggle", auditURL(item.URL), map[string]any{"watchlistId": id, "error": "internal"}, false)
 		respondInternalError(c, "SetWatchlistEnabled", err)
 		return
 	}
+	s.audit(c, "watchlist.toggle", auditURL(item.URL), map[string]any{"watchlistId": id, "enabled": !item.Enabled}, true)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "enabled": !item.Enabled})
 }
@@ -189,10 +193,17 @@ func (s *Server) handleWatchlistDelete(c *gin.Context) {
 		return
 	}
 
+	target := "watchlist:" + strconv.FormatInt(id, 10)
+	name := ""
+	if item, err := s.db.GetWatchlistItem(id); err == nil && item != nil {
+		target, name = auditURL(item.URL), item.Name
+	}
 	if err := s.db.DeleteWatchlistItem(id); err != nil {
+		s.audit(c, "watchlist.delete", target, map[string]any{"watchlistId": id, "error": "internal"}, false)
 		respondInternalError(c, "DeleteWatchlistItem", err)
 		return
 	}
+	s.audit(c, "watchlist.delete", target, map[string]any{"watchlistId": id, "name": name}, true)
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
@@ -218,6 +229,7 @@ func (s *Server) handleWatchlistCheck(c *gin.Context) {
 	if err := s.db.RecordWatchlistCheck(item.ID, result.Status, result.HTTPCode, result.ResponseMs, result.ContentHash, result.Title, result.Changed); err != nil {
 		logger.Warn("Watchlist kontrol kaydedilemedi (ID: %d): %v", item.ID, err)
 	}
+	s.audit(c, "watchlist.check", auditURL(item.URL), map[string]any{"watchlistId": item.ID, "status": result.Status, "httpCode": result.HTTPCode, "changed": result.Changed}, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
@@ -233,9 +245,11 @@ func (s *Server) handleWatchlistCheck(c *gin.Context) {
 func (s *Server) handleWatchlistSeed(c *gin.Context) {
 	n, err := s.db.SeedTurkishWatchlist()
 	if err != nil {
+		s.audit(c, "watchlist.seed", "watchlist", map[string]any{"error": "internal"}, false)
 		respondInternalError(c, "SeedTurkishWatchlist", err)
 		return
 	}
 	logger.Info("WATCHLIST SEED: %d hedef eklendi", n)
+	s.audit(c, "watchlist.seed", "watchlist", map[string]any{"added": n}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true, "added": n})
 }

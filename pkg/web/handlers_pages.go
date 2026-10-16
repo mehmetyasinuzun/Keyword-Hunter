@@ -101,27 +101,49 @@ func (s *Server) handleLogin(c *gin.Context) {
 	username := strings.TrimSpace(c.PostForm("username"))
 	password := c.PostForm("password")
 	clientIP := c.ClientIP()
+	// Denetim kaydı için denenen kullanıcı adı (kısaltılmış; parola ASLA kaydedilmez)
+	attempted := "user:" + shared.TruncateRunes(username, 64)
 
-	if len(username) > 128 || len(password) > 512 {
-		c.Redirect(http.StatusFound, "/login?error=1")
-		return
-	}
-
+	// Kilit denetimi her şeyden önce: kilitli IP'nin hiçbir denemesi (aşırı
+	// uzun alanlar dahil) dakikada birden fazla denetim satırı üretemez.
 	if s.loginGuard != nil {
 		if blocked, wait := s.loginGuard.Blocked(clientIP); blocked {
 			logger.Warn("USER LOGIN BLOCKED: IP=%s kilitli (%s kaldı)", clientIP, wait.Round(time.Second))
+			// Kilitliyken her deneme kaydedilirse saldırgan tabloyu şişirir: IP başına dakikada bir.
+			if s.auditNoise.allow("login-locked:"+clientIP, time.Minute) {
+				s.audit(c, "auth.login.locked", attempted, map[string]any{"retryAfterSec": int(wait.Seconds()) + 1}, false)
+			}
 			c.Header("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 			c.Redirect(http.StatusFound, "/login?error=locked&wait="+strconv.Itoa(int(wait.Seconds())+1))
 			return
 		}
 	}
 
+	if len(username) > 128 || len(password) > 512 {
+		// Aşırı uzun alan da başarısız denemedir: kilide sayılır, yoksa kilitsiz
+		// sınırsız denetim satırı yazdırılabilirdi.
+		if s.loginGuard != nil {
+			s.loginGuard.Fail(clientIP)
+		}
+		s.audit(c, "auth.login.failure", attempted, map[string]any{"reason": "too_long"}, false)
+		c.Redirect(http.StatusFound, "/login?error=1")
+		return
+	}
+
 	authed := false
+	role := storage.RoleAdmin // bootstrap kimlik deposu (users tablosu dışı) admin'dir
+	reason := "bad_credentials"
 	if u, err := s.db.GetUserByUsername(username); err == nil && u != nil && u.Enabled {
 		authed = verifyBcrypt(u.PasswordHash, password) && subtleEqual(u.Username, username)
-	} else if s.creds != nil {
-		// users tablosunda yoksa bootstrap kimlik deposu (eski kurulum)
-		authed = s.creds.Verify(username, password)
+		role = u.Role
+	} else {
+		if err == nil && u != nil && !u.Enabled {
+			reason = "account_disabled"
+		}
+		if s.creds != nil {
+			// users tablosunda yoksa bootstrap kimlik deposu (eski kurulum)
+			authed = s.creds.Verify(username, password)
+		}
 	}
 	if authed {
 		if s.loginGuard != nil {
@@ -134,11 +156,15 @@ func (s *Server) handleLogin(c *gin.Context) {
 		expiresAt := time.Now().Add(s.sessionTTL)
 		if err := s.db.CreateSession(sessionID, username, csrfToken, expiresAt); err != nil {
 			logger.Error("Session kaydı oluşturulamadı: %v", err)
+			s.recordAudit(c, storage.AuditEvent{Action: "auth.login.failure", Target: "user:" + username, Actor: username, Role: role,
+				AuthMethod: storage.AuthMethodAnonymous}, map[string]any{"reason": "session_error"})
 			c.Redirect(http.StatusFound, "/login?error=1&message=session")
 			return
 		}
 
 		logger.UserLogin(username, true, clientIP)
+		s.recordAudit(c, storage.AuditEvent{Action: "auth.login.success", Target: "user:" + username, Actor: username, Role: role,
+			AuthMethod: storage.AuthMethodSession, Success: true}, nil)
 
 		maxAge := int(s.sessionTTL.Seconds())
 		c.SetSameSite(http.SameSiteLaxMode)
@@ -152,6 +178,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 		s.loginGuard.Fail(clientIP)
 	}
 	logger.UserLogin(shared.TruncateRunes(username, 32), false, clientIP)
+	s.audit(c, "auth.login.failure", attempted, map[string]any{"reason": reason}, false)
 	c.Redirect(http.StatusFound, "/login?error=1")
 }
 
@@ -167,6 +194,15 @@ func (s *Server) handleLogout(c *gin.Context) {
 	if err != nil {
 		logger.Debug("Logout: session cookie bulunamadı: %v", err)
 	} else {
+		// Denetim için oturumun sahibi silmeden önce okunur (oturum kimliği kayda girmez).
+		if sess, err := s.db.GetSession(sessionID); err == nil && sess != nil {
+			role := storage.RoleAdmin
+			if u, err := s.db.GetUserByUsername(sess.Username); err == nil && u != nil {
+				role = u.Role
+			}
+			s.recordAudit(c, storage.AuditEvent{Action: "auth.logout", Target: "user:" + sess.Username, Actor: sess.Username, Role: role,
+				AuthMethod: storage.AuthMethodSession, Success: true}, nil)
+		}
 		if err := s.db.DeleteSession(sessionID); err != nil {
 			logger.Warn("Logout: session silinemedi: %v", err)
 		}
@@ -448,10 +484,13 @@ func (s *Server) handleSearch(c *gin.Context) {
 		totalHits += r.KeywordHits
 	}
 
-	savedCount, err := s.db.SaveResults(storageResults)
-	if err != nil {
-		logger.Error("Sonuçlar kaydedilemedi: %v", err)
+	savedCount, saveErr := s.db.SaveResults(storageResults)
+	if saveErr != nil {
+		logger.Error("Sonuçlar kaydedilemedi: %v", saveErr)
 	}
+	s.audit(c, "search.run", query, map[string]any{
+		"pages": pages, "found": len(results), "newSaved": savedCount, "durationMs": elapsed.Milliseconds(),
+	}, saveErr == nil)
 	if err := s.db.SaveSearchHistory(query, len(results)); err != nil {
 		logger.Error("Arama geçmişi kaydedilemedi: %v", err)
 	}

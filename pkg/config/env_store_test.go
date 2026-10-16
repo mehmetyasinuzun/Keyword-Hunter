@@ -76,3 +76,24 @@ func TestLoad_RequiresCredentialsAndValidatesRanges(t *testing.T) {
 		t.Fatalf("beklenmeyen config: %+v", cfg)
 	}
 }
+
+func TestLoad_AuditRetentionDays(t *testing.T) {
+	t.Setenv("AUDIT_RETENTION_DAYS", "") // süreç ortamı testi etkilemesin
+	path := filepath.Join(t.TempDir(), ".env")
+	store := NewEnvStore(path)
+	_ = store.Update(map[string]string{"ADMIN_USER": "a", "ADMIN_PASS": "x"})
+	cfg, err := Load(path)
+	if err != nil || cfg.AuditRetentionDays != 365 {
+		t.Fatalf("varsayılan saklama 365 gün olmalı: %d %v", cfg.AuditRetentionDays, err)
+	}
+	_ = store.Update(map[string]string{"AUDIT_RETENTION_DAYS": "0"})
+	if cfg, err = Load(path); err != nil || cfg.AuditRetentionDays != 0 {
+		t.Fatalf("0 (süresiz) kabul edilmeli: %d %v", cfg.AuditRetentionDays, err)
+	}
+	for _, bad := range []string{"-1", "abc", "40000"} {
+		_ = store.Update(map[string]string{"AUDIT_RETENTION_DAYS": bad})
+		if _, err := Load(path); err == nil {
+			t.Fatalf("geçersiz AUDIT_RETENTION_DAYS=%q kabul edilmemeli", bad)
+		}
+	}
+}

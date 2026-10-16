@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,6 +86,16 @@ type Server struct {
 	engineCacheMu sync.Mutex
 	engineCache   map[string]bool
 	engineCacheAt time.Time
+
+	// Denetim kaydı: saklama süresi (0 = süresiz), zincir durumu önbelleği ve
+	// kilitli IP'den gelen tekrar denemeler için kayıt seyreltme.
+	auditRetentionDays int
+	auditChainMu       sync.Mutex
+	auditChainCache    *storage.AuditChainStatus
+	auditChainAt       time.Time
+	auditNoise         auditThrottle
+	auditWriteFails    atomic.Int64 // son başlatmadan beri yazılamayan olay
+	auditWriteFailAt   atomic.Int64 // son yazma hatası (unix ms)
 }
 
 // Config sunucu yapılandırması
@@ -103,6 +114,8 @@ type Config struct {
 	TorProxy       string
 	TorControlAddr string
 	TorControlPass string
+	// AuditRetentionDays denetim kaydı saklama süresi (gün); 0 = süresiz.
+	AuditRetentionDays int
 }
 
 // New yeni web sunucusu oluşturur
@@ -112,11 +125,13 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("kimlik deposu oluşturulamadı: %w", err)
 	}
 	// Çoklu kullanıcı: users tablosu boşsa .env admin'ini bootstrap admin olarak taşı.
+	bootstrapped := ""
 	if n, err := cfg.DB.CountUsers(); err == nil && n == 0 {
 		hash, _ := creds.Update("", "") // mevcut hash'i al (parola değiştirmeden)
-		if _, err := cfg.DB.CreateUser(cfg.Username, hash, storage.RoleAdmin); err != nil {
+		if u, err := cfg.DB.CreateUser(cfg.Username, hash, storage.RoleAdmin); err != nil {
 			logger.Warn("Bootstrap admin oluşturulamadı: %v", err)
 		} else {
+			bootstrapped = u.Username
 			logger.Info("Bootstrap admin '%s' users tablosuna eklendi (rol: admin)", cfg.Username)
 		}
 	}
@@ -161,6 +176,11 @@ func New(cfg Config) (*Server, error) {
 		cleanupStop:   make(chan struct{}),
 		watchlistStop: make(chan struct{}),
 		torProxy:      cfg.TorProxy,
+
+		auditRetentionDays: cfg.AuditRetentionDays,
+	}
+	if bootstrapped != "" {
+		s.auditSystem("user.bootstrap", "user:"+bootstrapped, map[string]any{"role": storage.RoleAdmin}, true)
 	}
 
 	s.router.Use(s.rateLimiter.Middleware())
@@ -215,6 +235,7 @@ func New(cfg Config) (*Server, error) {
 	s.startSessionCleanup()
 	s.startWatchlistMonitor()
 	s.startScheduler()
+	s.startAuditMaintenance()
 	return s, nil
 }
 
@@ -285,6 +306,7 @@ func (s *Server) startScheduler() {
 				logger.Debug("Otomatik NEWNYM atlandı: %v", err)
 			} else {
 				s.invalidateEngineCache()
+				s.auditSystem("tor.newnym", s.torCtl.Addr(), map[string]any{"auto": true, "trigger": "all_engines_down"}, true)
 			}
 		})
 	}
@@ -349,6 +371,7 @@ func (s *Server) startSessionCleanup() {
 				if s.loginGuard != nil {
 					s.loginGuard.Cleanup()
 				}
+				s.auditNoise.cleanup(30 * time.Minute)
 			case <-s.cleanupStop:
 				return
 			}
@@ -508,6 +531,7 @@ func (s *Server) setupRoutes() {
 		protected.GET("/monitor", s.handleMonitorPage)
 		protected.GET("/crawl", s.handleCrawlPage)
 		protected.GET("/users", s.requireRole("admin"), s.handleUsersPage)
+		protected.GET("/audit", s.requireRole("admin"), s.handleAuditPage)
 		protected.GET("/screenshot/file/:id", s.handleServeScreenshot)
 
 		// SSE Events - Gerçek zamanlı loglar için
@@ -526,6 +550,7 @@ func (s *Server) setupRoutes() {
 				return
 			}
 			if !isSafeMethod(c.Request.Method) && roleRank(c.GetString("role")) < roleRank("analyst") {
+				s.auditDenied(c, "role", "analyst")
 				c.AbortWithStatusJSON(403, gin.H{"error": "Salt-okunur (viewer) rol bu işlemi yapamaz"})
 				return
 			}
@@ -538,6 +563,11 @@ func (s *Server) setupRoutes() {
 			admin.POST("/users", s.handleUserCreate)
 			admin.POST("/users/:id", s.handleUserUpdate)
 			admin.POST("/users/:id/delete", s.handleUserDelete)
+
+			// Denetim kaydı (hash zincirli): yalnız admin okur/doğrular/dışa aktarır
+			admin.GET("/audit", s.handleAuditList)
+			admin.GET("/audit/export", s.handleAuditExport)
+			admin.POST("/audit/verify", s.handleAuditVerify)
 
 			// Herkes: kimlik + kendi parolası
 			api.GET("/whoami", s.handleWhoami)

@@ -68,6 +68,7 @@ var navLayout = []navGroup{
 	{"shell.group.system", []navItem{
 		{Key: "monitor", Href: "/monitor", Icon: "monitor", LabelKey: "nav.monitorLong", Kbd: "G M"},
 		{Key: "users", Href: "/users", Icon: "user", LabelKey: "nav.users", Kbd: "G U", AdminOnly: true},
+		{Key: "audit", Href: "/audit", Icon: "audit", LabelKey: "nav.audit", Kbd: "G L", AdminOnly: true},
 		{Key: "settings", Href: "/settings", Icon: "settings", LabelKey: "nav.settings", Kbd: "G Y", AdminOnly: true},
 	}},
 }

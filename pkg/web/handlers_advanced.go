@@ -22,6 +22,9 @@ import (
 
 // handleExportSTIX filtreli bulguları ve IOC'lerini STIX 2.1 paketi olarak indirir.
 func (s *Server) handleExportSTIX(c *gin.Context) {
+	if refuseCrossSiteExport(c, "/results") {
+		return
+	}
 	f := parseResultFilter(c)
 	f.Offset = 0
 	f.Limit = 2000
@@ -53,6 +56,10 @@ func (s *Server) handleExportSTIX(c *gin.Context) {
 	if len(all) > f.Limit {
 		all = all[:f.Limit]
 	}
+
+	summary := resultFilterSummary(f, len(all))
+	summary["artifacts"] = withIOC
+	s.audit(c, "export.stix", "results", summary, true)
 
 	bundle := export.BuildBundle(all, s.db, withIOC)
 	stamp := time.Now().Format("20060102-1504")
@@ -129,9 +136,12 @@ func (s *Server) handleSiteProfileSave(c *gin.Context) {
 	if err := s.db.UpsertSiteProfile(storage.SiteProfile{
 		Host: host, Cookies: req.Cookies, UserAgent: req.UserAgent, RenderJS: req.RenderJS, Notes: req.Notes,
 	}); err != nil {
+		s.audit(c, "site_profile.save", host, map[string]any{"error": "internal"}, false)
 		respondInternalError(c, "UpsertSiteProfile", err)
 		return
 	}
+	// Yalnız host (+ JS render bayrağı): oturum çerezleri ve UA kayda ASLA girmez.
+	s.audit(c, "site_profile.save", host, map[string]any{"renderJs": req.RenderJS}, true)
 	logger.Info("SITE PROFILE: %s güncellendi (cookie=%v, renderJS=%v)", host, req.Cookies != "", req.RenderJS)
 	c.JSON(http.StatusOK, gin.H{"success": true, "host": host})
 }
@@ -146,9 +156,11 @@ func (s *Server) handleSiteProfileDelete(c *gin.Context) {
 		return
 	}
 	if err := s.db.DeleteSiteProfile(req.Host); err != nil {
+		s.audit(c, "site_profile.delete", storage.NormalizeHost(req.Host), map[string]any{"error": "internal"}, false)
 		respondInternalError(c, "DeleteSiteProfile", err)
 		return
 	}
+	s.audit(c, "site_profile.delete", storage.NormalizeHost(req.Host), nil, true)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
@@ -170,6 +182,7 @@ func (s *Server) handleTorStatus(c *gin.Context) {
 
 func (s *Server) handleTorNewNym(c *gin.Context) {
 	if s.torCtl == nil {
+		s.audit(c, "tor.newnym", "tor", map[string]any{"error": "not_configured"}, false)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Tor kontrol portu yapılandırılmamış (TOR_CONTROL)"})
 		return
 	}
@@ -178,10 +191,12 @@ func (s *Server) handleTorNewNym(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 	if err := s.torCtl.NewNym(req.Force); err != nil {
+		s.audit(c, "tor.newnym", s.torCtl.Addr(), map[string]any{"force": req.Force, "error": "rejected"}, false)
 		c.JSON(http.StatusConflict, gin.H{"success": false, "error": err.Error()})
 		return
 	}
 	s.invalidateEngineCache()
+	s.audit(c, "tor.newnym", s.torCtl.Addr(), map[string]any{"force": req.Force}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Yeni Tor devresi istendi (çıkış düğümleri değişecek)"})
 }
 
@@ -215,6 +230,11 @@ func (s *Server) handleCrawlSubmit(c *gin.Context) {
 		SeedURL: req.SeedURL, Depth: req.Depth, MaxPages: req.MaxPages, SameDomain: req.SameDomain, Query: req.Query,
 	})
 	if err != nil {
+		kind := "rejected"
+		if errors.Is(err, crawler.ErrBusy) {
+			kind = "busy"
+		}
+		s.audit(c, "crawl.submit", auditURL(req.SeedURL), map[string]any{"depth": req.Depth, "maxPages": req.MaxPages, "error": kind}, false)
 		if errors.Is(err, crawler.ErrBusy) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Örümcek meşgul; mevcut tarama bitince tekrar deneyin"})
 			return
@@ -223,6 +243,7 @@ func (s *Server) handleCrawlSubmit(c *gin.Context) {
 		return
 	}
 	logger.Info("CRAWL SUBMIT: %s (derinlik %d, %d sayfa)", job.SeedURL, job.Depth, job.MaxPages)
+	s.audit(c, "crawl.submit", auditURL(job.SeedURL), map[string]any{"jobId": job.ID, "depth": job.Depth, "maxPages": job.MaxPages, "sameDomain": req.SameDomain, "query": req.Query}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true, "job": job})
 }
 
@@ -250,8 +271,10 @@ func (s *Server) handleCrawlCancel(c *gin.Context) {
 		return
 	}
 	if err := s.crawler.Cancel(c.Param("id")); err != nil {
+		s.audit(c, "crawl.cancel", "job:"+c.Param("id"), map[string]any{"error": "internal"}, false)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "İptal edilemedi"})
 		return
 	}
+	s.audit(c, "crawl.cancel", "job:"+c.Param("id"), nil, true)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

@@ -2,6 +2,32 @@
 
 ## Yayımlanmamış
 
+### Değiştirilemez denetim kaydı (`/audit`)
+- **Hash zinciri:** her olay `sha256(prev_hash || kanonik alanlar)` ile bir öncekine
+  bağlanır; `audit_chain_state` çapa (budanan son satır) ve baş (son satır) tutar.
+  Satır değiştirme, ortadan/baştan silme ve sondan kırpma kırılma noktasıyla
+  yakalanır; başın ötesine zincir dışı eklenen satırlar ya da geri sarılmış zincir
+  durumu da (`extra`) kırık sayılır. SQLite tetikleyicileri UPDATE'i her zaman,
+  DELETE'i budama dışında reddeder; ekleme yalnız zincirin sonuna yapılabilir ve
+  zincir durumu yalnız ileri gider. Yazılamayan olaylar `/audit`'te uyarı olarak görünür.
+- **Sızıntı önleme:** URL hedeflerinde (örümcek, izleme listesi, ekran görüntüsü,
+  derinleştirme) kullanıcı bilgisi ve sorgu değerleri kayda girmez; başka siteden
+  tetiklenen dışa aktarma (bulgu CSV/JSON/STIX, denetim) Fetch Metadata ile reddedilir.
+  JSON dışa aktarma `ts` alanını hash'in kapsadığı birebir metinle verir.
+- **Kapsam:** giriş başarılı/başarısız/kilitli (kilitli denemeler IP başına dakikada
+  bir), çıkış, rol/CSRF reddi (`access.denied`), kullanıcı oluşturma/güncelleme/
+  silme/parola sıfırlama, öz-parola, ayarlar (yalnız değişen anahtar adları), bildirim
+  ayarı/testi (webhook yalnız ana makine), bulgu silme/vaka/kritiklik/analiz,
+  planlı tarama, izleme listesi, motorlar, Tor NEWNYM (otomatik dahil), site profili
+  (yalnız host), örümcek, CSV/JSON/STIX/denetim dışa aktarma, arama, etiketleme,
+  derinleştirme, ekran görüntüsü, zincir doğrulama ve budama.
+- **Arayüz:** yalnız admin; bütünlük kartı, filtre (aktör, kategori, sonuç, tarih,
+  metin), genişletilebilir ayrıntı, sayfalama, filtreye duyarlı CSV/JSON dışa
+  aktarma, mobil kart düzeni, TR/EN. Kısayol: <kbd>G</kbd> <kbd>L</kbd>.
+- **API:** `GET /api/audit`, `GET /api/audit/export?format=csv|json`,
+  `POST /api/audit/verify` (admin).
+- **Yapılandırma:** `AUDIT_RETENTION_DAYS` (varsayılan 365, `0` = süresiz).
+
 ### Çok dilli CTI sınıflandırıcı (`pkg/cti`)
 - **RU / DE / ES / PT yeraltı sinyalleri:** eski "PredictCTI v2" (PR #2) sözlüğündeki
   değerli terimler (пробив, стилер, обнал, кардинг, ботнет, дедики, Datenleck,
