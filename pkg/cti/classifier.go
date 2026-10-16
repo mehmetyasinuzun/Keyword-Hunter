@@ -280,11 +280,18 @@ var categoryRules = []rule{
 
 var knownSignalSet = buildKnownSignalSet()
 
+// multilingual RU/DE/ES/PT (+ ek TR/EN) sinyallerinin derlenmiş eşleştiricisi.
+// Paket yüklenirken bir kez derlenir (Go, categoryRules ve multilingualSignals'ı
+// bağımlılık sırasıyla önce hazırlar); hatalı tablo başlangıçta panikler.
+var multilingual = mustCompileMultilingual()
+
 // Analyze classifies textual signals into a CTI category.
 func Analyze(title, url, query string, tags []string, keywordHits int) Analysis {
 	normalizedTags := normalizeTagList(tags)
-	combinedText := strings.ToLower(strings.Join([]string{title, url, query, strings.Join(normalizedTags, " ")}, " "))
+	rawText := strings.Join([]string{title, url, query, strings.Join(normalizedTags, " ")}, " ")
+	combinedText := strings.ToLower(rawText)
 	tokenCounts := countTokens(combinedText)
+	multiScores := multilingual.analyze(rawText)
 
 	best := Analysis{
 		Category:       "Genel",
@@ -297,18 +304,30 @@ func Analyze(title, url, query string, tags []string, keywordHits int) Analysis 
 	bestScore := 0
 	bestMatched := []string{}
 	bestRuleCriticality := 1
+	bestCategory := best.Category
 
-	for _, r := range categoryRules {
-		score, matched := scoreRule(r, tokenCounts, combinedText)
+	// Eşik altı sonuçta kategori adı yalnız eski TR/EN puanlarından gelir (eski
+	// davranış birebir): çok dilli sinyaller tek başına zayıf bir tehdit etiketi
+	// ("Доступ к сайту" → Initial Access) üretmez, metin "Genel" kalır.
+	legacyBestScore := 0
+	legacyBestCategory := best.Category
+
+	for i, r := range categoryRules {
+		score, legacyScore, matched := scoreRule(r, tokenCounts, combinedText, multiScores[i])
 		if score > bestScore {
 			bestScore = score
 			bestMatched = matched
 			bestRuleCriticality = r.baseCriticality
-			best.Category = r.category
+			bestCategory = r.category
+		}
+		if legacyScore > legacyBestScore {
+			legacyBestScore = legacyScore
+			legacyBestCategory = r.category
 		}
 	}
 
 	if bestScore < 6 {
+		best.Category = legacyBestCategory
 		if keywordHits > 0 {
 			best.Confidence = 25 + minInt(keywordHits, 20)
 		}
@@ -328,6 +347,7 @@ func Analyze(title, url, query string, tags []string, keywordHits int) Analysis 
 		confidence = 99
 	}
 
+	best.Category = bestCategory
 	best.Criticality = criticality
 	best.Confidence = confidence
 	best.Score = bestScore
@@ -373,10 +393,14 @@ func MergeTags(extracted, matchedSignals []string, query string, maxTags int) []
 			break
 		}
 		normalized := normalizeSignal(token)
-		if !knownSignalSet[normalized] {
+		if knownSignalSet[normalized] {
+			add(token)
 			continue
 		}
-		add(token)
+		// Çok dilli sinyal: ham token değil, sinyalin sabit etiket adı eklenir.
+		if tag, ok := multilingual.queryTag(normalized); ok {
+			add(tag)
+		}
 	}
 
 	if len(result) > maxTags {
@@ -385,7 +409,11 @@ func MergeTags(extracted, matchedSignals []string, query string, maxTags int) []
 	return result
 }
 
-func scoreRule(r rule, tokenCounts map[string]int, text string) (int, []string) {
+// scoreRule eski TR/EN anahtar kelime + ifade puanını, kurala düşen çok dilli
+// sinyal puanlarıyla birleştirir. Toplam puanı, yalnız eski sinyallerden gelen
+// puanı ve en güçlü sinyal adlarını döndürür. Destekleyici çok dilli sinyaller
+// yalnız kuralda başka bir sinyal puan aldıysa eklenir.
+func scoreRule(r rule, tokenCounts map[string]int, text string, multi *ruleMulti) (int, int, []string) {
 	score := 0
 	signalScores := make(map[string]int)
 
@@ -407,6 +435,20 @@ func scoreRule(r rule, tokenCounts map[string]int, text string) (int, []string) 
 		}
 		score += weight
 		signalScores[phrase] += weight
+	}
+
+	legacyScore := score
+	if multi != nil {
+		for name, s := range multi.scores {
+			score += s
+			signalScores[name] += s
+		}
+		if score > 0 {
+			for name, s := range multi.support {
+				score += s
+				signalScores[name] += s
+			}
+		}
 	}
 
 	type signal struct {
@@ -431,7 +473,7 @@ func scoreRule(r rule, tokenCounts map[string]int, text string) (int, []string) 
 		matched = append(matched, normalizeSignal(signals[i].name))
 	}
 
-	return score, matched
+	return score, legacyScore, matched
 }
 
 func countTokens(text string) map[string]int {

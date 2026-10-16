@@ -37,7 +37,7 @@ classifies findings automatically, extracts IOCs, monitors sites and alerts on n
 
 | Module | Capabilities |
 |---|---|
-| 🔎 **Search** | Parallel search across 10 live-verified onion engines, per-engine live progress (SSE), pagination, automatic severity (1-5) and category (EN + TR signals), dedup |
+| 🔎 **Search** | Parallel search across 10 live-verified onion engines, per-engine live progress (SSE), pagination, automatic severity (1-5) and category (EN · TR · RU · DE · ES · PT signals; accent/case-insensitive, word-boundary stem matching), dedup |
 | 🗂️ **Findings** | Multi-dimensional filters, sorting, bulk actions, inline editing, **case management** (new → investigating → confirmed / dismissed + notes), CSV · JSON · **STIX 2.1** |
 | 🧬 **Tagging + IOC** | Fetches the page over Tor; Unicode-aware keyword extraction; email, BTC/XMR, IP, hash, card (Luhn), SSH/API keys, onion IOCs; pivot search |
 | 🕸️ **Map** | Query → engine → result relationship graph (radial / tree / force), node expansion (adds on-page links), focus, add to watchlist |

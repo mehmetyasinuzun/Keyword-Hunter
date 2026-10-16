@@ -40,7 +40,7 @@ CTI platformu.**
 
 | Modül | Yetenekler |
 |---|---|
-| 🔎 **Arama** | 10 canlı doğrulanmış onion motorunda paralel tarama, motor bazında canlı ilerleme (SSE), sayfalama, otomatik kritiklik (1-5) ve kategori (TR + EN sinyaller), tekilleştirme |
+| 🔎 **Arama** | 10 canlı doğrulanmış onion motorunda paralel tarama, motor bazında canlı ilerleme (SSE), sayfalama, otomatik kritiklik (1-5) ve kategori (TR · EN · RU · DE · ES · PT sinyaller; aksan/büyük-küçük harf duyarsız, kelime sınırlı kök eşleşmesi), tekilleştirme |
 | 🗂️ **Bulgular** | Çok boyutlu filtre (sorgu, metin, motor, kategori, min. kritiklik, etiket, vaka), sıralama, toplu işlemler (etiketle / kritiklik / kopyala / sil), satır içi düzenleme, **vaka yönetimi** (yeni → inceleniyor → doğrulandı / elendi + not), CSV · JSON · **STIX 2.1** |
 | 🧬 **Etiketleme + IOC** | Sayfayı Tor'dan çeker; Unicode/Türkçe duyarlı anahtar kelime çıkarımı; e-posta, BTC/XMR, IP, hash, kart (Luhn), SSH/API anahtarı, onion IOC'leri; pivot arama |
 | 🕸️ **Harita** | Sorgu → motor → sonuç ilişki grafiği (radial / tree / force), düğüm derinleştirme (sayfadaki linkleri grafa ekler), odaklan, izlemeye ekle |
@@ -203,7 +203,7 @@ go build ./... && go vet ./... && go test -race ./...
 ```
 
 Test kapsamı: yapılandırma/env deposu, kimlik + kilitleme, auth/CSRF/logout, RBAC, **CSP regresyonu**,
-arama parser'ı, CTI sınıflandırıcı (TR/EN), artifact çıkarımı, STIX, storage migrasyonları,
+arama parser'ı, CTI sınıflandırıcı (TR/EN/RU/DE/ES/PT + yanlış pozitif korumaları), artifact çıkarımı, STIX, storage migrasyonları,
 SSRF korumaları, webhook sırrı maskeleme, crawler, scraper, tagging.
 
 Katkı için [CONTRIBUTING.md](CONTRIBUTING.md) · Davranış kuralları [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · Sürüm notları [CHANGELOG.md](CHANGELOG.md).

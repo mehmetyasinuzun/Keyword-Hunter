@@ -2,6 +2,34 @@
 
 ## Yayımlanmamış
 
+### Çok dilli CTI sınıflandırıcı (`pkg/cti`)
+- **RU / DE / ES / PT yeraltı sinyalleri:** eski "PredictCTI v2" (PR #2) sözlüğündeki
+  değerli terimler (пробив, стилер, обнал, кардинг, ботнет, дедики, Datenleck,
+  Geldwäsche, contraseña, vazamento de dados, lavagem de dinheiro …) mevcut
+  kategori/kritiklik şemasına eşlenerek taşındı; uyuşturucu, silah, sahte belge,
+  kiralık suç ve DDoS hizmeti sinyalleri `Illegal Market`, phishing/aklama
+  `Finansal Dolandırıcılık`, zararlı yazılım `Exploit / Vulnerability` altında
+  toplandı (TR/EN tamamlayıcı terimlerle birlikte).
+- **Unicode-doğru eşleşme:** Kiril dahil küçük harf katlama, aksan silme
+  (contraseña = contrasena, Geldwäsche = geldwaesche), ß → ss, ё → е, Türkçe ı/İ;
+  eşleşme kelime sınırlı, kökler (`обнал*`) yalnız kelime başında — kısa kökler
+  (мет, крипт, скам, брут) alakasız kelimelerde tetiklenmez. URL yolundaki
+  kelimeler de ayrıştırılır.
+- **Sabit etiket adları:** her sinyal tek bir etiketle kaydedilir; çekimler,
+  aksanlı/aksansız ve umlaut/ae yazımları ile transliterasyonlar aynı etikete
+  düşer (ботнета / ботнету → `ботнет`, probiv → `пробив`, Geldwaesche →
+  `geldwäsche`), böylece Bulgular'daki `?tag=` süzgeci hepsini bulur. Sorgu
+  metninden yalnız tek kelimelik sinyaller, sabit adıyla etiket olur.
+- **Yanlış pozitif sertleştirmesi:** çok anlamlı kelimeler (выкуп, слив, golpe,
+  filtración, heroína, hitman, ddos) yalnız destekleyici sinyaldir — tekrar
+  etse ya da sorguda geçse de tek başına sınıflandırma üretmez. DDoS koruma
+  sayfaları artık `Illegal Market` sayılmaz (yalnız "ddos for hire", "ддос на
+  заказ" gibi ifadeler); eşik altı sonuçlarda çok dilli sinyaller zayıf tehdit
+  etiketi üretmez, metin `Genel` kalır.
+- Mevcut TR/EN kuralları ve skorları birebir korundu; dil başına doğru pozitif,
+  yanlış pozitif koruma, aksan/büyük-küçük harf eşdeğerliği ve çift sayım
+  testleri eklendi.
+
 ### Ekran görüntüsü / JS render (`pkg/capture`)
 - **chromedp v0.21.0 + cdproto v0.157.10**'a geçildi; yakalama kodu yeni API'ye taşındı.
 - **Yalnız http sunan .onion siteler yeniden yükleniyor:** güncel Chromium http://
