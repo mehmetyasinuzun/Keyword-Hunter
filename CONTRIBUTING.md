@@ -26,6 +26,14 @@ go mod tidy -diff
 for f in $(find pkg/web/static/js -name '*.js' -not -path '*/vendor/*'); do node --check "$f"; done
 ```
 
+`pkg/capture`'ın gerçek tarayıcı testleri (sahte SOCKS5 proxy + sahte .onion;
+Tor gerekmez) yalnız `CHROME_BIN` verildiğinde koşar, aksi halde sessizce atlanır.
+Ekran görüntüsü / JS render koduna dokunduysanız çalıştırın:
+
+```bash
+CHROME_BIN=/path/to/chrome go test -race -count=1 -run '^TestBrowser_' ./pkg/capture
+```
+
 ## Mimari kısa yol
 
 | Katman | Yer |

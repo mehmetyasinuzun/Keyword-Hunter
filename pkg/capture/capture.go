@@ -10,10 +10,12 @@
 package capture
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,7 +37,20 @@ type Capturer struct {
 	outDir     string // PNG çıktı dizini
 	timeout    time.Duration
 	sem        chan struct{} // eşzamanlılık sınırı
+
+	// Navigasyondan sonra sayfanın (ağ + JS) oturması için bekleme süreleri.
+	// .onion sayfalar yavaş yüklenir; testler kısaltabilir.
+	captureSettle time.Duration
+	renderSettle  time.Duration
 }
+
+// Ekran görüntüsü boyutu. Yeni headless kipte pencere boyutu (window-size)
+// tarayıcı çerçevesini de içerdiğinden görünür alan daha kısa kalır; bu yüzden
+// viewport ayrıca EmulateViewport ile (ölçek 1) tam bu boyuta sabitlenir.
+const (
+	shotWidth  = 1280
+	shotHeight = 900
+)
 
 // Shot tek bir ekran görüntüsünün sonucu
 type Shot struct {
@@ -81,6 +96,9 @@ func New(torProxy, chromePath, outDir string) *Capturer {
 		outDir:     outDir,
 		timeout:    70 * time.Second,
 		sem:        make(chan struct{}, 2),
+
+		captureSettle: 5 * time.Second,
+		renderSettle:  4 * time.Second,
 	}
 }
 
@@ -175,23 +193,26 @@ func (c *Capturer) Capture(ctx context.Context, targetURL string) (*Shot, error)
 	defer cancelAlloc()
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
 	defer cancelTask()
+	// Zaman aşımı ilk Run'ın bağlamında: tarayıcının açılışı dahil tüm işlem
+	// sınırlıdır (bkz. Render).
 	runCtx, cancelRun := context.WithTimeout(taskCtx, c.timeout)
 	defer cancelRun()
 
-	var buf []byte
-	var pageTitle, bodyText string
-	err := chromedp.Run(runCtx,
-		chromedp.Navigate(targetURL),
-		chromedp.Sleep(5*time.Second), // .onion sayfalar yavaş çözülür/yüklenir
-		chromedp.Title(&pageTitle),
-		chromedp.Evaluate(`(document.body && document.body.innerText ? document.body.innerText : "").slice(0,4000)`, &bodyText),
-		chromedp.CaptureScreenshot(&buf),
-	)
+	got, err := chromedp.Run(runCtx, captureAction(targetURL, c.captureSettle))
 	if err != nil {
 		return nil, fmt.Errorf("ekran görüntüsü alınamadı: %w", err)
 	}
+	if err := checkFinalURL(got.final); err != nil {
+		return nil, fmt.Errorf("ekran görüntüsü alınamadı: %w", err)
+	}
+	buf, pageTitle, bodyText := got.png, got.title, got.text
 	if len(buf) == 0 {
 		return nil, fmt.Errorf("boş ekran görüntüsü")
+	}
+	// Boyutlar varsayılmaz, PNG başlığından okunur (bozuk çıktı da burada yakalanır).
+	cfg, err := png.DecodeConfig(bytes.NewReader(buf))
+	if err != nil {
+		return nil, fmt.Errorf("geçersiz PNG: %w", err)
 	}
 
 	// Engel/doğrulama (captcha, Cloudflare) sayfası mı?
@@ -214,14 +235,52 @@ func (c *Capturer) Capture(ctx context.Context, targetURL string) (*Shot, error)
 	return &Shot{
 		Path:          name, // dizine göreli ad (servis için)
 		SHA256:        hash,
-		Width:         1280,
-		Height:        900,
+		Width:         cfg.Width,
+		Height:        cfg.Height,
 		Bytes:         len(buf),
 		Title:         strings.TrimSpace(pageTitle),
 		Challenge:     challenge,
 		ChallengeKind: kind,
 		TakenAt:       now,
 	}, nil
+}
+
+// pageShot captureAction'ın sekmeden topladığı ham çıktı.
+type pageShot struct {
+	png   []byte
+	title string
+	text  string // body.innerText (ilk 4000 karakter; engel tespiti için)
+	final string // yönlendirme / JS gezinmesi sonrası son URL (bkz. checkFinalURL)
+}
+
+// captureAction Capture'ın sekmede çalıştırdığı adım dizisi: viewport'u
+// shotWidth×shotHeight'e sabitle, sayfaya git, settle kadar bekle, başlık +
+// görünür metni ve son URL'yi oku, viewport'un PNG görüntüsünü al.
+func captureAction(targetURL string, settle time.Duration) chromedp.Action[pageShot] {
+	return func(ctx context.Context, t *chromedp.Target) (pageShot, error) {
+		var out pageShot
+		if _, err := chromedp.Steps(
+			chromedp.EmulateViewport(shotWidth, shotHeight),
+			chromedp.Navigate(targetURL),
+			chromedp.Sleep(settle),
+		)(ctx, t); err != nil {
+			return out, err
+		}
+		var err error
+		if out.title, err = chromedp.Title()(ctx, t); err != nil {
+			return out, err
+		}
+		if out.final, err = chromedp.Location()(ctx, t); err != nil {
+			return out, err
+		}
+		if out.text, err = chromedp.Evaluate[string](`(document.body && document.body.innerText ? document.body.innerText : "").slice(0,4000)`)(ctx, t); err != nil {
+			return out, err
+		}
+		if out.png, err = chromedp.CaptureScreenshot()(ctx, t); err != nil {
+			return out, err
+		}
+		return out, nil
+	}
 }
 
 // safeHost URL'den dosya adına uygun host parçası üretir

@@ -1,5 +1,26 @@
 # Değişiklik Günlüğü
 
+## Yayımlanmamış
+
+### Ekran görüntüsü / JS render (`pkg/capture`)
+- **chromedp v0.21.0 + cdproto v0.157.10**'a geçildi; yakalama kodu yeni API'ye taşındı.
+- **Yalnız http sunan .onion siteler yeniden yükleniyor:** güncel Chromium http://
+  gezinmesini önce https://'e çevirdiği için bu siteler `ERR_BLOCKED_BY_CLIENT` /
+  `ERR_TOO_MANY_REDIRECTS` ile düşüyordu; HTTPS yükseltmeleri (`HttpsUpgrades`,
+  `HttpsFirstBalancedModeAutoEnable`) kapatıldı.
+- **Ekran görüntüleri tam 1280×900:** yeni headless kipte pencere çerçevesi yüzünden
+  1280×761 çıkıyordu; görünür alan sabitlendi, boyutlar PNG başlığından okunuyor.
+- **Güvenlik — Tor dışına sızıntılar kapatıldı:** düşman bir .onion sayfası
+  (1) tarayıcıyı `127.0.0.1` / `localhost` / `[::1]` (ve 169.254/16) adreslerine
+  yönlendirip sunucudaki iç servislerin içeriğini render/ekran görüntüsü çıktısına
+  sızdırabiliyordu — Chromium loopback'i proxy'yi atlayarak bağlıyordu
+  (`--proxy-bypass-list=<-loopback>` ile artık Tor'a gider; ayrıca iç adreste ya da
+  hata sayfasında biten sonuç atılır); (2) WebRTC/STUN ile proxy'siz UDP gönderip
+  platformun gerçek çıkış IP'sini öğrenebiliyordu
+  (`--webrtc-ip-handling-policy=disable_non_proxied_udp`).
+- Gerçek tarayıcı testleri (sahte SOCKS5 + sahte .onion) eklendi; `CHROME_BIN`
+  verilmezse atlanır (bkz. CONTRIBUTING).
+
 ## v0.15.0 — 2026-10-16 · "Nightwatch"
 
 Arayüzün baştan yeniden tasarımı, sıkı CSP'ye geçiş ve bu süreçte bulunan

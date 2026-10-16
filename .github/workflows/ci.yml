@@ -34,6 +34,15 @@ jobs:
           for f in $(find pkg/web/static/js -name '*.js' -not -path '*/vendor/*'); do node --check "$f"; done
       - name: Test (race)
         run: go test -race -count=1 ./...
+      # pkg/capture'ın gerçek tarayıcı testleri (sahte SOCKS5 + sahte .onion) yalnız
+      # CHROME_BIN verildiğinde koşar; runner'daki Chrome ile chromedp entegrasyonu
+      # her PR'da uçtan uca doğrulanır.
+      - name: Real-browser capture tests (Chrome)
+        run: |
+          CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_BIN" ]; then echo "Chrome bulunamadı — atlandı"; exit 0; fi
+          "$CHROME_BIN" --version
+          CHROME_BIN="$CHROME_BIN" go test -race -count=1 -run '^TestBrowser_' -v ./pkg/capture
       - name: Build (all packages)
         run: go build ./...
 
