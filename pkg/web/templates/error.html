@@ -1,0 +1,21 @@
+{{template "doc" .}}
+<title>{{.code}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/error.css?v={{version}}">
+{{template "body" .}}
+{{template "icons" .}}
+<main class="err" id="main">
+  <div class="err-card">
+    <a class="err-brand" href="/dashboard"><span class="kh-brand-mark">{{template "logo" .}}</span><span class="kh-brand-name">KeywordHunter</span></a>
+    <div class="err-code" aria-hidden="true"><span>{{.code}}</span></div>
+    <h1 class="kh-title">{{t .Lang .titleKey}}</h1>
+    <p class="kh-subtitle">{{t .Lang .bodyKey}}</p>
+    <div class="kh-inline justify-center mt-6">
+      <a class="kh-btn subtle" href="/" data-action="history-back">{{icon "arrow-right"}} {{t .Lang "err.back"}}</a>
+      <a class="kh-btn primary" href="/dashboard">{{icon "dashboard"}} {{t .Lang "err.home"}}</a>
+    </div>
+    <p class="kh-hint mt-6 kh-mono">{{.path}}</p>
+  </div>
+</main>
+<script src="/static/js/pages/error.js?v={{version}}" defer></script>
+</body>
+</html>

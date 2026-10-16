@@ -99,6 +99,11 @@ func (s *Server) requireRole(min string) gin.HandlerFunc {
 		role, _ := c.Get("role")
 		r, _ := role.(string)
 		if roleRank(r) < roleRank(min) {
+			// Sayfa istekleri markalı 403 sayfası, API/form istekleri JSON alır.
+			if c.Request.Method == http.MethodGet && !strings.HasPrefix(c.Request.URL.Path, "/api/") {
+				s.renderError(c, http.StatusForbidden)
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Bu işlem için yetkiniz yok (" + min + " rolü gerekir)"})
 			return
 		}

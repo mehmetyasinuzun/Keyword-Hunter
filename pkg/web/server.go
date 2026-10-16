@@ -29,7 +29,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.14.1"
+var Version = "0.15.0"
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -475,6 +475,9 @@ func (s *Server) setupRoutes() {
 		c.Next()
 	})
 	static.StaticFS("/", http.FS(staticSubFS))
+
+	// Bilinmeyen adresler: markalı 404 (API için JSON)
+	s.router.NoRoute(func(c *gin.Context) { s.renderError(c, http.StatusNotFound) })
 
 	// Public routes
 	s.router.GET("/", s.handleIndex)

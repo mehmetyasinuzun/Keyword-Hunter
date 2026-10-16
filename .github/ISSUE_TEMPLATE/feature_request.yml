@@ -1,0 +1,28 @@
+name: ✨ Özellik isteği / Feature request
+description: Yeni bir yetenek ya da iyileştirme önerin.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Çözülecek problem / Problem
+      description: Hangi CTI iş akışında neyi zor buluyorsunuz?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Önerilen çözüm / Proposal
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatifler / Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Kapsam / Scope
+      options:
+        - label: Bu öneri yalnızca yasal ve yetkili CTI kullanımı içindir.
+          required: true

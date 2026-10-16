@@ -28,6 +28,10 @@ jobs:
           if ! go mod tidy -diff; then echo "go.mod/go.sum düzenli değil: 'go mod tidy' çalıştırın"; exit 1; fi
       - name: go vet
         run: go vet ./...
+      - name: Frontend JS syntax (node --check)
+        run: |
+          set -e
+          for f in $(find pkg/web/static/js -name '*.js' -not -path '*/vendor/*'); do node --check "$f"; done
       - name: Test (race)
         run: go test -race -count=1 ./...
       - name: Build (all packages)

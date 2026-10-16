@@ -1,0 +1,46 @@
+name: 🐞 Hata bildirimi / Bug report
+description: Beklenmeyen bir davranış bildirin. Güvenlik açıkları için bunu KULLANMAYIN — SECURITY.md'ye bakın.
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Teşekkürler! Güvenlik açıklarını **herkese açık issue olarak açmayın**; GitHub → Security → *Report a vulnerability* kullanın.
+        Lütfen loglardan parola, oturum çerezi, webhook adresi gibi sırları temizleyin.
+  - type: input
+    id: version
+    attributes:
+      label: Sürüm / Version
+      description: Arayüzün sol altındaki sürüm ya da `/healthz` çıktısındaki `version`.
+      placeholder: v0.15.0
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Çalıştırma ortamı / Runtime
+      options: [Docker Compose, GHCR image, Yerel (macOS), Yerel (Linux), Yerel (Windows)]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Ne oldu? / What happened?
+      description: Adımlar, beklenen ve gerçekleşen davranış.
+      placeholder: |
+        1. /results sayfasına git
+        2. ...
+        Beklenen: ...
+        Gerçekleşen: ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Loglar / Konsol / Logs
+      description: Sunucu logları (`data/logs/`) ve tarayıcı konsolu. Sırları maskeleyin.
+      render: shell
+  - type: textarea
+    id: screens
+    attributes:
+      label: Ekran görüntüsü / Screenshot

@@ -652,7 +652,7 @@ details.kh-details[open] > summary::before { transform: rotate(90deg); }
 .kh-log .st { font-weight: 700; min-width: 54px; flex: none; }
 
 /* Rol: izleyici yazma butonlarını görmez (sunucu da korur) */
-.role-viewer [data-write], body.role-viewer .kh-btn.primary:not(.view-ok), body.role-viewer .kh-btn.danger, body.role-viewer .kh-btn.success, body.role-viewer .kh-btn.warn { display: none !important; }
+.role-viewer [data-write] { display: none !important; }
 
 /* ── 5. MOTION ─────────────────────────────────────────────────────────── */
 @keyframes kh-spin { to { transform: rotate(360deg); } }

@@ -1,43 +1,68 @@
-# KeywordHunter — Dark Web Cyber Threat Intelligence Platformu
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+  <img alt="KeywordHunter — Dark Web Cyber Threat Intelligence Platform" src="docs/assets/banner-dark.svg" width="100%">
+</picture>
 
 [![CI](https://github.com/mehmetyasinuzun/Keyword-Hunter/actions/workflows/ci.yml/badge.svg)](https://github.com/mehmetyasinuzun/Keyword-Hunter/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mehmetyasinuzun/Keyword-Hunter?display_name=tag&sort=semver&color=6366f1)](https://github.com/mehmetyasinuzun/Keyword-Hunter/releases)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/GHCR-keyword--hunter-2496ED?logo=docker&logoColor=white)](https://github.com/mehmetyasinuzun/Keyword-Hunter/pkgs/container/keyword-hunter)
+[![CSP](https://img.shields.io/badge/CSP-script--src%20'self'-34d399)](docs/FRONTEND.md)
+![Platforms](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-a855f7)
 
+**Tor ağındaki onion arama motorlarını eşzamanlı tarayan, bulguları otomatik sınıflandıran,
+IOC çıkaran, siteleri izleyen ve yeni tehditleri anında bildiren — tek ikili dosyadan oluşan
+CTI platformu.**
 
-KeywordHunter, Tor ağındaki dark web arama motorlarını **eşzamanlı** tarayan, bulguları
-otomatik sınıflandıran (kritiklik 1-5, kategori), sayfa içeriğinden **IOC/artifact**
-(e-posta, kripto cüzdanı, IP, hash, onion adresi…) çıkaran, bilinen onion sitelerini
-**izleyen** (uptime, içerik değişikliği, captcha/engel tespiti, ekran görüntüsü) ve yeni
-bulguları **webhook** ile bildiren, tek ikili dosyadan oluşan bir CTI aracıdır.
+[Özellikler](#-özellikler) · [Hızlı Başlangıç](#-hızlı-başlangıç) · [Ekran Görüntüleri](#-ekran-görüntüleri) · [Mimari](#-mimari) · [Güvenlik](#-güvenlik-modeli) · [**English**](README.en.md)
 
-Tüm dış trafik Tor üzerinden çıkar; arayüz ve varlıklar tamamen yerel (CDN yok), veri
-yalnızca sizin makinenizde SQLite'ta tutulur.
-
-**Sürüm:** v0.13 · Go 1.26 · SQLite (modernc, saf Go, CGO yok) · Gin · D3.js · Chart.js
+</div>
 
 ---
 
-## Neler yapar?
+<p align="center">
+  <img src="docs/screenshots/dashboard-dark.jpg" alt="Operasyon paneli — koyu tema" width="49%">
+  <img src="docs/screenshots/dashboard-light.jpg" alt="Operasyon paneli — açık tema" width="49%">
+</p>
 
-| Modül | Özellik |
+## 🎯 Neden KeywordHunter?
+
+- **Tek konsol, tüm akış:** ara → sınıflandır → IOC çıkar → izle → bildir → STIX ile dışa aktar.
+- **Tor-only, yerel-öncelikli:** tüm dış trafik Tor üzerinden çıkar; veri yalnızca sizin SQLite dosyanızda. CDN yok, telemetri yok.
+- **Tek ikili, sıfır bağımlılık:** saf Go (CGO yok), altı platform, Docker imajı hazır.
+- **Ekip için tasarlandı:** admin / analist / izleyici rolleri, vaka durumu ve analist notları, planlı taramalar, webhook (Slack / Discord / Teams / SIEM).
+- **Analist deneyimi:** komut paleti (<kbd>Ctrl</kbd>+<kbd>K</kbd>), klavye kısayolları, açık/koyu/sistem teması, Türkçe + İngilizce arayüz, mobil uyumlu.
+
+## ✨ Özellikler
+
+| Modül | Yetenekler |
 |---|---|
-| **Arama** | 10 canlı doğrulanmış onion arama motorunda paralel tarama, canlı motor durumu, otomatik kritiklik/kategori (İngilizce + Türkçe sinyaller), dedup, kayıt |
-| **Bulgular** | Filtre (sorgu, metin, motor, kategori, min. kritiklik, etiket), sıralama, sayfalama, toplu seçim (etiketle / kritiklik ata / URL kopyala / sil), CSV & JSON export |
-| **Etiketleme + IOC** | Sayfayı Tor'dan çeker, Unicode/Türkçe farkındalıklı anahtar kelime çıkarır, kategori/kritiklik günceller, e-posta / BTC / XMR / IP / hash / kart (Luhn) / SSH / API key / onion IOC'lerini saklar ve pivot aramaya açar |
-| **Harita** | Sorgu → motor → sonuç ilişki grafiği (radial / tree / force), düğüm derinleştirme (sayfadaki linkleri çıkarıp graf'a ekler) |
-| **Analiz** | Zaman serisi, kaynak/sorgu/kritiklik/kategori dağılımı, domain haritası, sıklık istatistikleri |
-| **Planlı Tarama** | Dakika bazlı periyot, yalnızca *yeni* URL'leri diff'leyen çalışma, tarama-özel + genel webhook (Slack/Discord/Teams), test gönderimi |
-| **İzleme Listesi** | Onion siteleri için periyodik erişilebilirlik, görünür-metin hash'i ile değişiklik tespiti, Cloudflare/captcha/doğrulama ekranı sezimi, uptime %, tetiklenen ve manuel ekran görüntüsü (Docker) + zaman çizelgesi |
-| **Motorlar** | Canlı sağlık, yanıt süresi, başarı oranı, motoru aramaya dahil et / çıkar (gerçekten etkiler); tüm motorlar düşerse otomatik Tor devre yenileme |
-| **Örümcek** | Bir tohum .onion'dan derinlik/sayfa sınırlı, nazik BFS site tarama; keşfedilen sayfalar bulgu olur |
-| **Site Profilleri** | Host bazlı Cookie + User-Agent + JS render (giriş duvarı/captcha aşımı) |
-| **Export** | CSV, JSON ve **STIX 2.1** (MISP/OpenCTI/Sentinel) — IOC'ler ve ilişkiler dahil |
-| **Ayarlar** | Kimlik (bcrypt), oturum süresi, hız limiti anında uygulanır; altyapı ayarları .env'ye yazılır |
+| 🔎 **Arama** | 10 canlı doğrulanmış onion motorunda paralel tarama, motor bazında canlı ilerleme (SSE), sayfalama, otomatik kritiklik (1-5) ve kategori (TR + EN sinyaller), tekilleştirme |
+| 🗂️ **Bulgular** | Çok boyutlu filtre (sorgu, metin, motor, kategori, min. kritiklik, etiket, vaka), sıralama, toplu işlemler (etiketle / kritiklik / kopyala / sil), satır içi düzenleme, **vaka yönetimi** (yeni → inceleniyor → doğrulandı / elendi + not), CSV · JSON · **STIX 2.1** |
+| 🧬 **Etiketleme + IOC** | Sayfayı Tor'dan çeker; Unicode/Türkçe duyarlı anahtar kelime çıkarımı; e-posta, BTC/XMR, IP, hash, kart (Luhn), SSH/API anahtarı, onion IOC'leri; pivot arama |
+| 🕸️ **Harita** | Sorgu → motor → sonuç ilişki grafiği (radial / tree / force), düğüm derinleştirme (sayfadaki linkleri grafa ekler), odaklan, izlemeye ekle |
+| 📈 **Analiz** | Zaman serisi, kaynak / sorgu / kritiklik / kategori dağılımları, domain haritası, tema duyarlı grafikler |
+| ⏱️ **Planlı Tarama** | Dakika bazlı periyot, yalnızca *yeni* URL diff'i, tarama-özel ve genel webhook, eşik, test gönderimi |
+| 📡 **İzleme Listesi** | Onion siteleri için uptime %, görünür-metin hash'i ile değişiklik tespiti, Cloudflare/captcha sezimi, tetiklenen ve manuel ekran görüntüsü, zaman çizelgesi |
+| 🛰️ **Motorlar** | Canlı sağlık, yanıt süresi, başarı oranı, aç/kapat (aramayı gerçekten etkiler), tüm motorlar düşerse otomatik Tor devre yenileme (NEWNYM) |
+| 🕷️ **Örümcek** | Tohum .onion'dan derinlik/sayfa sınırlı, nazik BFS site taraması; keşfedilen sayfalar bulgu olur |
+| 🍪 **Site Profilleri** | Host bazlı Cookie + User-Agent + JS render (giriş duvarı / captcha arkası) |
+| 👥 **Ekip** | Çok kullanıcılı, rol tabanlı erişim (admin / analist / izleyici), parola sıfırlama, oturum iptali |
 
----
+### Arayüz
 
-## Hızlı Başlangıç (Docker — önerilen)
+- **Nightwatch tasarım sistemi** — tek kaynaklı token'lar, açık / koyu / sistem teması (ilk boyamada sunucu tarafında uygulanır, yanıp sönme yok).
+- **Komut paleti** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd>): sayfalara git, dark web'de ara, bulgularda filtrele, tema/dil değiştir.
+- **Klavye öncelikli:** <kbd>/</kbd> arama · <kbd>G</kbd> sonra <kbd>D</kbd>/<kbd>R</kbd>/<kbd>H</kbd>/<kbd>A</kbd>/<kbd>P</kbd>/<kbd>I</kbd>/<kbd>C</kbd>/<kbd>M</kbd> sayfalar · <kbd>?</kbd> yardım.
+- Akıcı mikro-etkileşimler: sayfalar arası görünüm geçişleri, kademeli giriş, sayaç animasyonları, imleç takipli ışık, iskelet yükleyiciler — `prefers-reduced-motion` tam desteklenir.
+- Erişilebilirlik: anlamsal işaretleme, odak tuzaklı modallar, klavyeyle tam gezinme, "içeriğe geç" bağlantısı.
 
-Gereksinim: Docker 20.10+ ve Compose v2.
+## 🚀 Hızlı Başlangıç
+
+### Docker (önerilen)
 
 ```bash
 git clone https://github.com/mehmetyasinuzun/Keyword-Hunter.git
@@ -46,46 +71,43 @@ docker compose up -d --build
 docker compose logs app | grep -A3 "yönetici parolası"   # ilk kurulumda üretilen parola
 ```
 
+Arayüz: **http://localhost:8080** · Sağlık: `http://localhost:8080/healthz`
+
 Hazır imaj (etiketli sürümlerde GHCR'a yayınlanır):
 
 ```bash
 docker pull ghcr.io/mehmetyasinuzun/keyword-hunter:latest
 ```
 
-Windows: `temiz_baslat.bat` aynı adımları yapar.
+- Varsayılan olarak yalnızca bu makineden erişilir; Tor konteyneri host'a port yayınlamaz.
+- LAN/sunucudan erişim: `KH_BIND=0.0.0.0 docker compose up -d` — mutlaka güçlü parola, HTTPS ters vekil (Caddy/nginx) ve `WEB_SECURE_COOKIES=true`.
+- Kalıcı veri `./data/` altında: `keywordhunter.db`, `.env`, `logs/`, `screenshots/`. `docker compose down -v && rm -rf data` tümünü siler.
+- Windows: `temiz_baslat.bat` aynı adımları yapar.
 
-* Arayüz: **http://localhost:8080** (varsayılan olarak yalnızca bu makineden erişilir)
-* Sağlık: `http://localhost:8080/healthz`
-* Tor konteyneri yalnızca compose ağına açıktır; host'a port yayınlanmaz.
-* LAN/sunucudan erişim için: `KH_BIND=0.0.0.0 docker compose up -d` — bu durumda mutlaka
-  güçlü parola ve HTTPS ters vekil (Caddy/nginx) kullanın, `WEB_SECURE_COOKIES=true` yapın.
-
-Kalıcı veriler `./data/` altındadır: `keywordhunter.db`, `.env`, `logs/`, `screenshots/`.
-`docker compose down -v && rm -rf data` tüm veriyi siler.
-
-### Yerel çalıştırma — macOS / Linux / Windows (Go 1.26+)
-
-Uygulama saf Go'dur (CGO yok, SQLite gömülü); altı hedefte derlenir ve çalışır:
-`darwin/arm64`, `darwin/amd64`, `linux/amd64`, `linux/arm64`, `windows/amd64`, `windows/arm64`.
+### Yerel (macOS / Linux / Windows, Go 1.26+)
 
 | Platform | Başlat | Not |
 |---|---|---|
 | macOS / Linux | `./run.sh` (veya `make run`) | `.env` yoksa şablondan oluşturur, Tor portunu kontrol eder |
-| Windows (PowerShell) | `.
-un.ps1` | `winget install GoLang.Go` ile Go kurun |
+| Windows (PowerShell) | `.\run.ps1` | `winget install GoLang.Go` ile Go kurun |
 | Windows (cmd) | `build_and_run.bat` | `run.ps1`'i çağıran ince sarmalayıcı |
 | Her platform | `./run.sh release` | `dist/` altına 6 platform için ikili üretir |
 
-Tor: **Tor Browser** açıkken 9150, **tor servisi** 9050 portunu dinler (`brew install tor`,
-`apt install tor`, Windows'ta Tor Expert Bundle). `.env` içindeki `TOR_PROXY` bunu göstermeli.
+Tor: **Tor Browser** 9150, **tor servisi** 9050 portunu dinler (`brew install tor`, `apt install tor`, Windows'ta Tor Expert Bundle). `.env` içindeki `TOR_PROXY` bunu göstermeli.
+Ekran görüntüsü için Chrome/Chromium/Brave/Edge otomatik bulunur; bulunamazsa `CHROME_BIN=/yol/chrome`. Docker imajında Chromium hazır gelir.
 
-Ekran görüntüsü: makinede Chrome/Chromium/Brave/Edge varsa otomatik bulunur
-(macOS `/Applications`, Windows `Program Files`, Linux `/usr/bin`); bulunamazsa
-`CHROME_BIN=/yol/chrome` verin. Docker imajında Chromium hazır gelir.
+## 🖼️ Ekran Görüntüleri
 
----
+| | |
+|---|---|
+| <img src="docs/screenshots/login.jpg" alt="Giriş"> **Giriş** — canlı radar, kilitleme geri sayımı | <img src="docs/screenshots/search.jpg" alt="Arama"> **Arama** — eşzamanlı motor taraması |
+| <img src="docs/screenshots/results.jpg" alt="Bulgular"> **Bulgular** — filtre, vaka yönetimi, toplu işlem | <img src="docs/screenshots/graph.jpg" alt="Harita"> **Harita** — ilişki grafiği ve derinleştirme |
+| <img src="docs/screenshots/analytics.jpg" alt="Analiz"> **Analiz** — tema duyarlı grafikler | <img src="docs/screenshots/watchlist.jpg" alt="İzleme"> **İzleme Listesi** — uptime, değişiklik, captcha |
+| <img src="docs/screenshots/monitor.jpg" alt="Motorlar"> **Motorlar** — canlı sağlık ve aç/kapat | <img src="docs/screenshots/palette.jpg" alt="Komut paleti"> **Komut paleti** — <kbd>Ctrl</kbd>+<kbd>K</kbd> |
 
-## Yapılandırma (`.env` / `data/.env`)
+<p align="center"><img src="docs/screenshots/mobile.jpg" alt="Mobil görünüm" width="300"></p>
+
+## ⚙️ Yapılandırma (`.env` / `data/.env`)
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
@@ -97,77 +119,95 @@ Ekran görüntüsü: makinede Chrome/Chromium/Brave/Edge varsa otomatik bulunur
 | `SESSION_TTL_HOURS` | `24` | Kayan oturum süresi (1–720); mutlak üst sınır 30 gün |
 | `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `25` / `80` | IP başına hız limiti (statik dosyalar muaf) |
 | `TOR_PROXY` | `127.0.0.1:9150` | SOCKS5 adresi; Docker'da otomatik `tor:9050` |
+| `TOR_CONTROL` / `TOR_CONTROL_PASSWORD` | — | Devre yenileme (NEWNYM) için kontrol portu |
 | `DB_PATH` | `keywordhunter.db` | SQLite dosyası |
-| `LOG_DIR` / `LOG_LEVEL` | `logs` / `info` | Günlük döndürmeli log |
+| `LOG_DIR` / `LOG_LEVEL` | `logs` / `info` | Döndürmeli log |
 | `WATCHLIST_INTERVAL_MIN` | `15` | İzleme kontrol aralığı |
-| `WATCHLIST_SEED` | `none` | `turkey` = gömülü Türk onion listesini otomatik yükle; dosya yolu = JSON seed. UI'dan da yüklenebilir |
+| `WATCHLIST_SEED` | `none` | `turkey` = gömülü Türk onion listesi; dosya yolu = JSON seed |
 | `SCREENSHOT_DIR` | `/data/screenshots` (Docker) / `screenshots` | PNG çıktı dizini |
-| `CHROME_BIN` | otomatik | Chrome/Chromium ikili yolu (ekran görüntüsü) |
-| `WEBHOOK_ALLOW_PRIVATE` | `false` | `true` ise webhook'lar kurum içi (10.x, 192.168.x, localhost) SIEM/SOAR alıcılarına da gidebilir; internete açık kurulumda kapalı tutun |
+| `CHROME_BIN` | otomatik | Chrome/Chromium yolu |
+| `WEBHOOK_ALLOW_PRIVATE` | `false` | `true` ise webhook'lar kurum içi (10.x, 192.168.x, localhost) SIEM/SOAR alıcılarına da gidebilir |
 | `TZ` (compose) | `Europe/Istanbul` | Arayüzde gösterilen saat dilimi |
 
 Docker'da `ENV_FILE=/data/.env` kullanılır; kökteki `.env` Docker için okunmaz.
 
----
+## 🛡️ Güvenlik Modeli
 
-## Güvenlik modeli
+Bu araç saldırgan içerik barındıran siteleri ziyaret eder ve oradan gelen metni gösterir; arayüz buna göre **güvenilmez girdi** varsayımıyla tasarlanmıştır.
 
-* Tek yönetici hesabı, **bcrypt** parola, IP başına ve global **login kilitleme** (5 hata → üstel kilit).
-* Oturum çerezi `HttpOnly + SameSite=Lax`, kayan + mutlak ömür; parola değişince diğer oturumlar düşer.
-* API yazma uçlarında **CSRF token**; `GET /logout` siteler-arası tetiklemeye karşı Fetch Metadata ile korunur.
-* **CSP** (`default-src 'self'`, harici script/iframe yok), `X-Frame-Options: DENY`, `nosniff`, `no-store`, HSTS (HTTPS'te).
-* **SSRF koruması**: derinleştirme/analiz/izleme yalnızca `.onion`; webhook ve ekran görüntüsü hedefleri dahili/loopback/link-local adreslere çözümlenemez (DNS sonrası kontrol), yönlendirme takip edilmez. Kurum içi alıcı gerekiyorsa `WEBHOOK_ALLOW_PRIVATE=true` (yönlendirme yine kapalı).
-* Dark web'den gelen tüm metinler arayüzde kaçışlanır (stored XSS yok); CSV export formül enjeksiyonuna karşı korumalı.
-* Docker: root olmayan kullanıcı, `no-new-privileges`, Tor portu host'a kapalı, `govulncheck` temiz.
+- **Sıkı CSP:** `script-src 'self'` — şablonlarda tek satır satır içi betik veya `on*=` işleyici yoktur; bu, her şablon ve JS dosyası için **otomatik testle** zorlanır ([`templates_csp_test.go`](pkg/web/templates_csp_test.go)). Dark web'den gelen bir metin bir şekilde HTML'e sızsa bile tarayıcı onu çalıştırmaz.
+- Ayrıca: `object-src 'none'`, `frame-ancestors 'none'`, `base-uri`/`form-action 'self'`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, COOP/CORP, HSTS (HTTPS'te).
+- **Kimlik:** bcrypt, IP başına ve global login kilitleme (üstel), kayan + mutlak oturum ömrü, parola değişince diğer oturumlar düşer, rol değişikliği anında etkin.
+- **RBAC:** admin / analist / izleyici; tüm yazma uçları analist+, yönetim uçları admin. Menü ve kontroller sunucu tarafında role göre süzülür.
+- **CSRF:** tüm yazma uçlarında token (arama formu dahil); `GET /logout` Fetch Metadata ile korunur.
+- **SSRF:** derinleştirme / analiz / izleme / render yalnızca `.onion`; webhook ve ekran görüntüsü hedefleri DNS sonrası iç adreslere çözümlenemez, yönlendirme takip edilmez.
+- **Sızıntı önleme:** webhook sırları log, API ve HTML'de maskelenir; CSV export formül enjeksiyonuna karşı korumalı.
+- **Tedarik zinciri:** tüm varlıklar gömülü (CDN yok), her push'ta `govulncheck`, Dependabot, sürümlerde SHA256 özetleri.
+- **Docker:** root olmayan kullanıcı, `no-new-privileges`, Tor portu host'a kapalı.
 
-Bu araç saldırgan içerik barındıran siteleri ziyaret eder. Yalnızca izole bir ortamda
-ve yasal yetkiniz dahilinde kullanın; kimlik bilgilerini paylaşmayın.
+Zafiyet bildirimi için [SECURITY.md](SECURITY.md).
 
----
+## 🧭 Mimari
 
-## Arama motorları
+```mermaid
+flowchart LR
+    subgraph Browser["Tarayıcı (CSP: script-src 'self')"]
+      UI["Nightwatch UI<br/>kh.css · app.js · pages/*.js"]
+    end
+    subgraph Binary["keywordhunter (tek Go ikilisi)"]
+      WEB["pkg/web<br/>Gin · html/template · RBAC · CSRF · SSE"]
+      SRCH["pkg/search<br/>motorlar + parser"]
+      SCR["pkg/scraper · pkg/tagging<br/>metin · etiket · IOC"]
+      CTI["pkg/cti · pkg/artifact<br/>sınıflandırma · IOC"]
+      BG["pkg/scheduler · pkg/monitor<br/>pkg/crawler · pkg/capture"]
+      NTF["pkg/notify<br/>webhook"]
+      DB[("SQLite<br/>pkg/storage")]
+    end
+    TOR(["Tor SOCKS5"]) --> ONION(["Onion arama motorları<br/>ve hedef siteler"])
+    UI <-->|"HTTPS / SSE"| WEB
+    WEB --> SRCH & SCR & BG
+    SRCH & SCR & BG --> TOR
+    SCR --> CTI
+    WEB & SRCH & SCR & BG --> DB
+    BG --> NTF -->|"Slack · Discord · Teams · SIEM"| EXT(["Webhook alıcıları"])
+```
 
-Liste 2026-09-18'de gerçek Tor devresi üzerinden, üç turda ve iki sorguyla doğrulandı
-(`pkg/search/engines.go`). Varsayılan aktif: **Tordex, Amnesia, Tor66, Onionway, OnionLand,
-Torland, Excavator, TorNet, Submarine, Danex**. Captcha isteyen (OSS, Torgle), JavaScript
-gerektiren (Torgol), boş dizinli (DeepSearches) veya erişilemeyen (Torch, Ahmia onion,
-FindTor) motorlar pasif gelir; `/monitor` ekranından açılabilir. Motor listesi
-değiştiğinde kullanıcı özelleştirmeleri korunur.
+Ön yüz sözleşmesi (bileşenler, olay delegasyonu, tema, i18n): [docs/FRONTEND.md](docs/FRONTEND.md).
 
----
-
-## API (oturum + CSRF gerekir)
+## 🔌 API (oturum + CSRF)
 
 `GET /api/results?q=&text=&source=&category=&minCriticality=&tag=&sort=&limit=&page=` ·
-`GET /api/export/results?format=csv|json` · `POST /api/results/delete` ·
-`POST /api/auto-tag` · `POST /api/batch-auto-tag` · `GET /api/results/:id/artifacts` ·
-`GET /api/artifacts?type=&value=` · `GET /api/artifacts/stats` · `GET /api/engines` ·
-`POST /api/engines/:name/toggle` · `GET|POST /api/scheduled` · `POST /api/scheduled/:id/run-now` ·
-`GET|POST /api/alert-config` · `POST /api/alert-config/test` · `GET|POST /api/watchlist` ·
-`POST /api/watchlist/:id/check` · `POST /api/screenshot` · `GET /api/screenshots` ·
-`GET /api/analytics` · `GET /api/graph/*` · `GET /events` (SSE) · `GET /healthz` (açık).
+`GET /api/export/results?format=csv|json` · `GET /api/export/stix` · `POST /api/results/delete` ·
+`POST /api/results/:id/case` · `POST /api/auto-tag` · `POST /api/batch-auto-tag` ·
+`GET /api/results/:id/artifacts` · `GET /api/artifacts?type=&value=` · `GET /api/artifacts/stats` ·
+`GET /api/engines` · `POST /api/engines/:name/toggle` · `GET|POST /api/scheduled` ·
+`POST /api/scheduled/:id/run-now` · `GET|POST /api/alert-config` · `POST /api/alert-config/test` ·
+`GET|POST /api/watchlist` · `POST /api/watchlist/:id/check` · `POST /api/screenshot` ·
+`GET /api/screenshots` · `GET /api/analytics` · `GET /api/graph/*` · `GET /events` (SSE) ·
+`GET /healthz` (açık).
 
----
-
-## Geliştirme
+## 🧑‍💻 Geliştirme
 
 ```bash
 go build ./... && go vet ./... && go test -race ./...
 ```
 
-Testler: yapılandırma/env deposu, kimlik + kilitleme, auth/CSRF/logout akışı, arama
-parser'ı, CTI sınıflandırıcı (TR/EN), artifact çıkarımı, storage migrasyonları
-(graph_nodes dedup, zaman damgası normalizasyonu, saat dilimi güvenli zamanlayıcı),
-motor varsayılanı/kullanıcı seçimi.
+Test kapsamı: yapılandırma/env deposu, kimlik + kilitleme, auth/CSRF/logout, RBAC, **CSP regresyonu**,
+arama parser'ı, CTI sınıflandırıcı (TR/EN), artifact çıkarımı, STIX, storage migrasyonları,
+SSRF korumaları, webhook sırrı maskeleme, crawler, scraper, tagging.
 
-Mimari: `cmd/main.go` → `pkg/config` (.env) → `pkg/storage` (SQLite) → `pkg/search`
-(motorlar, parser) · `pkg/scraper` (Tor HTTP, metin, etiket) · `pkg/cti` (sınıflandırma) ·
-`pkg/artifact` (IOC) · `pkg/tagging` (iş kuyruğu) · `pkg/scheduler` · `pkg/monitor` ·
-`pkg/capture` (chromedp) · `pkg/notify` (webhook) · `pkg/web` (Gin, şablonlar, statik).
+Katkı için [CONTRIBUTING.md](CONTRIBUTING.md) · Davranış kuralları [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · Sürüm notları [CHANGELOG.md](CHANGELOG.md).
 
-## Yasal uyarı
+## ⚖️ Yasal Uyarı
 
-Bu yazılım güvenlik araştırmacıları ve SOC/CTI ekipleri içindir. Yetkisiz erişim veya
-yasadışı faaliyet için kullanılamaz; sorumluluk kullanıcıya aittir.
+Bu yazılım güvenlik araştırmacıları ve SOC/CTI ekipleri içindir. Yalnızca **izole bir ortamda**
+ve **yasal yetkiniz dahilinde** kullanın. Yetkisiz erişim veya yasa dışı faaliyet için
+kullanılamaz; sorumluluk kullanıcıya aittir.
 
-**Geliştirici:** Mehmet Yasin Uzun
+<div align="center">
+
+**Geliştirici:** [Mehmet Yasin Uzun](https://github.com/mehmetyasinuzun) · MIT Lisansı
+
+<img src="docs/assets/logo.svg" width="56" alt="">
+
+</div>

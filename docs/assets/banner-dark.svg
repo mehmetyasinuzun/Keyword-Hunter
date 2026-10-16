@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-label="KeywordHunter — Dark Web Cyber Threat Intelligence Platform">
+  <title>KeywordHunter — Dark Web Cyber Threat Intelligence Platform</title>
+  <style>
+    text{font-family:'Plus Jakarta Sans','Inter','Segoe UI',Helvetica,Arial,sans-serif}
+    .wm{font-size:64px;font-weight:800;letter-spacing:-2px}
+    .tg{font-size:22px;fill:#a4adc4;font-weight:500}
+    .ey{font-size:13px;font-weight:800;letter-spacing:3px;fill:#22d3ee}
+    .ct{font-size:12.5px;fill:#a4adc4;font-weight:600;font-family:ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace}
+    .in{opacity:0;animation:in .9s cubic-bezier(.16,1,.3,1) forwards}
+    .chip{opacity:0;animation:in .7s cubic-bezier(.16,1,.3,1) forwards}
+    .sweep{transform-origin:1010px 200px;animation:rot 5s linear infinite}
+    .spin{transform-origin:1010px 200px;animation:rot 60s linear infinite reverse}
+    .blip{opacity:0;animation:blip 5s linear infinite}
+    .o,.m{stroke-dasharray:100;stroke-dashoffset:100;animation:d 1.6s cubic-bezier(.16,1,.3,1) .2s forwards}
+    .m{animation-delay:.45s}
+    .core{transform-origin:1010px 214px;animation:br 3s ease-in-out infinite}
+    .ping{transform-origin:1010px 214px;opacity:0;animation:ping 3s cubic-bezier(.16,1,.3,1) 1s infinite}
+    .scan{animation:scan 6s cubic-bezier(.65,0,.35,1) infinite}
+    @keyframes in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+    @keyframes rot{to{transform:rotate(360deg)}}
+    @keyframes blip{0%,100%{opacity:0}5%{opacity:1}40%{opacity:.15}}
+    @keyframes d{to{stroke-dashoffset:0}}
+    @keyframes br{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+    @keyframes ping{0%{opacity:.8;transform:scale(1)}70%,100%{opacity:0;transform:scale(5)}}
+    @keyframes scan{0%{transform:translateX(-200px)}100%{transform:translateX(1480px)}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important}.in,.chip{opacity:1}.o,.m{stroke-dashoffset:0}}
+  </style>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#05070c"/><stop offset="1" stop-color="#0b1020"/></linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#c084fc"/></linearGradient>
+    <linearGradient id="gm" x1="938" y1="118" x2="1082" y2="262" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#c084fc"/></linearGradient>
+    <radialGradient id="glowA" cx="0.12" cy="0.1" r="0.6"><stop offset="0" stop-color="#6366f1" stop-opacity="0.28"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowB" cx="0.8" cy="0.5" r="0.45"><stop offset="0" stop-color="#22d3ee" stop-opacity="0.22"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#22d3ee" stop-opacity="0"/><stop offset="1" stop-color="#22d3ee" stop-opacity=".45"/></linearGradient>
+    <linearGradient id="scanG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#22d3ee" stop-opacity="0"/><stop offset=".5" stop-color="#22d3ee" stop-opacity="0.1"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="rgba(148,163,205,.07)"/></pattern>
+    <clipPath id="clip"><rect width="1280" height="400" rx="24"/></clipPath>
+    <radialGradient id="cg" cx="1010" cy="214" r="12" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#67e8f9"/><stop offset="1" stop-color="#6366f1"/></radialGradient>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="1280" height="400" fill="url(#bg)"/>
+    <rect width="1280" height="400" fill="url(#grid)"/>
+    <rect width="1280" height="400" fill="url(#glowA)"/>
+    <rect width="1280" height="400" fill="url(#glowB)"/>
+    <rect class="scan" x="0" y="0" width="200" height="400" fill="url(#scanG)"/>
+
+    <!-- radar -->
+    <g>
+      <circle cx="1010" cy="200" r="170" fill="none" stroke="rgba(56,189,248,.20)"/>
+      <circle cx="1010" cy="200" r="120" fill="none" stroke="rgba(56,189,248,.20)"/>
+      <circle class="spin" cx="1010" cy="200" r="70" fill="none" stroke="rgba(56,189,248,.20)" stroke-dasharray="4 8"/>
+      <path d="M1010 30V370M840 200H1180" stroke="rgba(56,189,248,.20)"/>
+      <path class="sweep" d="M1010 200L1010 30A170 170 0 0 1 1157 115Z" fill="url(#sw)"/>
+      <circle class="blip" cx="930" cy="120" r="5" fill="#f43f5e" style="animation-delay:.4s"/>
+      <circle class="blip" cx="1110" cy="150" r="4" fill="#facc15" style="animation-delay:1.3s"/>
+      <circle class="blip" cx="1120" cy="290" r="5" fill="#2dd4bf" style="animation-delay:2.4s"/>
+      <circle class="blip" cx="900" cy="300" r="4" fill="#fb923c" style="animation-delay:3.5s"/>
+    </g>
+    <!-- mark (64-unit mark scaled x4.5 around 1010,214) -->
+    <g transform="translate(866 43) scale(4.5)">
+      <path class="o" pathLength="100" d="M32 6C36 14 52 22 52 38A20 20 0 0 1 12 38C12 22 28 14 32 6Z" fill="none" stroke="url(#g)" stroke-width="2.6" stroke-linejoin="round"/>
+      <path class="m" pathLength="100" d="M32 17.4C34.6 22.6 45.2 27.6 45.2 38A13.2 13.2 0 0 1 18.8 38C18.8 27.6 29.4 22.6 32 17.4Z" fill="none" stroke="url(#g)" stroke-width="1.6" stroke-linejoin="round" opacity=".7"/>
+      <path d="M32 27.5v4M32 44.5v4M21.5 38h4M38.5 38h4" stroke="url(#g)" stroke-width="1.6" stroke-linecap="round"/>
+    </g>
+    <circle class="ping" cx="1010" cy="214" r="14" fill="none" stroke="#67e8f9" stroke-width="2"/>
+    <circle class="core" cx="1010" cy="214" r="14" fill="url(#cg)"/>
+
+    <!-- copy -->
+    <g class="in" style="animation-delay:.2s"><text x="120" y="128" class="ey">DARK WEB · CYBER THREAT INTELLIGENCE</text></g>
+    <g class="in" style="animation-delay:.4s"><text x="116" y="200" class="wm"><tspan fill="#e8ebf4">Keyword</tspan><tspan fill="url(#g)">Hunter</tspan></text></g>
+    <g class="in" style="animation-delay:.6s"><text x="120" y="246" class="tg">Hunt keywords across onion space. Classify, extract IOCs, watch, alert.</text></g>
+    <g class="in" style="animation-delay:.8s"><text x="120" y="276" class="tg" style="font-size:16px;fill:#6c7590">Single Go binary · Tor-only egress · local SQLite · no CDN</text></g>
+    <g class="chip" style="animation-delay:1.40s"><rect x="120" y="300" width="188" height="30" rx="15" fill="rgba(255,255,255,.04)" stroke="rgba(148,163,205,.18)"/><text x="214" y="320" text-anchor="middle" class="ct">Tor · 10+ onion engines</text></g><g class="chip" style="animation-delay:1.52s"><rect x="318" y="300" width="122" height="30" rx="15" fill="rgba(255,255,255,.04)" stroke="rgba(148,163,205,.18)"/><text x="379" y="320" text-anchor="middle" class="ct">IOC extraction</text></g><g class="chip" style="animation-delay:1.64s"><rect x="450" y="300" width="77" height="30" rx="15" fill="rgba(255,255,255,.04)" stroke="rgba(148,163,205,.18)"/><text x="488" y="320" text-anchor="middle" class="ct">STIX 2.1</text></g><g class="chip" style="animation-delay:1.76s"><rect x="537" y="300" width="151" height="30" rx="15" fill="rgba(255,255,255,.04)" stroke="rgba(148,163,205,.18)"/><text x="613" y="320" text-anchor="middle" class="ct">Watchlist &amp; alerts</text></g><g class="chip" style="animation-delay:1.88s"><rect x="698" y="300" width="144" height="30" rx="15" fill="rgba(255,255,255,.04)" stroke="rgba(148,163,205,.18)"/><text x="770" y="320" text-anchor="middle" class="ct">Strict CSP · RBAC</text></g>
+  </g>
+</svg>

@@ -180,3 +180,27 @@ func templateFuncs() template.FuncMap {
 		},
 	}
 }
+
+// renderError markaya uygun hata sayfası basar; /api/ altında JSON döner.
+func (s *Server) renderError(c *gin.Context, status int) {
+	if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		msg := "Bulunamadı"
+		if status == 403 {
+			msg = "Bu işlem için yetkiniz yok"
+		}
+		c.AbortWithStatusJSON(status, gin.H{"error": msg})
+		return
+	}
+	key := "err.404"
+	if status == 403 {
+		key = "err.403"
+	}
+	c.Header("Cache-Control", "no-store")
+	s.render(c, status, "error.html", gin.H{
+		"code":     status,
+		"titleKey": key + ".title",
+		"bodyKey":  key + ".body",
+		"path":     shared.Truncate(c.Request.URL.Path, 120),
+	})
+	c.Abort()
+}
