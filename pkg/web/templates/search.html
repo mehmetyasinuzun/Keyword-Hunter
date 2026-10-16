@@ -1,149 +1,176 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Arama</title>
-    <style>
-        .search-box { display: flex; gap: 10px; }
-        .search-box .kh-input { font-size: 1.05rem; padding: 14px 16px; }
-        .presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-        .presets .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); font-weight: 800; width: 64px; }
-        .log { font-family: var(--font-mono); font-size: .76rem; height: 220px; overflow-y: auto; background: rgba(7,8,13,.7); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 10px 12px; }
-        .log .ln { display: flex; gap: 10px; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.03); }
-        .log .ts { color: var(--text-muted); flex: none; }
-        .log .st { font-weight: 700; width: 56px; flex: none; }
-        .result-card { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 14px; border: 1px solid var(--bg-card-border); border-radius: 12px; background: rgba(255,255,255,.02); transition: border-color .15s; }
-        .result-card:hover { border-color: rgba(99,179,237,.3); }
-        .result-card .t { font-weight: 700; margin-bottom: 4px; }
-        .result-card .u { font-family: var(--font-mono); font-size: .76rem; color: var(--accent-primary); word-break: break-all; }
-        .result-card .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
-        .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-        @media (max-width: 640px) { .summary { grid-template-columns: repeat(2, 1fr); } }
-    </style>
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page">
-        <div class="kh-header">
-            <div><h1 class="kh-title" data-i18n="search.title">Dark Web Arama</h1><p class="kh-subtitle">Aktif arama motorlarında eşzamanlı tarama; sonuçlar otomatik sınıflandırılır ve kaydedilir</p></div>
-            <div class="kh-actions"><a href="/monitor" class="kh-btn subtle sm" id="engine-summary">{{icon "monitor"}} motorlar…</a></div>
+{{template "doc" .}}
+<title>{{t .Lang "search.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/search.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "onion"}} {{t .Lang "search.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "search.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "search.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <a href="/monitor" class="kh-btn subtle sm" id="engine-summary" title="{{t .Lang "nav.monitorLong"}}"><span class="kh-dot unknown" id="engine-dot"></span><span id="engine-sum-txt">{{t .Lang "search.enginesLoading"}}</span></a>
+      <a href="/results" class="kh-btn subtle sm">{{icon "results"}} {{t .Lang "nav.results"}}</a>
+    </div>
+  </header>
+
+  <section class="kh-card accent search-hero kh-section" aria-labelledby="search-h">
+    <h2 id="search-h" class="kh-sr">{{t .Lang "search.queryLabel"}}</h2>
+    {{if .error}}<div class="kh-alert err mb-4" role="alert">{{icon "warn"}}<span>{{.error}}</span></div>{{end}}
+    {{if not .CanWrite}}<div class="kh-alert info mb-4">{{icon "lock"}}<span>{{t .Lang "search.viewerNote"}}</span></div>{{end}}
+    <form method="POST" action="/search" id="search-form" class="search-bar" data-submit="search" autocomplete="off">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <label class="kh-sr" for="query">{{t .Lang "search.queryLabel"}}</label>
+      <div class="kh-input-icon search-field">
+        {{icon "search"}}
+        <input class="kh-input lg" type="text" name="query" id="query" value="{{.query}}" placeholder="{{t .Lang "search.placeholder"}}" required maxlength="200" autocomplete="off" spellcheck="false" autofocus>
+        <kbd class="search-kbd" aria-hidden="true">/</kbd>
+      </div>
+      <label class="kh-sr" for="pages">{{t .Lang "search.depth"}}</label>
+      <select class="kh-select search-pages" name="pages" id="pages" title="{{t .Lang "search.depthHint"}}">
+        <option value="1"{{if not .pages}} selected{{end}}>{{t .Lang "search.page1"}}</option>
+        <option value="2"{{if eq .pages 2}} selected{{end}}>2 {{t .Lang "search.pageN"}}</option>
+        <option value="3"{{if eq .pages 3}} selected{{end}}>3 {{t .Lang "search.pageN"}}</option>
+        <option value="5"{{if eq .pages 5}} selected{{end}}>5 {{t .Lang "search.pageN"}}</option>
+      </select>
+      <button type="submit" id="search-btn" class="kh-btn primary lg search-go" data-write data-busy-text="{{t .Lang "search.searching"}}">{{icon "radar"}} {{t .Lang "search.submit"}}</button>
+    </form>
+
+    <div class="presets">
+      <div class="preset-row">
+        <span class="preset-lbl">{{icon "globe"}} {{t .Lang "search.presetGeneral"}}</span>
+        <div class="preset-chips">{{range $q := (split "ransomware,leak,database dump,combolist,rdp access,credit card" ",")}}<button type="button" class="kh-chip" data-action="preset" data-q="{{$q}}">{{$q}}</button>{{end}}</div>
+      </div>
+      <div class="preset-row">
+        <span class="preset-lbl">{{icon "flag"}} {{t .Lang "search.presetTR"}}</span>
+        <div class="preset-chips">{{range $q := (split "turkey,mernis,e-devlet,tc kimlik,turkish citizen,türk hacker,sorgu paneli" ",")}}<button type="button" class="kh-chip" data-action="preset" data-q="{{$q}}">{{$q}}</button>{{end}}</div>
+      </div>
+      <div class="preset-row" id="recent-row" hidden>
+        <span class="preset-lbl">{{icon "clock"}} {{t .Lang "search.presetRecent"}}</span>
+        <div class="preset-chips" id="recent-chips"></div>
+      </div>
+    </div>
+    <p class="kh-hint search-tip">{{icon "info"}} <span>{{t .Lang "search.tip"}}</span></p>
+  </section>
+
+  <section class="kh-card live kh-section" id="live" hidden aria-live="polite">
+    <div class="live-grid">
+      <div class="radar" aria-hidden="true">
+        <span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>
+        <span class="cross"></span><span class="sweep"></span>
+        <span class="blip b1"></span><span class="blip b2"></span><span class="blip b3"></span>
+        <span class="core">{{icon "onion"}}</span>
+      </div>
+      <div class="live-main">
+        <div class="live-head">
+          <div class="live-title"><span class="kh-dot up pulse" id="live-dot"></span><span>{{t .Lang "search.live"}}</span><span class="kh-badge neutral mono live-q" id="live-query"></span></div>
+          <div class="live-meta">
+            <span class="kh-mono live-timer" id="live-timer">00:00</span>
+            <button type="button" class="kh-btn xs danger" id="stop-btn" data-action="stop" data-write>{{icon "close"}} {{t .Lang "search.stop"}}</button>
+          </div>
         </div>
+        <div class="live-status"><span id="live-status">{{t .Lang "search.liveStarting"}}</span><span class="kh-mono" id="live-pct">0%</span></div>
+        <div class="kh-progress active mb-4" id="live-progress"><div id="live-bar"></div></div>
+        <div class="kh-engine-chips" id="engine-chips"></div>
+        <details class="kh-details mt-4" id="log-details">
+          <summary>{{t .Lang "search.liveLogs"}} <span class="kh-badge neutral mono" id="log-count">0</span></summary>
+          <div class="kh-log mt-2" id="log" role="log"></div>
+        </details>
+      </div>
+    </div>
+  </section>
 
-        <section class="kh-card accent" style="margin-bottom:16px">
-            {{if .error}}<div class="kh-alert err" style="margin-bottom:12px">{{icon "warn"}} {{.error}}</div>{{end}}
-            <form method="POST" action="/search" id="searchForm">
-                <div class="search-box">
-                    <input class="kh-input" type="text" name="query" id="query" value="{{.query}}" placeholder="ransomware, leak, tc kimlik, şirket adı, e-posta alanı…" data-i18n-ph="search.placeholder" required autofocus maxlength="200" autocomplete="off">
-                    <select class="kh-select" name="pages" id="pages" title="Sayfalama destekleyen motorlarda kaç sayfa taransın" style="width:130px;flex:none">
-                        <option value="1"{{if not .pages}} selected{{end}}>1 sayfa</option>
-                        <option value="2"{{if eq .pages 2}} selected{{end}}>2 sayfa</option>
-                        <option value="3"{{if eq .pages 3}} selected{{end}}>3 sayfa</option>
-                        <option value="5"{{if eq .pages 5}} selected{{end}}>5 sayfa</option>
-                    </select>
-                    <button type="submit" id="searchBtn" class="kh-btn primary" style="padding:0 26px">Ara</button>
-                </div>
-            </form>
-            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-                <div class="presets"><span class="lbl">Genel</span>{{range $q := (split "ransomware,leak,database dump,combolist,rdp access,credit card" ",")}}<button type="button" class="kh-chip" onclick="setQuery('{{$q}}')">{{$q}}</button>{{end}}</div>
-                <div class="presets"><span class="lbl">Türkiye</span>{{range $q := (split "turkey,mernis,e-devlet,tc kimlik,turkish citizen,türk hacker,sorgu paneli" ",")}}<button type="button" class="kh-chip" onclick="setQuery('{{$q}}')">{{$q}}</button>{{end}}</div>
-            </div>
-            <div class="kh-hint" style="margin-top:10px">İpucu: Tam ifade için tırnak kullanmayın; motorlar kelimeleri kendi mantıklarıyla eşler. Her arama 90 saniyeye kadar sürebilir (Tor gecikmesi).</div>
+  <div id="results-area">
+    {{if .results}}
+    <section class="kh-grid cols-4 kh-section">
+      <div class="kh-stat blue">
+        <div class="label">{{t .Lang "search.statResults"}}</div>
+        <div class="value" data-countup id="stat-total" data-n="{{.totalFound}}">{{.totalFound}}</div>
+        <div class="sub">{{t .Lang "search.statResultsS"}}</div>
+        <div class="icon">{{icon "results"}}</div>
+      </div>
+      <div class="kh-stat green">
+        <div class="label">{{t .Lang "search.statNew"}}</div>
+        <div class="value" data-countup>{{.newSaved}}</div>
+        <div class="sub">{{t .Lang "search.statNewS"}}</div>
+        <div class="icon">{{icon "plus"}}</div>
+      </div>
+      <div class="kh-stat purple">
+        <div class="label">{{t .Lang "search.statHits"}}</div>
+        <div class="value" data-countup>{{.totalHits}}</div>
+        <div class="sub">{{t .Lang "search.statHitsS"}}</div>
+        <div class="icon">{{icon "target"}}</div>
+      </div>
+      <div class="kh-stat amber">
+        <div class="label">{{t .Lang "search.statDuration"}}</div>
+        <div class="value">{{.duration}}</div>
+        <div class="sub">{{t .Lang "search.statDurationS"}} · {{if .pages}}{{.pages}}{{else}}1{{end}} {{t .Lang "search.pageN"}}</div>
+        <div class="icon">{{icon "clock"}}</div>
+      </div>
+    </section>
 
-            <div id="live" style="display:none;margin-top:14px">
-                <div class="kh-inline" style="justify-content:space-between;margin-bottom:8px">
-                    <div class="kh-engine-chips" id="engine-chips"></div>
-                    <span class="kh-hint" id="live-status">Başlatılıyor…</span>
-                </div>
-                <div class="kh-progress" style="margin-bottom:8px"><div id="live-bar" style="width:2%"></div></div>
-                <details class="kh-details"><summary>Canlı işlem logları</summary><div class="log" id="log-container"></div></details>
+    <section class="kh-card flush">
+      <div class="kh-card-head">
+        <h2>{{icon "results"}} {{t .Lang "search.results"}} <span class="kh-badge neutral mono">{{.query}}</span></h2>
+        <span class="kh-hint">{{t .Lang "search.resultsHint"}}</span>
+        <span class="end">
+          <a class="kh-btn xs ghost" href="/results?q={{.query}}">{{t .Lang "search.allFindings"}} ({{.totalFound}}) {{icon "arrow-right"}}</a>
+          <a class="kh-btn xs subtle" href="/results/graph?q={{.query}}">{{icon "graph"}} {{t .Lang "search.map"}}</a>
+          <a class="kh-btn xs subtle" href="/scheduled#new" title="{{t .Lang "search.scheduleHint"}}" data-write>{{icon "scheduled"}} {{t .Lang "search.schedule"}}</a>
+        </span>
+      </div>
+      <div class="result-list kh-stagger">
+        {{range .results}}
+        <article class="result-card s{{.Criticality}}">
+          <div class="rc-sev"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span></div>
+          <div class="rc-body">
+            <h3 class="rc-title" title="{{.Title}}">{{truncate .Title 120}}</h3>
+            <a class="rc-url" href="{{.URL}}" target="_blank" rel="noopener noreferrer" title="{{.URL}}">{{truncate .URL 140}}</a>
+            <div class="rc-meta">
+              {{if .Category}}<span class="kh-badge neutral">{{icon "folder"}} {{.Category}}</span>{{end}}
+              <span class="kh-badge neutral mono">{{.Source}}</span>
+              {{if gt .KeywordHits 0}}<span class="kh-badge ok">{{icon "target"}} {{.KeywordHits}} hit</span>{{end}}
             </div>
-        </section>
-
-        <div id="results-area">
-            {{if .results}}
-            <div class="summary">
-                <div class="kh-stat blue"><div class="label">Sonuç</div><div class="value">{{.totalFound}}</div></div>
-                <div class="kh-stat green"><div class="label">Yeni Kayıt</div><div class="value">{{.newSaved}}</div></div>
-                <div class="kh-stat purple"><div class="label">Toplam Hit</div><div class="value">{{.totalHits}}</div></div>
-                <div class="kh-stat amber"><div class="label">Süre</div><div class="value" style="font-size:1.3rem">{{.duration}}</div></div>
-            </div>
-            <section class="kh-card">
-                <div class="kh-card-title">Sonuçlar <span class="hint">ilk 20 · kritikliğe göre rozetli</span>
-                    <span style="margin-left:auto" class="kh-inline"><a class="kh-btn xs ghost" href="/results?q={{.query}}">Tümü ({{.totalFound}}) →</a><a class="kh-btn xs subtle" href="/results/graph?q={{.query}}">{{icon "map"}} Harita</a><a class="kh-btn xs subtle" href="/scheduled#new" title="Bu sorguyu periyodik tara">{{icon "scheduled"}} Planla</a></span></div>
-                <div style="display:grid;gap:10px">
-                    {{range .results}}
-                    <div class="result-card">
-                        <div>
-                            <div class="t">{{truncate .Title 90}}</div>
-                            <a class="u" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{truncate .URL 110}}</a>
-                            <div class="meta"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span>{{if .Category}}<span class="kh-badge neutral">{{.Category}}</span>{{end}}<span class="kh-badge neutral mono">{{.Source}}</span>{{if gt .KeywordHits 0}}<span class="kh-badge ok">⌖ {{.KeywordHits}} hit</span>{{end}}</div>
-                        </div>
-                        <div><button class="kh-btn xs subtle" onclick="KH.copy('{{.URL}}','URL kopyalandı')" title="Kopyala">{{icon "copy"}}</button></div>
-                    </div>
-                    {{end}}
-                </div>
-            </section>
-            {{else if .query}}
-            <section class="kh-card"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>Sonuç bulunamadı</h3><p>Motorlar yanıt vermemiş ya da sorgu eşleşmemiş olabilir. <a href="/monitor" style="color:var(--accent-primary)">Motor sağlığını</a> kontrol edin ve daha genel bir terim deneyin.</p></div></section>
-            {{end}}
+          </div>
+          <div class="rc-actions">
+            <button type="button" class="kh-btn xs subtle icon" data-action="copy" data-copy="{{.URL}}" data-copy-label="{{t $.Lang "search.copied"}}" aria-label="{{t $.Lang "search.copyUrl"}}" title="{{t $.Lang "search.copyUrl"}}">{{icon "copy"}}</button>
+            <a class="kh-btn xs subtle icon" href="/results?text={{.URL}}" aria-label="{{t $.Lang "search.openFinding"}}" title="{{t $.Lang "search.openFinding"}}">{{icon "arrow-right"}}</a>
+          </div>
+        </article>
+        {{end}}
+      </div>
+    </section>
+    {{else if .searched}}
+    <section class="kh-card">
+      <div class="kh-empty">
+        <div class="icon">{{icon "empty"}}</div>
+        <h3>{{t .Lang "search.noResults"}}</h3>
+        <p>{{t .Lang "search.noResultsS"}}</p>
+        <div class="kh-inline">
+          <a href="/monitor" class="kh-btn subtle">{{icon "monitor"}} {{t .Lang "search.checkEngines"}}</a>
+          <button type="button" class="kh-btn ghost" data-action="refocus">{{icon "search"}} {{t .Lang "search.tryAnother"}}</button>
         </div>
-    </main>
-
-    <script>
-        function setQuery(q) { const i = document.getElementById('query'); i.value = q; i.focus(); }
-        const logEl = document.getElementById('log-container'), chipsEl = document.getElementById('engine-chips');
-        let engines = [], engineState = {};
-
-        KH.api('/api/engines').then(d => {
-            engines = (d.engines || []).filter(e => e.isActive).map(e => e.name);
-            const up = (d.engines || []).filter(e => e.isActive && e.lastStatus === 'up').length;
-            document.getElementById('engine-summary').innerHTML = KH.icon('monitor') + ' ' + engines.length + ' aktif motor · ' + up + ' çevrimiçi';
-        }).catch(() => { });
-
-        function renderChips() { chipsEl.innerHTML = engines.map(n => { const s = engineState[n] || {}; return `<span class="kh-engine-chip ${s.cls || ''}" title="${KH.esc(s.msg || 'bekliyor')}">${s.cls === 'running' ? KH.icon('refresh') : s.cls === 'done' ? KH.icon('check') : s.cls === 'fail' ? KH.icon('close') : s.cls === 'zero' ? '·' : '○'} ${KH.esc(n)}${s.count != null ? ' <b>' + s.count + '</b>' : ''}</span>`; }).join(''); }
-        function addLog(d) {
-            const t = new Date().toLocaleTimeString('tr-TR', { hour12: false });
-            const map = { engine_start: ['SCAN', '#63b3ed'], engine_end: ['DONE', '#76e4f7'], engine_page: ['PAGE', '#805ad5'], info: ['INFO', '#8b9dc3'], error: ['ERR', '#fc8181'], success: ['OK', '#68d391'], auto_tag: ['TAG', '#b794f4'], auto_tag_error: ['TAG!', '#f6ad55'] };
-            let [st, col] = map[d.type] || ['LOG', '#5a6a8a'];
-            if (d.type === 'engine_end' && /ERROR|FAILED/.test(d.message)) { st = 'FAIL'; col = '#fc8181'; }
-            const div = document.createElement('div'); div.className = 'ln';
-            div.innerHTML = `<span class="ts">${t}</span><span class="st" style="color:${col}">[${st}]</span><span>${d.engine ? '<b>' + KH.esc(d.engine) + '</b>: ' : ''}${KH.esc(d.message.replace(/^SEARCH ENGINE (SUCCESS|ERROR): ?/, ''))}</span>`;
-            logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
-        }
-        function updateLive(d) {
-            if (d.type === 'engine_start' && d.engine) engineState[d.engine] = { cls: 'running', msg: 'sorgulanıyor' };
-            if (d.type === 'engine_end' && d.engine) {
-                const m = d.message.match(/(\d+) sonuç/); const n = m ? parseInt(m[1]) : 0;
-                engineState[d.engine] = /ERROR|FAILED/.test(d.message) ? { cls: 'fail', msg: d.message } : { cls: n > 0 ? 'done' : 'zero', count: n, msg: d.message };
-            }
-            renderChips();
-            const finished = Object.values(engineState).filter(s => s.cls !== 'running').length;
-            document.getElementById('live-bar').style.width = Math.max(2, Math.round(finished / Math.max(engines.length, 1) * 100)) + '%';
-            document.getElementById('live-status').textContent = finished + '/' + engines.length + ' motor tamamlandı';
-        }
-        function startEventStream() {
-            logEl.innerHTML = ''; engineState = {}; renderChips(); document.getElementById('live').style.display = '';
-            if (window.eventSource) window.eventSource.close();
-            window.eventSource = new EventSource('/events');
-            window.eventSource.onmessage = ev => { try { const d = JSON.parse(ev.data); addLog(d); updateLive(d); } catch (_) { } };
-            window.eventSource.onerror = () => window.eventSource.close();
-        }
-        document.getElementById('searchForm').addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const btn = document.getElementById('searchBtn'); KH.busy(btn, true, 'Aranıyor…');
-            document.getElementById('results-area').innerHTML = '<div class="kh-card"><div class="kh-empty"><div class="kh-skel" style="width:50%;margin:0 auto 10px"></div><p class="kh-hint">Motorlar Tor üzerinden sorgulanıyor, bu 30-90 saniye sürebilir…</p></div></div>';
-            startEventStream();
-            try {
-                const res = await fetch('/search', { method: 'POST', body: new FormData(this) });
-                if (!res.ok) throw new Error(res.status === 429 ? 'Çok fazla istek' : 'Arama isteği başarısız (HTTP ' + res.status + ')');
-                const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-                const fresh = doc.getElementById('results-area'); if (fresh) document.getElementById('results-area').replaceWith(fresh);
-                document.getElementById('live-status').textContent = 'Tamamlandı';
-                if (window.eventSource) window.eventSource.close();
-                const total = fresh && fresh.querySelector('.kh-stat .value'); KH.toast(total ? total.textContent + ' sonuç bulundu' : 'Arama tamamlandı', 'ok');
-            } catch (err) { KH.toast(err.message, 'err'); document.getElementById('results-area').innerHTML = ''; }
-            finally { KH.busy(btn, false); }
-        });
-    </script>
+      </div>
+    </section>
+    {{else}}
+    <section class="kh-card idle">
+      <div class="kh-empty">
+        <div class="icon">{{icon "radar"}}</div>
+        <h3>{{t .Lang "search.idleTitle"}}</h3>
+        <p>{{t .Lang "search.idleText"}}</p>
+      </div>
+      <ol class="idle-steps kh-stagger">
+        <li><span class="n">1</span>{{icon "onion"}}<span>{{t .Lang "search.step1"}}</span></li>
+        <li><span class="n">2</span>{{icon "lab"}}<span>{{t .Lang "search.step2"}}</span></li>
+        <li><span class="n">3</span>{{icon "bell"}}<span>{{t .Lang "search.step3"}}</span></li>
+      </ol>
+    </section>
+    {{end}}
+  </div>
+</main>
+{{template "shell_end" .}}
+<script src="/static/js/pages/search.js?v={{version}}" defer></script>
 </body>
 </html>

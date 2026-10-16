@@ -486,6 +486,7 @@ a.kh-stat { color: inherit; text-decoration: none !important; display: block; }
 .kh-badge.neutral { --c: var(--text-2); } .kh-badge.ok { --c: var(--ok); } .kh-badge.err { --c: var(--err); } .kh-badge.warn { --c: var(--warn); }
 .kh-badge.info { --c: var(--info); } .kh-badge.violet { --c: var(--violet); }
 .kh-badge.mono { font-family: var(--font-mono); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.kh-badge.plain { text-transform: none; letter-spacing: 0; }
 button.kh-badge { cursor: pointer; } button.kh-badge:hover { background: color-mix(in srgb, var(--c) 20%, transparent); }
 .kh-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: .8rem; color: var(--text-2); background: var(--surface); border: 1px solid var(--border); cursor: pointer; text-decoration: none !important; transition: all var(--dur-2) var(--ease-out); }
 .kh-chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, transparent); color: var(--text); transform: translateY(-1px); }

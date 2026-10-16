@@ -1,274 +1,219 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Bulgular</title>
-    <style>
-        .filters { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
-        @media (max-width: 1100px) { .filters { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 640px) { .filters { grid-template-columns: 1fr; } }
-        .tagcloud { display: flex; flex-wrap: wrap; gap: 6px; }
-        .bulkbar { display: none; position: sticky; top: 66px; z-index: 20; background: rgba(13,15,22,.96); border: 1px solid rgba(99,179,237,.3); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; align-items: center; gap: 10px; flex-wrap: wrap; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
-        .bulkbar.show { display: flex; }
-        .crit-select { font-weight: 800; font-family: var(--font-mono); }
-        .crit-select.s5 { color: #fc8181; } .crit-select.s4 { color: #f6ad55; } .crit-select.s3 { color: #f6e05e; } .crit-select.s2 { color: #76e4f7; } .crit-select.s1 { color: #90cdf4; }
-        .art-badge { font-size: .66rem; }
-        #artifact-modal .art-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: .82rem; align-items: center; }
-        #artifact-modal .art-row .v { font-family: var(--font-mono); word-break: break-all; }
-    .case-sel { font-weight: 600; }
-    .case-sel.cs-new { color: #90cdf4; } .case-sel.cs-investigating { color: #f6e05e; }
-    .case-sel.cs-confirmed { color: #68d391; } .case-sel.cs-dismissed { color: var(--text-muted); }
-    .note-btn.has-note { color: var(--accent-primary); border-color: rgba(99,179,237,.4); }
-    </style>
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page wide">
-        <div class="kh-header">
-            <div>
-                <h1 class="kh-title" data-i18n="results.title">Bulgular</h1>
-                <p class="kh-subtitle">Toplam <strong>{{.totalResults}}</strong> kayıt · filtreyle eşleşen <strong>{{.total}}</strong> · sayfa {{.page}}/{{.totalPages}}</p>
-            </div>
-            <div class="kh-actions">
-                <a href="/results/graph{{if .query}}?q={{.query}}{{end}}" class="kh-btn ghost">{{icon "map"}} Haritada Gör</a>
-                <a id="export-csv" href="/api/export/results?format=csv&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri CSV indir">{{icon "download"}} CSV</a>
-                <a id="export-json" href="/api/export/results?format=json&{{.baseQuery}}" class="kh-btn subtle" title="Filtreyle eşleşenleri JSON indir">{{icon "download"}} JSON</a>
-                <a id="export-stix" href="/api/export/stix?{{.baseQuery}}" class="kh-btn subtle" title="STIX 2.1 (MISP/OpenCTI/Sentinel) — IOC'ler dahil">{{icon "download"}} STIX</a>
-            </div>
-        </div>
+{{template "doc" .}}
+<title>{{t .Lang "results.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/results.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page" data-query="{{.query}}" data-active-tag="{{.filter.Tag}}">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "database"}} {{t .Lang "results.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "results.title"}}</h1>
+      <p class="kh-subtitle"><b class="kh-mono">{{.total}}</b> {{t .Lang "results.matching"}} · {{t .Lang "results.ofPre"}} <b class="kh-mono">{{.totalResults}}</b> {{t .Lang "results.ofPost"}} · {{t .Lang "results.pageLbl"}} {{.page}}/{{.totalPages}}</p>
+    </div>
+    <div class="kh-actions">
+      <a href="/results/graph{{if .query}}?q={{.query}}{{end}}" class="kh-btn ghost">{{icon "graph"}} {{t .Lang "results.viewMap"}}</a>
+      <div class="kh-btn-group" role="group" aria-label="{{t .Lang "common.export"}}">
+        <a id="export-csv" href="{{.exportCSV}}" class="kh-btn subtle" title="{{t .Lang "results.csvHint"}}">{{icon "download"}} CSV</a>
+        <a id="export-json" href="{{.exportJSON}}" class="kh-btn subtle" title="{{t .Lang "results.jsonHint"}}">JSON</a>
+        <a id="export-stix" href="{{.exportSTIX}}" class="kh-btn subtle" title="{{t .Lang "results.stixHint"}}">STIX 2.1</a>
+      </div>
+    </div>
+  </header>
 
-        <section class="kh-card" style="margin-bottom:14px">
-            <form method="GET" action="/results" class="filters" id="filter-form">
-                <div class="kh-field"><label class="kh-label">Sorgu</label><input class="kh-input sm" type="text" name="q" value="{{.filter.Query}}" placeholder="arama sorgusu…" list="query-list"></div>
-                <div class="kh-field"><label class="kh-label">Başlık / URL</label><input class="kh-input sm" type="text" name="text" value="{{.filter.Text}}" placeholder="metin ara…"></div>
-                <div class="kh-field"><label class="kh-label">Motor</label><select class="kh-select sm" name="source"><option value="">Tümü</option>{{range .sources}}<option value="{{.}}" {{if eq $.filter.Source .}}selected{{end}}>{{.}}</option>{{end}}</select></div>
-                <div class="kh-field"><label class="kh-label">Kategori</label><select class="kh-select sm" name="category"><option value="">Tümü</option>{{range .categories}}<option value="{{.}}" {{if eq $.filter.Category .}}selected{{end}}>{{.}}</option>{{end}}</select></div>
-                <div class="kh-field"><label class="kh-label">Min. Kritiklik</label><select class="kh-select sm" name="minCriticality">{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $.filter.MinCriticality}}selected{{end}}>Sev {{$v}}+</option>{{end}}</select></div>
-                <div class="kh-field"><label class="kh-label">Vaka</label><select class="kh-select sm" name="case">
-                    <option value=""{{if eq .filter.CaseStatus ""}} selected{{end}}>Tümü</option>
-                    <option value="any"{{if eq .filter.CaseStatus "any"}} selected{{end}}>İşaretli</option>
-                    <option value="new"{{if eq .filter.CaseStatus "new"}} selected{{end}}>Yeni</option>
-                    <option value="investigating"{{if eq .filter.CaseStatus "investigating"}} selected{{end}}>İnceleniyor</option>
-                    <option value="confirmed"{{if eq .filter.CaseStatus "confirmed"}} selected{{end}}>Doğrulandı</option>
-                    <option value="dismissed"{{if eq .filter.CaseStatus "dismissed"}} selected{{end}}>Elendi</option>
-                </select></div>
-                <div class="kh-field"><label class="kh-label">Sırala</label><select class="kh-select sm" name="sort">
-                    <option value="newest" {{if eq .filter.Sort "newest"}}selected{{end}}>En yeni</option><option value="oldest" {{if eq .filter.Sort "oldest"}}selected{{end}}>En eski</option>
-                    <option value="criticality" {{if eq .filter.Sort "criticality"}}selected{{end}}>Kritiklik</option><option value="hits" {{if eq .filter.Sort "hits"}}selected{{end}}>Sıklık</option></select></div>
-                <div class="kh-inline">
-                    <select class="kh-select sm" name="limit"><option value="25" {{if eq .limit 25}}selected{{end}}>25</option><option value="50" {{if eq .limit 50}}selected{{end}}>50</option><option value="100" {{if eq .limit 100}}selected{{end}}>100</option><option value="250" {{if eq .limit 250}}selected{{end}}>250</option></select>
-                    <button type="submit" class="kh-btn primary sm">Filtrele</button>
-                    <a href="/results" class="kh-btn subtle sm" title="Filtreleri temizle">✕</a>
-                </div>
-                {{if .filter.Tag}}<input type="hidden" name="tag" value="{{.filter.Tag}}">{{end}}
-            </form>
-            <datalist id="query-list"></datalist>
-            <div class="kh-divider" style="margin:12px 0"></div>
-            <div class="kh-inline" style="justify-content:space-between">
-                <div class="kh-inline"><span class="kh-label">Etiket:</span><span id="tag-cloud-loading" class="kh-hint">yükleniyor…</span><div class="tagcloud" id="tag-cloud"></div></div>
-                {{if .filter.Tag}}<a href="/results" class="kh-badge info">etiket: {{.filter.Tag}} ✕</a>{{end}}
-            </div>
-        </section>
+  <section class="kh-card filter-card kh-section" aria-labelledby="filters-h">
+    <h2 id="filters-h" class="kh-sr">{{t .Lang "results.filters"}}</h2>
+    <form method="GET" action="/results" class="filter-grid" id="filter-form">
+      <div class="kh-field f-wide">
+        <label class="kh-label" for="f-q">{{t .Lang "results.f.query"}}</label>
+        <div class="kh-input-icon">{{icon "search"}}<input class="kh-input sm" id="f-q" type="text" name="q" value="{{.filter.Query}}" placeholder="{{t .Lang "results.f.queryPh"}}" list="query-list" autocomplete="off"></div>
+      </div>
+      <div class="kh-field f-wide">
+        <label class="kh-label" for="f-text">{{t .Lang "results.f.text"}}</label>
+        <div class="kh-input-icon">{{icon "filter"}}<input class="kh-input sm" id="f-text" type="text" name="text" value="{{.filter.Text}}" placeholder="{{t .Lang "results.f.textPh"}}" autocomplete="off"></div>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="f-source">{{t .Lang "results.f.engine"}}</label>
+        <select class="kh-select sm" id="f-source" name="source" data-change="filter-auto"><option value="">{{t .Lang "common.all"}}</option>{{range .sources}}<option value="{{.}}"{{if eq $.filter.Source .}} selected{{end}}>{{.}}</option>{{end}}</select>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="f-cat">{{t .Lang "common.category"}}</label>
+        <select class="kh-select sm" id="f-cat" name="category" data-change="filter-auto"><option value="">{{t .Lang "common.all"}}</option>{{range .categories}}<option value="{{.}}"{{if eq $.filter.Category .}} selected{{end}}>{{.}}</option>{{end}}</select>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="f-sev">{{t .Lang "results.f.minSev"}}</label>
+        <select class="kh-select sm crit-select s{{.filter.MinCriticality}}" id="f-sev" name="minCriticality" data-change="filter-auto">{{range $v := (seq 1 5)}}<option value="{{$v}}"{{if eq $v $.filter.MinCriticality}} selected{{end}}>SEV {{$v}}+</option>{{end}}</select>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="f-case">{{t .Lang "results.f.case"}}</label>
+        <select class="kh-select sm" id="f-case" name="case" data-change="filter-auto">
+          <option value=""{{if eq .filter.CaseStatus ""}} selected{{end}}>{{t .Lang "common.all"}}</option>
+          <option value="any"{{if eq .filter.CaseStatus "any"}} selected{{end}}>{{t .Lang "results.case.any"}}</option>
+          <option value="new"{{if eq .filter.CaseStatus "new"}} selected{{end}}>{{t .Lang "results.case.new"}}</option>
+          <option value="investigating"{{if eq .filter.CaseStatus "investigating"}} selected{{end}}>{{t .Lang "results.case.inv"}}</option>
+          <option value="confirmed"{{if eq .filter.CaseStatus "confirmed"}} selected{{end}}>{{t .Lang "results.case.ok"}}</option>
+          <option value="dismissed"{{if eq .filter.CaseStatus "dismissed"}} selected{{end}}>{{t .Lang "results.case.dis"}}</option>
+        </select>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="f-sort">{{t .Lang "results.f.sort"}}</label>
+        <select class="kh-select sm" id="f-sort" name="sort" data-change="filter-auto">
+          <option value="newest"{{if eq .filter.Sort "newest"}} selected{{end}}>{{t .Lang "results.sort.newest"}}</option>
+          <option value="oldest"{{if eq .filter.Sort "oldest"}} selected{{end}}>{{t .Lang "results.sort.oldest"}}</option>
+          <option value="criticality"{{if eq .filter.Sort "criticality"}} selected{{end}}>{{t .Lang "results.sort.sev"}}</option>
+          <option value="hits"{{if eq .filter.Sort "hits"}} selected{{end}}>{{t .Lang "results.sort.hits"}}</option>
+        </select>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="f-limit">{{t .Lang "results.f.limit"}}</label>
+        <select class="kh-select sm" id="f-limit" name="limit" data-change="filter-auto">
+          <option value="25"{{if eq .limit 25}} selected{{end}}>25</option>
+          <option value="50"{{if eq .limit 50}} selected{{end}}>50</option>
+          <option value="100"{{if eq .limit 100}} selected{{end}}>100</option>
+          <option value="250"{{if eq .limit 250}} selected{{end}}>250</option>
+        </select>
+      </div>
+      <div class="f-actions">
+        <a href="/results" class="kh-btn subtle sm" title="{{t .Lang "results.f.clearHint"}}">{{icon "close"}} {{t .Lang "results.f.clear"}}</a>
+        <button type="submit" class="kh-btn primary sm view-ok">{{icon "filter"}} {{t .Lang "common.filter"}}</button>
+      </div>
+      {{if .filter.Tag}}<input type="hidden" name="tag" value="{{.filter.Tag}}">{{end}}
+    </form>
+    <datalist id="query-list"></datalist>
+    <hr class="kh-divider">
+    <div class="tag-row">
+      <span class="tag-lbl">{{icon "tag"}} {{t .Lang "results.tags"}}</span>
+      <div class="tagcloud clamped" id="tag-cloud"><span class="kh-hint">{{t .Lang "common.loading"}}</span></div>
+      <div class="tag-row-end">
+        {{if .filter.Tag}}<a href="/results" id="tag-clear" class="kh-chip active" title="{{t .Lang "results.f.clear"}}">{{t .Lang "results.tagActive"}}: <b>{{.filter.Tag}}</b> {{iconc "close" "sm"}}</a>{{end}}
+        <button type="button" class="kh-btn xs subtle" id="tag-more" data-action="tags-toggle" aria-expanded="false" hidden>{{icon "chevron-down"}}</button>
+      </div>
+    </div>
+  </section>
 
-        <div class="bulkbar" id="bulkbar">
-            <strong id="bulk-count">0 seçili</strong>
-            <button class="kh-btn sm ghost" onclick="batchAutoTag(true)">{{icon "tag"}} Seçilenleri Etiketle</button>
-            <button class="kh-btn sm subtle" onclick="bulkSetCriticality()">{{icon "fire"}} Kritiklik Ata</button>
-            <button class="kh-btn sm subtle" onclick="bulkCopyUrls()">{{icon "copy"}} URL'leri Kopyala</button>
-            <button class="kh-btn sm danger" onclick="bulkDelete()">{{icon "trash"}} Sil</button>
-            <span class="spacer" style="flex:1"></span>
-            <button class="kh-btn sm subtle" onclick="clearSelection()">Seçimi kaldır</button>
-        </div>
+  <div class="bulkwrap" id="bulkwrap"><div class="bulkclip">
+    <div class="bulkbar" id="bulkbar" role="region" aria-label="{{t .Lang "results.selected"}}">
+      <span class="bulk-count"><span class="n" id="bulk-n">0</span> {{t .Lang "results.selected"}}</span>
+      <span class="bulk-sep" aria-hidden="true"></span>
+      <button type="button" class="kh-btn sm ghost" data-action="batch-tag" data-scope="selected" data-write>{{icon "tag"}} {{t .Lang "results.tagSelected"}}</button>
+      <button type="button" class="kh-btn sm subtle" data-action="bulk-sev" data-write>{{icon "fire"}} {{t .Lang "results.setSev"}}</button>
+      <button type="button" class="kh-btn sm subtle" data-action="bulk-copy">{{icon "copy"}} {{t .Lang "results.copyUrls"}}</button>
+      <button type="button" class="kh-btn sm danger" data-action="bulk-delete" data-write>{{icon "trash"}} {{t .Lang "common.delete"}}</button>
+      <span class="spacer"></span>
+      <button type="button" class="kh-btn sm subtle" data-action="clear-selection">{{icon "close"}} {{t .Lang "results.clearSel"}}</button>
+    </div>
+  </div></div>
 
-        {{if .results}}
-        <section class="kh-card flush">
-            <div class="kh-toolbar" style="padding:12px 16px;border-bottom:1px solid var(--bg-card-border)">
-                <button id="batchTagBtn" class="kh-btn sm primary" onclick="batchAutoTag(false)">{{icon "tag"}} Bu Sayfayı Etiketle ({{len .results}})</button>
-                <button id="cancelBatchBtn" class="kh-btn sm danger" style="display:none" onclick="cancelBatchJob()">{{icon "close"}} İptal</button>
-                <span class="kh-hint">Etiketleme her kaydı Tor üzerinden çeker (~5-40 sn/kayıt), içerikten etiket + IOC çıkarır ve kategoriyi günceller.</span>
-                <span class="spacer"></span>
-                <div id="tag-progress" style="display:none;min-width:260px">
-                    <div class="kh-inline" style="justify-content:space-between;font-size:.75rem"><span id="tag-status">Hazırlanıyor…</span><span id="tag-progress-text" class="kh-mono">%0</span></div>
-                    <div class="kh-progress"><div id="tag-progress-bar" style="width:0%"></div></div>
-                </div>
+  {{if .results}}
+  <section class="kh-card flush results-card">
+    <div class="results-toolbar">
+      <button type="button" id="batch-tag-btn" class="kh-btn sm primary" data-action="batch-tag" data-scope="page" data-write>{{icon "tag"}} {{t .Lang "results.tagPage"}} <span class="kh-mono">({{len .results}})</span></button>
+      <button type="button" id="cancel-batch-btn" class="kh-btn sm danger" data-action="batch-cancel" hidden>{{icon "close"}} {{t .Lang "results.cancelJob"}}</button>
+      <span class="kh-hint tb-hint" data-write>{{t .Lang "results.tagHint"}}</span>
+      <div class="tag-progress" id="tag-progress" hidden>
+        <div class="flex justify-between gap-3 text-xs"><span id="tag-status" class="kh-truncate">…</span><span id="tag-pct" class="kh-mono">0%</span></div>
+        <div class="kh-progress active"><div id="tag-bar"></div></div>
+      </div>
+      <span class="tb-range kh-mono">{{.rangeFrom}}–{{.rangeTo}} / {{.total}}</span>
+    </div>
+    <div class="kh-table-wrap">
+      <table class="kh-table findings" id="results-table">
+        <colgroup><col class="w-check"><col><col class="w-tags"><col class="w-risk"><col class="w-hits"><col class="w-case"><col class="w-act"></colgroup>
+        <thead><tr>
+          <th class="c-check"><input type="checkbox" id="select-all" data-change="select-all" aria-label="{{t .Lang "results.selectAll"}}" title="{{t .Lang "results.selectAll"}}"></th>
+          <th>{{t .Lang "results.col.finding"}}</th>
+          <th>{{t .Lang "results.col.tags"}}</th>
+          <th>{{t .Lang "results.col.risk"}}</th>
+          <th class="center" title="{{t .Lang "results.col.hitsHint"}}">{{t .Lang "results.col.hits"}}</th>
+          <th>{{t .Lang "results.col.case"}}</th>
+          <th class="right"><span class="kh-sr">{{t .Lang "common.actions"}}</span></th>
+        </tr></thead>
+        <tbody>
+        {{range .results}}{{$cc := .Criticality}}
+        <tr data-id="{{.ID}}" data-url="{{.URL}}" data-title="{{.Title}}">
+          <td class="c-check"><input type="checkbox" class="row-check" value="{{.ID}}" data-change="row-check" aria-label="{{t $.Lang "results.selectRow"}}"></td>
+          <td class="c-finding">
+            <span class="title" title="{{.Title}}">{{.Title}}</span>
+            <div class="url-line">
+              <a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" title="{{.URL}}">{{.URL}}</a>
+              <button type="button" class="kh-copy" data-action="copy" data-copy="{{.URL}}" data-copy-label="{{t $.Lang "results.copied"}}" aria-label="{{t $.Lang "results.a.copy"}}" title="{{t $.Lang "results.a.copy"}}">{{iconc "copy" "sm"}}</button>
             </div>
-            <div class="kh-table-wrap"><table class="kh-table" id="results-table" style="min-width:1180px">
-                <thead><tr>
-                    <th style="width:32px"><input type="checkbox" id="select-all" title="Tümünü seç" onchange="toggleAll(this)"></th>
-                    <th>Başlık &amp; Kaynak</th><th>URL</th><th>Etiketler / IOC</th><th class="center">Kritiklik</th><th>Kategori</th><th class="center" title="Arama kelimesinin sayfada geçme sayısı">Sıklık</th><th>Vaka</th><th>Tarih</th><th></th>
-                </tr></thead>
-                <tbody>
-                {{range .results}}
-                <tr data-id="{{.ID}}" data-url="{{.URL}}">
-                    <td><input type="checkbox" class="row-check" value="{{.ID}}" onchange="updateSelection()"></td>
-                    <td><span class="title" title="{{.Title}}">{{truncate .Title 60}}</span><div class="meta"><span class="kh-badge neutral mono">{{.Source}}</span><span>sorgu: <a href="/results?q={{.Query}}" style="color:var(--text-secondary)">{{.Query}}</a></span></div></td>
-                    <td><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" title="{{.URL}}">{{truncate .URL 44}}</a> <span class="kh-copy" title="Kopyala" onclick="KH.copy(this.closest('tr').dataset.url,'URL kopyalandı')" aria-label="Kopyala">{{icon "copy"}}</span></td>
-                    <td id="tags-{{.ID}}"><div id="tag-list-{{.ID}}">{{if .AutoTags}}{{range $t := (split .AutoTags ", ")}}<span class="kh-tag">{{$t}}</span>{{end}}{{else}}<span class="kh-hint">etiketlenmedi</span>{{end}}</div><div id="art-{{.ID}}" style="margin-top:4px"></div></td>
-                    <td class="center"><select data-field="criticality" onchange="updateRowFrom(this)" class="kh-select sm crit-select s{{.Criticality}}" style="width:76px">{{$cc := .Criticality}}{{range $v := (seq 1 5)}}<option value="{{$v}}" {{if eq $v $cc}}selected{{end}}>{{$v}}</option>{{end}}</select></td>
-                    <td><input type="text" data-field="category" value="{{.Category}}" maxlength="64" onchange="updateRowFrom(this)" class="kh-input sm" style="width:130px" list="category-list"></td>
-                    <td class="center"><span id="count-{{.ID}}" class="kh-mono" style="font-weight:700;{{if gt .KeywordCount 0}}color:#68d391{{else}}color:var(--text-muted){{end}}">{{.KeywordCount}}</span></td>
-                    <td>
-                        <select data-field="case" onchange="updateCase('{{.ID}}', this)" class="kh-select sm case-sel cs-{{.CaseStatus}}" style="width:110px" title="Vaka durumu">
-                            <option value=""{{if eq .CaseStatus ""}} selected{{end}}>—</option>
-                            <option value="new"{{if eq .CaseStatus "new"}} selected{{end}}>Yeni</option>
-                            <option value="investigating"{{if eq .CaseStatus "investigating"}} selected{{end}}>İnceleniyor</option>
-                            <option value="confirmed"{{if eq .CaseStatus "confirmed"}} selected{{end}}>Doğrulandı</option>
-                            <option value="dismissed"{{if eq .CaseStatus "dismissed"}} selected{{end}}>Elendi</option>
-                        </select>
-                        <button class="kh-btn xs subtle note-btn{{if .Note}} has-note{{end}}" title="{{if .Note}}Not: {{.Note}}{{else}}Not ekle{{end}}" onclick="editNote('{{.ID}}', this)" data-note="{{.Note}}">{{icon "file"}}</button>
-                    </td>
-                    <td class="muted kh-mono" style="font-size:.72rem;white-space:nowrap">{{formatTime .CreatedAt}}</td>
-                    <td><div class="kh-rowactions">
-                        <button class="kh-btn xs ghost" title="Etiketle + IOC çıkar" onclick="autoTagResult('{{.ID}}', this)">{{icon "tag"}}</button>
-                        <button class="kh-btn xs subtle" title="Sıklığı Tor üzerinden yeniden say" onclick="analyzeResult('{{.ID}}', this)">{{icon "refresh"}}</button>
-                        <button class="kh-btn xs subtle" title="IOC listesi" onclick="showArtifacts('{{.ID}}')">{{icon "dna"}}</button>
-                        <button class="kh-btn xs subtle" title="İzleme listesine ekle" onclick="addToWatchlist(this.closest('tr'))">{{icon "radar"}}</button>
-                    </div></td>
-                </tr>
-                {{end}}
-                </tbody></table></div>
-            <datalist id="category-list">{{range .categories}}<option value="{{.}}">{{end}}</datalist>
-            <div class="kh-pagination">
-                {{if .hasPrev}}<a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page=1">« İlk</a><a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page={{.prevPage}}">‹ Önceki</a>{{end}}
-                <span class="info">{{.page}} / {{.totalPages}} · {{.total}} kayıt</span>
-                {{if .hasNext}}<a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page={{.nextPage}}">Sonraki ›</a><a class="kh-btn sm subtle" href="/results?{{.baseQuery}}&page={{.totalPages}}">Son »</a>{{end}}
+            <div class="meta">
+              <span class="kh-badge neutral mono">{{.Source}}</span>
+              {{if .Query}}<a class="q" href="/results?q={{.Query}}" title="{{t $.Lang "results.byQuery"}}">{{iconc "search" "sm"}}<span>{{.Query}}</span></a>{{end}}
+              <span class="when" data-ago="{{isoTime .CreatedAt}}" title="{{formatTime .CreatedAt}}">{{iconc "clock" "sm"}}<span>{{formatTime .CreatedAt}}</span></span>
             </div>
-        </section>
-        {{else}}
-        <section class="kh-card"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>{{if .total}}Bu sayfada kayıt yok{{else}}Filtreyle eşleşen bulgu yok{{end}}</h3><p>Filtreleri gevşetin ya da yeni bir arama başlatın.</p><div class="kh-inline" style="justify-content:center;margin-top:12px"><a href="/results" class="kh-btn subtle">Filtreleri temizle</a><a href="/search" class="kh-btn primary">Yeni Arama →</a></div></div></section>
+          </td>
+          <td class="c-tags">
+            <div class="tag-list" id="tag-list-{{.ID}}">{{range tags .AutoTags}}<a class="kh-tag" href="/results?tag={{.}}">{{.}}</a>{{else}}<span class="kh-hint">{{t $.Lang "results.untagged"}}</span>{{end}}</div>
+            <div class="art" id="art-{{.ID}}"></div>
+          </td>
+          <td class="c-risk">
+            <select class="kh-select sm crit-select s{{.Criticality}}" data-field="criticality" data-change="update-row" aria-label="{{t $.Lang "results.sevLabel"}}"{{if not $.CanWrite}} disabled{{end}}>{{range $v := (seq 1 5)}}<option value="{{$v}}"{{if eq $v $cc}} selected{{end}}>SEV {{$v}}</option>{{end}}</select>
+            <input class="kh-input sm cat-input" type="text" data-field="category" data-change="update-row" value="{{.Category}}" maxlength="64" list="category-list" aria-label="{{t $.Lang "results.catLabel"}}" title="{{.Category}}"{{if not $.CanWrite}} disabled{{end}}>
+          </td>
+          <td class="center c-hits" data-label="{{t $.Lang "results.col.hits"}}"><span id="count-{{.ID}}" class="hits{{if gt .KeywordCount 0}} pos{{end}}">{{.KeywordCount}}</span></td>
+          <td class="c-case">
+            <div class="case-box">
+              <select class="kh-select sm case-sel cs-{{.CaseStatus}}" data-field="case" data-change="update-case" aria-label="{{t $.Lang "results.caseLabel"}}"{{if not $.CanWrite}} disabled{{end}}>
+                <option value=""{{if eq .CaseStatus ""}} selected{{end}}>—</option>
+                <option value="new"{{if eq .CaseStatus "new"}} selected{{end}}>{{t $.Lang "results.case.new"}}</option>
+                <option value="investigating"{{if eq .CaseStatus "investigating"}} selected{{end}}>{{t $.Lang "results.case.inv"}}</option>
+                <option value="confirmed"{{if eq .CaseStatus "confirmed"}} selected{{end}}>{{t $.Lang "results.case.ok"}}</option>
+                <option value="dismissed"{{if eq .CaseStatus "dismissed"}} selected{{end}}>{{t $.Lang "results.case.dis"}}</option>
+              </select>
+              <button type="button" class="kh-btn xs subtle icon note-btn{{if .Note}} has-note{{end}}" data-action="edit-note" data-note="{{.Note}}" aria-label="{{if .Note}}{{t $.Lang "results.note"}}{{else}}{{t $.Lang "results.addNote"}}{{end}}" title="{{if .Note}}{{t $.Lang "results.note"}}: {{.Note}}{{else}}{{t $.Lang "results.addNote"}}{{end}}" data-write>{{icon "note"}}</button>
+            </div>
+            <div class="note-preview" title="{{.Note}}"{{if not .Note}} hidden{{end}}>{{.Note}}</div>
+          </td>
+          <td class="right c-act">
+            <div class="kh-rowactions">
+              <button type="button" class="kh-btn xs ghost icon" data-action="auto-tag" aria-label="{{t $.Lang "results.a.tag"}}" title="{{t $.Lang "results.a.tag"}}" data-write>{{icon "tag"}}</button>
+              <button type="button" class="kh-btn xs subtle icon" data-action="recount" aria-label="{{t $.Lang "results.a.recount"}}" title="{{t $.Lang "results.a.recount"}}" data-write>{{icon "refresh"}}</button>
+              <button type="button" class="kh-btn xs subtle icon" data-action="show-ioc" aria-label="{{t $.Lang "results.a.ioc"}}" title="{{t $.Lang "results.a.ioc"}}">{{icon "dna"}}</button>
+              <button type="button" class="kh-btn xs subtle icon" data-action="watch" aria-label="{{t $.Lang "results.a.watch"}}" title="{{t $.Lang "results.a.watch"}}" data-write>{{icon "radar"}}</button>
+            </div>
+          </td>
+        </tr>
         {{end}}
-    </main>
+        </tbody>
+      </table>
+    </div>
+    <datalist id="category-list">{{range .categories}}<option value="{{.}}">{{end}}</datalist>
+    <nav class="kh-pagination" aria-label="{{t .Lang "results.pageLbl"}}">
+      {{if .hasPrev}}<a class="kh-btn sm subtle" href="{{.firstURL}}" aria-label="{{t .Lang "results.first"}}">« <span class="hide-sm">{{t .Lang "results.first"}}</span></a><a class="kh-btn sm subtle" href="{{.prevURL}}" rel="prev">‹ {{t .Lang "results.prev"}}</a>{{end}}
+      <span class="info">{{.page}} / {{.totalPages}} · {{.total}} {{t .Lang "results.records"}}</span>
+      {{if .hasNext}}<a class="kh-btn sm subtle" href="{{.nextURL}}" rel="next">{{t .Lang "results.next"}} ›</a><a class="kh-btn sm subtle" href="{{.lastURL}}" aria-label="{{t .Lang "results.last"}}"><span class="hide-sm">{{t .Lang "results.last"}}</span> »</a>{{end}}
+    </nav>
+  </section>
+  {{else}}
+  <section class="kh-card">
+    <div class="kh-empty">
+      <div class="icon">{{icon "empty"}}</div>
+      <h3>{{if .total}}{{t .Lang "results.emptyPage"}}{{else}}{{t .Lang "results.empty"}}{{end}}</h3>
+      <p>{{t .Lang "results.emptyS"}}</p>
+      <div class="kh-inline">
+        <a href="/results" class="kh-btn subtle">{{icon "close"}} {{t .Lang "results.f.clear"}}</a>
+        {{if .total}}<a href="{{.firstURL}}" class="kh-btn subtle">« {{t .Lang "results.first"}}</a>{{end}}
+        <a href="/search" class="kh-btn primary" data-write>{{icon "search"}} {{t .Lang "results.newSearch"}}</a>
+      </div>
+    </div>
+  </section>
+  {{end}}
+</main>
 
-    <div class="kh-modal-overlay" id="artifact-modal"><div class="kh-modal lg"><h2>{{icon "dna" }} Çıkarılan IOC / Artifact'lar</h2><div id="artifact-body"></div><div class="kh-modal-actions"><button class="kh-btn subtle" onclick="KH.closeModal('artifact-modal')">Kapat</button></div></div></div>
-
-    <script>
-        const currentQuery = {{.query}};
-        const pageIds = Array.from(document.querySelectorAll('tr[data-id]')).map(r => parseInt(r.dataset.id));
-        let activeBatchJobId = '', statusPollTimer = null;
-
-        // ── Etiket bulutu + sorgu listesi ──
-        KH.api('/api/tags').then(d => {
-            document.getElementById('tag-cloud-loading').textContent = '';
-            const tags = d.tags || []; const cloud = document.getElementById('tag-cloud');
-            if (!tags.length) { cloud.innerHTML = '<span class="kh-hint">Henüz etiket yok</span>'; return; }
-            const max = Math.max(...tags.map(t => t.count));
-            cloud.innerHTML = tags.slice(0, 40).map(t => `<a class="kh-chip ${t.tag === {{.filter.Tag}} ? 'active' : ''}" href="/results?tag=${encodeURIComponent(t.tag)}" style="font-size:${t.count >= max * .6 ? '.82' : t.count >= max * .3 ? '.76' : '.7'}rem">${KH.esc(t.tag)} <span class="count">${t.count}</span></a>`).join('');
-        }).catch(() => document.getElementById('tag-cloud-loading').textContent = 'yüklenemedi');
-        KH.api('/api/queries').then(d => { document.getElementById('query-list').innerHTML = (d.queries || []).map(q => `<option value="${KH.esc(q.query)}">`).join(''); }).catch(() => { });
-
-        // ── IOC rozetleri (tek toplu istek) ──
-        if (pageIds.length) KH.api('/api/artifacts/counts?ids=' + pageIds.join(',')).then(d => { Object.entries(d.counts || {}).forEach(([id, n]) => { const el = document.getElementById('art-' + id); if (el && n > 0) el.innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer">${KH.icon('dna')} ${n} IOC</button>`; }); }).catch(() => { });
-
-        function showArtifacts(id) {
-            const body = document.getElementById('artifact-body'); body.innerHTML = '<div class="kh-skel"></div>'; KH.openModal('artifact-modal');
-            const names = { email: 'E-posta', bitcoin: 'Bitcoin', monero: 'Monero', ip: 'IP', onion: 'Onion', credit_card: 'Kart', phone: 'Telefon', ssh_key: 'SSH Key', api_key: 'API Key', username: 'Kullanıcı', hash: 'Hash' }; const ticon = { email:'mail', bitcoin:'coin', monero:'coin', ip:'globe', onion:'onion', credit_card:'card', phone:'phone', ssh_key:'key', api_key:'key', username:'user', hash:'hash' };
-            KH.api('/api/results/' + id + '/artifacts').then(d => {
-                if (!d.count) { body.innerHTML = '<p class="kh-hint">Bu kayıt için IOC yok. Önce <strong> Etiketle</strong> çalıştırın (sayfa metni Tor üzerinden çekilir).</p>'; return; }
-                body.innerHTML = '<p class="kh-hint" style="margin-bottom:8px">' + d.count + ' artifact · güven skoruna göre sıralı</p>' + d.artifacts.map(a => `<div class="art-row"><span class="kh-badge neutral">${KH.icon(ticon[a.type]||'info')} ${KH.esc(names[a.type] || a.type)}</span><div><div class="v">${KH.esc(a.value)}</div><div class="kh-hint">${KH.esc(a.context)}</div></div><div class="kh-inline"><span class="kh-badge ${a.confidence >= .8 ? 'ok' : a.confidence >= .6 ? 'info' : 'neutral'}">${Math.round(a.confidence * 100)}%</span><button class="kh-btn xs subtle" onclick="KH.copy(${JSON.stringify(a.value)})" aria-label="Kopyala">${KH.icon('copy')}</button></div></div>`).join('') + `<div style="margin-top:12px"><button class="kh-btn sm subtle" onclick="KH.copy(${JSON.stringify(d.artifacts.map(a => a.type + ',' + a.value).join('\n'))}, 'Tüm IOC\\'lar kopyalandı')">${KH.icon('copy')} Tümünü CSV olarak kopyala</button></div>`;
-            }).catch(e => body.innerHTML = '<p class="kh-alert err">' + KH.esc(e.message) + '</p>');
-        }
-
-        // ── Vaka yönetimi ──
-        function updateCase(id, el) {
-            const row = el.closest('tr[data-id]');
-            const status = el.value; el.className = 'kh-select sm case-sel cs-' + status; el.style.width = '110px';
-            const noteBtn = row.querySelector('.note-btn');
-            KH.api('/api/results/' + id + '/case', { method: 'POST', body: { status, note: noteBtn.dataset.note || '' } })
-                .then(() => KH.toast('Vaka güncellendi', 'ok', 1500)).catch(e => KH.toast(e.message, 'err'));
-        }
-        function editNote(id, btn) {
-            const cur = btn.dataset.note || '';
-            const note = prompt('Analist notu (bu bulgu için):', cur);
-            if (note === null) return;
-            const row = btn.closest('tr[data-id]');
-            const status = row.querySelector('select[data-field="case"]').value;
-            KH.api('/api/results/' + id + '/case', { method: 'POST', body: { status, note: note.trim() } }).then(() => {
-                btn.dataset.note = note.trim();
-                btn.classList.toggle('has-note', !!note.trim());
-                btn.title = note.trim() ? 'Not: ' + note.trim() : 'Not ekle';
-                KH.toast('Not kaydedildi', 'ok', 1500);
-            }).catch(e => KH.toast(e.message, 'err'));
-        }
-
-        // ── Seçim ──
-        function selected() { return Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value)); }
-        function updateSelection() { const n = selected().length; document.getElementById('bulk-count').textContent = n + ' seçili'; document.getElementById('bulkbar').classList.toggle('show', n > 0); document.querySelectorAll('tr[data-id]').forEach(r => r.classList.toggle('selected', r.querySelector('.row-check').checked)); }
-        function toggleAll(cb) { document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked); updateSelection(); }
-        function clearSelection() { document.getElementById('select-all').checked = false; toggleAll(document.getElementById('select-all')); }
-        function bulkCopyUrls() { const urls = selected().map(id => document.querySelector(`tr[data-id="${id}"]`).dataset.url); KH.copy(urls.join('\n'), urls.length + ' URL kopyalandı'); }
-        async function bulkDelete() {
-            const ids = selected(); if (!ids.length) return;
-            if (!await KH.confirm({ title: 'Kayıtları sil', message: ids.length + ' bulgu ve bunlara bağlı etiket/IOC kayıtları kalıcı olarak silinecek.', okText: 'Sil', danger: true })) return;
-            try { const d = await KH.api('/api/results/delete', { method: 'POST', body: { ids } }); KH.toast(d.deleted + ' kayıt silindi', 'ok'); ids.forEach(id => document.querySelector(`tr[data-id="${id}"]`)?.remove()); updateSelection(); } catch (e) { KH.toast(e.message, 'err'); }
-        }
-        async function bulkSetCriticality() {
-            const ids = selected(); if (!ids.length) return;
-            const v = prompt('Seçili ' + ids.length + ' kayıt için kritiklik (1-5):', '4'); const crit = parseInt(v); if (!(crit >= 1 && crit <= 5)) return;
-            let ok = 0;
-            for (const id of ids) { const row = document.querySelector(`tr[data-id="${id}"]`); const cat = row.querySelector('input[data-field="category"]').value; try { await KH.api('/api/update-criticality', { method: 'POST', body: { id, type: 'result', criticality: crit, category: cat } }); row.querySelector('select[data-field="criticality"]').value = String(crit); ok++; } catch (_) { } }
-            KH.toast(ok + ' kayıt güncellendi', 'ok');
-        }
-
-        // ── Satır güncelleme (DOM'daki güncel değerlerle) ──
-        function updateRowFrom(el) {
-            const row = el.closest('tr[data-id]'); if (!row) return;
-            const sel = row.querySelector('select[data-field="criticality"]'); const crit = parseInt(sel.value); const cat = row.querySelector('input[data-field="category"]').value.trim();
-            sel.className = 'kh-select sm crit-select s' + crit; sel.style.width = '76px';
-            KH.api('/api/update-criticality', { method: 'POST', body: { id: parseInt(row.dataset.id), type: 'result', criticality: crit, category: cat } }).then(() => KH.toast('Güncellendi', 'ok', 1500)).catch(e => KH.toast(e.message, 'err'));
-        }
-
-        async function addToWatchlist(row) {
-            const url = row.dataset.url; const name = row.querySelector('.title').textContent.trim().slice(0, 100) || url;
-            try { const host = new URL(url).hostname; await KH.api('/api/watchlist', { method: 'POST', body: { name, url: 'http://' + host, category: 'Bulgu', notes: 'Bulgulardan eklendi' } }); KH.toast('İzleme listesine eklendi: ' + host.slice(0, 20) + '…', 'ok'); } catch (e) { KH.toast(e.message, 'err'); }
-        }
-
-        // ── Tekil etiketleme ──
-        function autoTagResult(id, btn) {
-            const tagsEl = document.getElementById('tag-list-' + id); const orig = tagsEl.innerHTML;
-            KH.busy(btn, true, ''); tagsEl.innerHTML = '<span class="kh-tag" style="opacity:.6">Tor üzerinden çekiliyor…</span>';
-            KH.api('/api/auto-tag', { method: 'POST', body: { id: parseInt(id) } }).then(d => {
-                KH.busy(btn, false);
-                tagsEl.innerHTML = KH.tags(d.tagsStr);
-                if (d.artifacts > 0) document.getElementById('art-' + id).innerHTML = `<button class="kh-badge info art-badge" onclick="showArtifacts(${id})" style="cursor:pointer"> ${d.artifacts} IOC</button>`;
-                const row = document.querySelector(`tr[data-id="${id}"]`);
-                if (d.keywordHits > 0) { const c = document.getElementById('count-' + id); c.textContent = d.keywordHits; c.style.color = '#68d391'; }
-                const sel = row.querySelector('select[data-field="criticality"]'); if (typeof d.criticality === 'number') { sel.value = String(d.criticality); sel.className = 'kh-select sm crit-select s' + d.criticality; sel.style.width = '76px'; }
-                if (d.category) row.querySelector('input[data-field="category"]').value = d.category;
-                KH.toast('Etiketlendi: ' + d.tagsStr + (d.artifacts ? ' · ' + d.artifacts + ' IOC' : ''), 'ok');
-            }).catch(e => { KH.busy(btn, false); tagsEl.innerHTML = orig; KH.toast(e.message, 'err'); });
-        }
-
-        function analyzeResult(id, btn) {
-            KH.busy(btn, true, '');
-            KH.api('/api/analyze-result', { method: 'POST', body: { id: parseInt(id) } }).then(d => { KH.busy(btn, false); const c = document.getElementById('count-' + id); c.textContent = d.count; c.style.color = d.count > 0 ? '#68d391' : 'var(--text-muted)'; KH.toast('Sıklık: ' + d.count, 'ok'); }).catch(e => { KH.busy(btn, false); KH.toast(e.message, 'err'); });
-        }
-
-        // ── Toplu etiketleme ──
-        function batchAutoTag(onlySelected) {
-            const ids = onlySelected ? selected() : pageIds; if (!ids.length) { KH.toast('Etiketlenecek kayıt yok', 'warn'); return; }
-            const btn = document.getElementById('batchTagBtn'); KH.busy(btn, true, 'Kuyruğa alınıyor…'); document.getElementById('cancelBatchBtn').style.display = '';
-            const prog = document.getElementById('tag-progress'); prog.style.display = ''; setProgress(0, 'İş kuyruğa alınıyor…');
-            startTagEventStream(ids.length);
-            KH.api('/api/batch-auto-tag', { method: 'POST', body: { resultIds: ids, query: currentQuery || '' } }).then(d => { activeBatchJobId = d.jobId; btn.innerHTML = ' İşleniyor…'; startBatchStatusPolling(d.jobId, d.total || ids.length); }).catch(e => { cleanupBatchUI(); KH.toast(e.message, 'err'); });
-        }
-        function setProgress(pct, text) { document.getElementById('tag-progress-bar').style.width = pct + '%'; document.getElementById('tag-progress-text').textContent = '%' + pct; if (text) document.getElementById('tag-status').textContent = text; }
-        function startTagEventStream(total) {
-            if (window.tagEventSource) window.tagEventSource.close();
-            let done = 0; window.tagEventSource = new EventSource('/events');
-            window.tagEventSource.onmessage = ev => { try { const d = JSON.parse(ev.data); if (d.type === 'auto_tag' || d.type === 'auto_tag_error') { done++; setProgress(Math.min(100, Math.round(done / total * 100)), d.message); } } catch (_) { } };
-            window.tagEventSource.onerror = () => window.tagEventSource.close();
-        }
-        function startBatchStatusPolling(jobId, total) {
-            stopBatchStatusPolling();
-            statusPollTimer = setInterval(() => KH.api('/api/batch-auto-tag/' + encodeURIComponent(jobId)).then(d => {
-                const pct = Math.min(100, Math.round((d.processed || 0) / Math.max(d.total || total, 1) * 100)); setProgress(pct, `Durum: ${d.status} · ${d.processed || 0}/${d.total || total} · ✓${d.successes || 0} ✗${d.failures || 0}`);
-                if (d.status === 'completed') { stopBatchStatusPolling(); KH.toast('Etiketleme tamamlandı, sayfa yenileniyor', 'ok'); setTimeout(() => location.reload(), 1200); }
-                else if (d.status === 'failed' || d.status === 'cancelled') { stopBatchStatusPolling(); cleanupBatchUI(); KH.toast(d.error || ('İş ' + d.status), d.status === 'failed' ? 'err' : 'warn'); }
-            }).catch(() => { }), 2000);
-        }
-        function stopBatchStatusPolling() { if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; } }
-        function cancelBatchJob() { if (!activeBatchJobId) return; KH.api('/api/batch-auto-tag/' + encodeURIComponent(activeBatchJobId) + '/cancel', { method: 'POST', body: {} }).then(() => { stopBatchStatusPolling(); cleanupBatchUI(); KH.toast('İptal edildi', 'warn'); }).catch(e => KH.toast(e.message, 'err')); }
-        function cleanupBatchUI() { activeBatchJobId = ''; stopBatchStatusPolling(); if (window.tagEventSource) window.tagEventSource.close(); KH.busy(document.getElementById('batchTagBtn'), false); document.getElementById('cancelBatchBtn').style.display = 'none'; document.getElementById('tag-progress').style.display = 'none'; }
-    </script>
+{{template "shell_end" .}}
+<div class="kh-modal-overlay" id="artifact-modal">
+  <div class="kh-modal lg" role="dialog" aria-modal="true" aria-labelledby="ioc-h">
+    <button type="button" class="kh-iconbtn kh-modal-x" data-action="modal-close" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+    <h2 id="ioc-h">{{icon "dna"}} {{t .Lang "results.iocTitle"}}</h2>
+    <p class="lead ioc-sub" id="ioc-sub"></p>
+    <div id="artifact-body" class="ioc-body"></div>
+    <div class="kh-modal-actions">
+      <button type="button" class="kh-btn subtle" id="ioc-copy-all" data-action="copy" data-copy="" hidden>{{icon "copy"}} <span id="ioc-copy-lbl"></span></button>
+      <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.close"}}</button>
+    </div>
+  </div>
+</div>
+<script src="/static/js/pages/results.js?v={{version}}" defer></script>
 </body>
 </html>

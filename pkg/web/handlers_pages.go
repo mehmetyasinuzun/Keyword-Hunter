@@ -404,7 +404,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 	if query == "" || len([]rune(query)) > maxSearchQueryLen {
 		s.render(c, http.StatusBadRequest, "search.html", gin.H{
 			"ActivePage": "search",
-			"error":      "Arama sorgusu boş olamaz ve 200 karakteri aşamaz",
+			"error":      i18n.T(requestLang(c), "search.errQuery"),
 		})
 		return
 	}
@@ -468,8 +468,9 @@ func (s *Server) handleSearch(c *gin.Context) {
 		"totalFound": len(results),
 		"newSaved":   savedCount,
 		"totalHits":  totalHits,
-		"duration":   elapsed.Round(time.Millisecond).String(),
+		"duration":   elapsed.Round(100 * time.Millisecond).String(),
 		"pages":      pages,
+		"searched":   true, // GET ?q= ön doldurmasından ayırmak için (boş sonuç durumu)
 	})
 }
 
@@ -523,6 +524,22 @@ func (s *Server) handleResults(c *gin.Context) {
 	qs := c.Request.URL.Query()
 	qs.Del("page")
 	baseQuery := qs.Encode()
+	// Bağlantılar tam URL olarak hazırlanır: html/template, sorgu bölümüne gömülen
+	// düz dizeyi "&"/"=" dahil kaçışladığı için (?limit%3d25%26…) filtreler dışa
+	// aktarma ve sayfalamada kayboluyordu; özniteliğin başındaki değer yalnızca
+	// normalleştirilir.
+	withQS := func(path, sep string) string {
+		if baseQuery == "" {
+			return path
+		}
+		return path + sep + baseQuery
+	}
+	pageURL := func(p int) string {
+		if baseQuery == "" {
+			return "/results?page=" + strconv.Itoa(p)
+		}
+		return "/results?" + baseQuery + "&page=" + strconv.Itoa(p)
+	}
 
 	s.render(c, http.StatusOK, "results.html", gin.H{
 		"ActivePage":   "results",
@@ -539,6 +556,15 @@ func (s *Server) handleResults(c *gin.Context) {
 		"prevPage":     page - 1,
 		"nextPage":     page + 1,
 		"baseQuery":    baseQuery,
+		"exportCSV":    withQS("/api/export/results?format=csv", "&"),
+		"exportJSON":   withQS("/api/export/results?format=json", "&"),
+		"exportSTIX":   withQS("/api/export/stix", "?"),
+		"firstURL":     pageURL(1),
+		"prevURL":      pageURL(page - 1),
+		"nextURL":      pageURL(page + 1),
+		"lastURL":      pageURL(totalPages),
+		"rangeFrom":    min(f.Offset+1, total),
+		"rangeTo":      min(f.Offset+len(results), total),
 		"sources":      sources,
 		"categories":   categories,
 	})
@@ -561,6 +587,12 @@ func (s *Server) handleAnalytics(c *gin.Context) {
 }
 
 func (s *Server) handleSettingsPage(c *gin.Context) {
+	// Ayarlar yalnız admin içindir: API zaten korunuyordu ama sayfanın kendisi
+	// her role açıktı (menüde gizli olsa da URL ile erişilebiliyordu).
+	if roleRank(c.GetString("role")) < roleRank("admin") {
+		s.renderError(c, http.StatusForbidden)
+		return
+	}
 	s.render(c, http.StatusOK, "settings.html", gin.H{
 		"ActivePage": "settings",
 	})
