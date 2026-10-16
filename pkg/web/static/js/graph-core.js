@@ -1,733 +1,360 @@
 /**
- * KeywordHunter - Graph Visualization JavaScript (Core)
- * Global State, Initialization, Data Loading
+ * KeywordHunter — İlişki haritası: çekirdek (durum, tema paleti, kademeli veri yükleme).
+ *
+ * Modüller tek bir ad alanını paylaşır: window.KHGraph (G).
+ *   graph-core.js   → durum, ayarlar, palet, veri yükleme, istatistik
+ *   graph-render.js → D3 yerleşimleri, geçişli çizim, yakınlaştırma, vurgulama
+ *   graph-ui.js     → ipucu, bağlam menüsü, ayar paneli, derinleştir / izle / ara
+ *   pages/graph.js  → KH.act bağlamaları + açılış
+ *
+ * Dark web kaynaklı başlık/URL'ler yalnızca textContent / D3 .text() ile basılır.
  */
+(function () {
+    'use strict';
 
-const GraphState = {
-    data: null,
-    root: null,
-    svg: null,
-    g: null,
-    zoom: null,
-    currentLayout: 'radial',
-    selectedNode: null,
-    nodeId: 0,
-    width: window.innerWidth,
-    height: window.innerHeight - 106, // Navbar + query panel
-    duration: 600,
-    queries: [],
-    activeLoadId: 0,
-    activeLoadController: null,
-    load: {
-        inProgress: false,
+    const G = window.KHGraph = window.KHGraph || {};
+    const T = (tr, en) => KH.tr(tr, en);
+    const $ = (id) => document.getElementById(id);
+
+    // ── Durum ───────────────────────────────────────────────────────────
+    G.state = {
+        data: null,            // ham ağaç (sunucu verisi; derinleştirme ile büyür)
+        view: null,            // çizilen kök (odaklı sorguda sorgu düğümü)
+        root: null,            // son çizilen d3.hierarchy
+        layout: 'radial',
         query: '',
-        profile: null,
-        counts: {
-            queries: 0,
-            engines: 0,
-            results: 0
-        }
-    }
-};
+        queries: [],
+        selected: null,        // bağlam menüsündeki düğüm (d3 düğümü)
+        defaultDepth: 2,       // bu derinliğin altındaki düğümler varsayılan açık
+        open: new Map(),       // kullanıcı aç/kapat geçersiz kılmaları: id → bool
+        fresh: new Set(),      // yeni açılan bağlantılar (kesik çizgi animasyonu)
+        userZoomed: false,     // kullanıcı elle yakınlaştırdıysa otomatik sığdırma yok
+        activeLoadId: 0,
+        controller: null,
+        load: { inProgress: false, query: '', profile: null, counts: { queries: 0, engines: 0, results: 0 } }
+    };
 
-const GRAPH_STAGE_PROFILES = Object.freeze({
-    overview: {
-        maxQueries: 20,
-        maxEnginesPerQuery: 8,
-        maxResultsPerEngine: 160,
-        resultPageSize: 60,
-        maxEnginesTotal: 80,
-        renderDebounceMs: 260
-    },
-    focused: {
-        maxQueries: 1,
-        maxEnginesPerQuery: 28,
-        maxResultsPerEngine: 700,
-        resultPageSize: 140,
-        maxEnginesTotal: 120,
-        renderDebounceMs: 200
-    }
-});
-
-const GRAPH_FETCH_GUARDS = Object.freeze({
-    maxPagesPerEngine: 60
-});
-
-let resizeDebounceHandle = null;
-let renderDebounceHandle = null;
-let lastRenderAt = 0;
-
-const GRAPH_STEP_IDS = Object.freeze({
-    queries: 'graph-step-queries',
-    engines: 'graph-step-engines',
-    results: 'graph-step-results'
-});
-
-// Graph Settings
-const GraphSettings = {
-    fontSize: 14,
-    spacing: 1,
-    truncateLength: 25,
-    showAllLabels: true
-};
-
-// =============================================================================
-// QUERY MANAGEMENT
-// =============================================================================
-async function loadQueries() {
+    const DEFAULT_SETTINGS = Object.freeze({ fontSize: 14, spacing: 1, truncateLength: 25, showAllLabels: true });
+    G.DEFAULT_SETTINGS = DEFAULT_SETTINGS;
+    G.settings = Object.assign({}, DEFAULT_SETTINGS);
     try {
-        const response = await fetch('/api/queries');
-        const data = await response.json();
-        GraphState.queries = data.queries || [];
+        const saved = JSON.parse(localStorage.getItem('kh.graph.settings') || 'null');
+        if (saved && typeof saved === 'object') {
+            ['fontSize', 'spacing', 'truncateLength'].forEach(k => { if (isFinite(saved[k])) G.settings[k] = Number(saved[k]); });
+            if (typeof saved.showAllLabels === 'boolean') G.settings.showAllLabels = saved.showAllLabels;
+        }
+        const layout = localStorage.getItem('kh.graph.layout');
+        if (['radial', 'tree', 'force'].includes(layout)) G.state.layout = layout;
+    } catch (_) { /* depolama kapalı olabilir */ }
+    G.saveSettings = function () {
+        try { localStorage.setItem('kh.graph.settings', JSON.stringify(G.settings)); localStorage.setItem('kh.graph.layout', G.state.layout); } catch (_) { }
+    };
 
-        const select = document.getElementById('query-select');
-        select.innerHTML = '<option value="">Tüm Sorgular</option>';
+    const PROFILES = Object.freeze({
+        overview: { maxQueries: 20, maxEnginesPerQuery: 8, maxResultsPerEngine: 160, resultPageSize: 60, maxEnginesTotal: 80, renderDebounceMs: 320 },
+        focused: { maxQueries: 1, maxEnginesPerQuery: 28, maxResultsPerEngine: 700, resultPageSize: 140, maxEnginesTotal: 120, renderDebounceMs: 260 }
+    });
+    const MAX_PAGES_PER_ENGINE = 60;
 
-        GraphState.queries.forEach(q => {
-            const option = document.createElement('option');
-            option.value = q.query;
-            option.textContent = `${q.query} (${q.count} sonuç)`;
-            select.appendChild(option);
+    // ── Tema paleti: düğüm/bağlantı/etiket renkleri tek kaynaktan ───────
+    /** Düğüm türü → renk. Açıklama (legend) ve çizim aynı haritayı kullanır. */
+    G.palette = function () {
+        const p = KH.palette();
+        const v = (n) => KH.cssVar(n);
+        G.colors = {
+            root: p.violet || p.series[1],
+            query: p.series[0],
+            engine: p.series[2],
+            result: v('--text-3') || p.fg2,
+            multi: p.series[3],
+            internal: p.series[4],
+            external: p.series[5],
+            text: p.fg,
+            text2: p.fg2,
+            halo: v('--bg'),
+            surface: p.surface,
+            primary: p.primary,
+            font: p.font,
+            mono: p.mono
+        };
+        return G.colors;
+    };
+    G.palette();
+
+    /** Bir düğümün görsel türü: sonuç düğümü birden çok motorda bulunduysa "multi". */
+    G.kind = function (data) {
+        const t = data.type || 'result';
+        if ((t === 'result' || t === 'internal' || t === 'external') && Number(data.count) > 1) return 'multi';
+        if (t === 'link') return 'internal';
+        if (t === 'internal-group') return 'internal';
+        if (t === 'external-group') return 'external';
+        return G.colors[t] ? t : 'result';
+    };
+    G.colorOf = function (data) { return G.colors[G.kind(data)] || G.colors.result; };
+
+    // ── Sorgu listesi ───────────────────────────────────────────────────
+    G.loadQueries = async function () {
+        const select = $('query-select');
+        try {
+            const data = await KH.api('/api/queries');
+            G.state.queries = Array.isArray(data && data.queries) ? data.queries : [];
+        } catch (e) {
+            G.state.queries = [];
+            KH.toast(T('Sorgu listesi alınamadı: ', 'Could not load queries: ') + e.message, 'err');
+        }
+        select.textContent = '';
+        const all = document.createElement('option');
+        all.value = ''; all.textContent = T('Tüm sorgular', 'All queries');
+        select.appendChild(all);
+        G.state.queries.forEach(q => {
+            const o = document.createElement('option');
+            o.value = q.query;
+            o.textContent = q.query + ' (' + KH.num(q.count) + ')';
+            select.appendChild(o);
         });
-
-        return GraphState.queries;
-    } catch (error) {
-        console.error('Failed to load queries:', error);
-        return [];
-    }
-}
-
-function loadSelectedQuery() {
-    const select = document.getElementById('query-select');
-    const query = select.value;
-    window.currentQuery = query;
-
-    const url = new URL(window.location);
-    if (query) {
-        url.searchParams.set('q', query);
-    } else {
-        url.searchParams.delete('q');
-    }
-    window.history.pushState({}, '', url);
-
-    updateQueryLabel(query);
-    initGraph(query);
-}
-
-function updateQueryLabel(query) {
-    const label = document.getElementById('current-query-label');
-    if (query) {
-        label.textContent = `"${query}" için harita`;
-    } else {
-        label.textContent = 'Tüm sorgular';
-    }
-}
-
-async function quickSearch() {
-    const input = document.getElementById('quick-search');
-    const query = input.value.trim();
-
-    if (!query) {
-        showToast('Sorgu girin', 'warning');
-        return;
-    }
-
-    showToast('Aranıyor...', 'info');
-
-    try {
-        const response = await fetch('/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `query=${encodeURIComponent(query)}`
-        });
-
-        if (response.ok) {
-            await loadQueries();
-            document.getElementById('query-select').value = query;
-            window.currentQuery = query;
-            updateQueryLabel(query);
-            initGraph(query);
-            input.value = '';
-            showToast('Arama tamamlandı', 'success');
-        } else {
-            showToast('Arama başarısız', 'error');
+        // URL'deki sorgu listede yoksa da seçilebilsin
+        if (G.state.query && !G.state.queries.some(q => q.query === G.state.query)) {
+            const o = document.createElement('option');
+            o.value = G.state.query; o.textContent = G.state.query;
+            select.appendChild(o);
         }
-    } catch (error) {
-        showToast('Bağlantı hatası', 'error');
-    }
-}
-
-// =============================================================================
-// INITIALIZATION
-// =============================================================================
-async function initGraph(queryParam = '') {
-    const normalizedQuery = (queryParam || '').trim();
-    const profile = normalizedQuery ? GRAPH_STAGE_PROFILES.focused : GRAPH_STAGE_PROFILES.overview;
-    const session = beginLoadSession(normalizedQuery, profile);
-
-    try {
-        const root = createGraphRoot();
-        GraphState.data = root;
-
-        const querySummaries = await resolveGraphQueries(normalizedQuery, profile, session.signal);
-        ensureCurrentLoad(session.requestId);
-
-        if (querySummaries.length === 0) {
-            markLoadStep('queries', 'done');
-            markLoadStep('engines', 'done');
-            markLoadStep('results', 'done');
-            setLoadMeta('Veri bulunamadi.');
-            showEmptyState();
-            finalizeLoadSession(session.requestId);
-            return;
-        }
-
-        root.children = querySummaries.map(summary => ({
-            name: summary.query,
-            type: 'query',
-            count: Number(summary.count) || 0,
-            children: []
-        }));
-
-        GraphState.data = root;
-        markLoadStep('queries', 'done');
-        markLoadStep('engines', 'active');
-        updateLoadCounters();
-        setLoadMeta(`Sorgular hazir: ${GraphState.load.counts.queries}`);
-        scheduleGraphRender({ requestId: session.requestId, force: true });
-
-        await hydrateGraphIncrementally(root, normalizedQuery, profile, session);
-        ensureCurrentLoad(session.requestId);
-
-        markLoadStep('engines', 'done');
-        markLoadStep('results', 'done');
-        updateLoadCounters();
-        setLoadMeta(buildLoadSummaryText());
-        scheduleGraphRender({ requestId: session.requestId, force: true });
-        finalizeLoadSession(session.requestId);
-    } catch (error) {
-        if (isAbortLikeError(error)) {
-            return;
-        }
-
-        console.error('Failed to load graph data:', error);
-
-        const hasPartialData = GraphState.data && Array.isArray(GraphState.data.children) && GraphState.data.children.length > 0;
-        if (hasPartialData) {
-            scheduleGraphRender({ requestId: session.requestId, force: true });
-        } else {
-            showEmptyState();
-        }
-
-        const activeStep = findActiveStep();
-        if (activeStep) {
-            markLoadStep(activeStep, 'error');
-        }
-
-        const message = error && error.message ? error.message : 'Yukleme hatasi';
-        setLoadMeta(`Yukleme kesildi: ${message}`);
-        finalizeLoadSession(session.requestId);
-
-        if (typeof showToast === 'function') {
-            showToast(`Grafik yukleme hatasi: ${message}`, 'error');
-        }
-    }
-}
-
-function beginLoadSession(query, profile) {
-    if (GraphState.activeLoadController) {
-        GraphState.activeLoadController.abort();
-    }
-
-    if (renderDebounceHandle) {
-        clearTimeout(renderDebounceHandle);
-        renderDebounceHandle = null;
-    }
-
-    const controller = new AbortController();
-    const requestId = GraphState.activeLoadId + 1;
-
-    GraphState.activeLoadId = requestId;
-    GraphState.activeLoadController = controller;
-    GraphState.load = {
-        inProgress: true,
-        query,
-        profile,
-        counts: {
-            queries: 0,
-            engines: 0,
-            results: 0
-        }
+        select.value = G.state.query || '';
+        return G.state.queries;
     };
 
-    setLoadStatusVisible(true);
-    markLoadStep('queries', 'active');
-    markLoadStep('engines', 'pending');
-    markLoadStep('results', 'pending');
-    setLoadMeta('Sorgu listesi aliniyor...');
-    updateQueryLabel(query);
-
-    return {
-        requestId,
-        signal: controller.signal
+    G.selectQuery = function (query, push) {
+        G.state.query = (query || '').trim();
+        if (push !== false) {
+            const url = new URL(window.location.href);
+            if (G.state.query) url.searchParams.set('q', G.state.query); else url.searchParams.delete('q');
+            window.history.pushState({ q: G.state.query }, '', url);
+        }
+        const sel = $('query-select');
+        if (sel && sel.value !== G.state.query) sel.value = G.state.query;
+        G.state.open.clear();
+        G.state.defaultDepth = 2;
+        G.state.userZoomed = false;
+        return G.initGraph(G.state.query);
     };
-}
 
-function finalizeLoadSession(requestId) {
-    if (requestId !== GraphState.activeLoadId) {
-        return;
-    }
+    // ── Kademeli yükleme: sorgular → motorlar → sonuçlar ───────────────
+    G.initGraph = async function (queryParam) {
+        const query = (queryParam || '').trim();
+        const profile = query ? PROFILES.focused : PROFILES.overview;
+        const session = beginLoad(query, profile);
+        const root = { name: 'KeywordHunter', type: 'root', children: [] };
+        G.state.data = root;
 
-    GraphState.load.inProgress = false;
-    GraphState.activeLoadController = null;
-}
-
-function createGraphRoot() {
-    return {
-        name: 'KeywordHunter',
-        type: 'root',
-        children: []
-    };
-}
-
-async function resolveGraphQueries(queryParam, profile, signal) {
-    const params = new URLSearchParams();
-    params.set('limit', String(profile.maxQueries));
-
-    if (queryParam) {
-        params.set('q', queryParam);
-    }
-
-    const data = await fetchJSON('/api/graph/queries?' + params.toString(), signal);
-    const items = Array.isArray(data.queries) ? data.queries : [];
-
-    if (queryParam && items.length === 0) {
-        return [{ query: queryParam, count: 0 }];
-    }
-
-    return items
-        .filter(item => item && typeof item.query === 'string' && item.query.trim() !== '')
-        .map(item => ({
-            query: item.query.trim(),
-            count: Number(item.count) || 0
-        }));
-}
-
-async function hydrateGraphIncrementally(root, queryParam, profile, session) {
-    let remainingEngineBudget = profile.maxEnginesTotal;
-
-    for (let queryIndex = 0; queryIndex < root.children.length; queryIndex += 1) {
-        const queryNode = root.children[queryIndex];
-
-        if (remainingEngineBudget <= 0) {
-            setLoadMeta(`Motor butcesi doldu, kalan sorgular atlandi. ${buildLoadSummaryText()}`);
-            break;
-        }
-
-        ensureCurrentLoad(session.requestId);
-        setLoadMeta(`Motorlar: ${queryIndex + 1}/${root.children.length} - ${queryNode.name}`);
-
-        const engineParams = new URLSearchParams();
-        engineParams.set('q', queryNode.name);
-        engineParams.set('limit', String(Math.min(profile.maxEnginesPerQuery, remainingEngineBudget)));
-
-        const enginePayload = await fetchJSON('/api/graph/engines?' + engineParams.toString(), session.signal);
-        ensureCurrentLoad(session.requestId);
-
-        const engines = Array.isArray(enginePayload.engines) ? enginePayload.engines : [];
-        queryNode.children = engines
-            .filter(item => item && typeof item.engine === 'string' && item.engine.trim() !== '')
-            .map(item => ({
-                name: item.engine.trim(),
-                type: 'engine',
-                count: Number(item.count) || 0,
-                children: []
-            }));
-
-        remainingEngineBudget -= queryNode.children.length;
-        updateLoadCounters();
-        scheduleGraphRender({ requestId: session.requestId });
-
-        if (queryNode.children.length === 0) {
-            continue;
-        }
-
-        markLoadStep('results', 'active');
-
-        for (let engineIndex = 0; engineIndex < queryNode.children.length; engineIndex += 1) {
-            const engineNode = queryNode.children[engineIndex];
-            ensureCurrentLoad(session.requestId);
-
-            await hydrateEngineResults(queryNode, engineNode, engineIndex, queryNode.children.length, profile, session);
-        }
-
-        markLoadStep('engines', 'active');
-    }
-
-    if (queryParam) {
-        updateQueryLabel(queryParam);
-    }
-}
-
-async function hydrateEngineResults(queryNode, engineNode, engineIndex, totalEngines, profile, session) {
-    let nextOffset = 0;
-    let totalLoadedForEngine = 0;
-    let pageCount = 0;
-
-    while (totalLoadedForEngine < profile.maxResultsPerEngine) {
-        const remaining = profile.maxResultsPerEngine - totalLoadedForEngine;
-        const pageLimit = Math.min(profile.resultPageSize, remaining);
-
-        const params = new URLSearchParams();
-        params.set('q', queryNode.name);
-        params.set('engine', engineNode.name);
-        params.set('limit', String(pageLimit));
-        params.set('offset', String(nextOffset));
-
-        setLoadMeta(`Sonuclar: ${engineIndex + 1}/${totalEngines} - ${engineNode.name} (${totalLoadedForEngine})`);
-
-        const resultPayload = await fetchJSON('/api/graph/results?' + params.toString(), session.signal);
-        ensureCurrentLoad(session.requestId);
-
-        const mappedResults = mapResultItems(resultPayload.results);
-        const addedCount = appendUniqueResults(engineNode, mappedResults);
-
-        totalLoadedForEngine += addedCount;
-        pageCount += 1;
-
-        if (addedCount > 0) {
-            updateLoadCounters();
-            scheduleGraphRender({ requestId: session.requestId });
-        }
-
-        const resultCount = Array.isArray(resultPayload.results) ? resultPayload.results.length : 0;
-        const payloadNextOffset = Number(resultPayload.nextOffset) || 0;
-
-        if (resultCount === 0 || payloadNextOffset <= nextOffset || resultCount < pageLimit) {
-            break;
-        }
-
-        nextOffset = payloadNextOffset;
-        if (pageCount >= GRAPH_FETCH_GUARDS.maxPagesPerEngine) {
-            break;
-        }
-    }
-}
-
-function mapResultItems(items) {
-    if (!Array.isArray(items)) {
-        return [];
-    }
-
-    return items
-        .map(item => {
-            const url = String(item.url || '').trim();
-            if (!url) {
-                return null;
+        try {
+            const summaries = await resolveQueries(query, profile, session.signal);
+            ensureCurrent(session.id);
+            if (!summaries.length) {
+                ['queries', 'engines', 'results'].forEach(s => markStep(s, 'done'));
+                setMeta(T('Veri bulunamadı.', 'No data found.'));
+                G.showEmpty(true);
+                finishLoad(session.id);
+                return;
             }
+            root.children = summaries.map(s => ({ name: s.query, type: 'query', count: s.count, children: [] }));
+            markStep('queries', 'done');
+            markStep('engines', 'active');
+            countLoaded();
+            setMeta(T('Sorgular hazır: ', 'Queries ready: ') + G.state.load.counts.queries);
+            scheduleRender(session.id, true);
 
+            await hydrate(root, profile, session);
+            ensureCurrent(session.id);
+
+            markStep('engines', 'done');
+            markStep('results', 'done');
+            countLoaded();
+            setMeta(summaryText());
+            scheduleRender(session.id, true, true);
+            finishLoad(session.id);
+        } catch (error) {
+            if (isAbort(error)) return;
+            const partial = root.children && root.children.length > 0;
+            if (partial) scheduleRender(session.id, true, true); else G.showEmpty(true);
+            const step = activeStep();
+            if (step) markStep(step, 'error');
+            const msg = (error && error.message) || T('Yükleme hatası', 'Load error');
+            setMeta(T('Yükleme kesildi: ', 'Loading stopped: ') + msg);
+            finishLoad(session.id);
+            KH.toast(T('Harita yüklenemedi: ', 'Map failed to load: ') + msg, 'err');
+        }
+    };
+
+    function beginLoad(query, profile) {
+        if (G.state.controller) G.state.controller.abort();
+        clearTimeout(renderTimer); renderTimer = 0;
+        const controller = new AbortController();
+        const id = G.state.activeLoadId + 1;
+        G.state.activeLoadId = id;
+        G.state.controller = controller;
+        G.state.load = { inProgress: true, query, profile, counts: { queries: 0, engines: 0, results: 0 } };
+        const status = $('graph-load-status');
+        if (status) { status.hidden = false; status.classList.add('is-loading'); }
+        markStep('queries', 'active'); markStep('engines', 'pending'); markStep('results', 'pending');
+        setMeta(T('Sorgu listesi alınıyor…', 'Fetching queries…'));
+        G.showEmpty(false);
+        return { id, signal: controller.signal };
+    }
+    function finishLoad(id) {
+        if (id !== G.state.activeLoadId) return;
+        G.state.load.inProgress = false;
+        G.state.controller = null;
+        const status = $('graph-load-status');
+        if (status) status.classList.remove('is-loading');
+    }
+    function ensureCurrent(id) { if (id !== G.state.activeLoadId) throw new DOMException('stale graph request', 'AbortError'); }
+    function isAbort(e) { return e && (e.name === 'AbortError' || e.message === 'stale graph request'); }
+
+    async function resolveQueries(query, profile, signal) {
+        const params = new URLSearchParams({ limit: String(profile.maxQueries) });
+        if (query) params.set('q', query);
+        const data = await KH.api('/api/graph/queries?' + params, { signal });
+        const items = Array.isArray(data && data.queries) ? data.queries : [];
+        if (query && !items.length) return [{ query, count: 0 }];
+        return items
+            .filter(i => i && typeof i.query === 'string' && i.query.trim())
+            .map(i => ({ query: i.query.trim(), count: Number(i.count) || 0 }));
+    }
+
+    async function hydrate(root, profile, session) {
+        let budget = profile.maxEnginesTotal;
+        for (let qi = 0; qi < root.children.length; qi++) {
+            const qNode = root.children[qi];
+            if (budget <= 0) { setMeta(T('Motor bütçesi doldu, kalan sorgular atlandı. ', 'Engine budget reached, remaining queries skipped. ') + summaryText()); break; }
+            ensureCurrent(session.id);
+            setMeta(T('Motorlar: ', 'Engines: ') + (qi + 1) + '/' + root.children.length + ' · ' + qNode.name);
+            const params = new URLSearchParams({ q: qNode.name, limit: String(Math.min(profile.maxEnginesPerQuery, budget)) });
+            const payload = await KH.api('/api/graph/engines?' + params, { signal: session.signal });
+            ensureCurrent(session.id);
+            const engines = Array.isArray(payload && payload.engines) ? payload.engines : [];
+            qNode.children = engines
+                .filter(e => e && typeof e.engine === 'string' && e.engine.trim())
+                .map(e => ({ name: e.engine.trim(), type: 'engine', count: Number(e.count) || 0, children: [] }));
+            budget -= qNode.children.length;
+            countLoaded();
+            scheduleRender(session.id);
+            if (!qNode.children.length) continue;
+            markStep('results', 'active');
+            for (let ei = 0; ei < qNode.children.length; ei++) {
+                ensureCurrent(session.id);
+                await hydrateEngine(qNode, qNode.children[ei], ei, qNode.children.length, profile, session);
+            }
+        }
+    }
+
+    async function hydrateEngine(qNode, eNode, index, total, profile, session) {
+        let offset = 0, loaded = 0, pages = 0;
+        while (loaded < profile.maxResultsPerEngine) {
+            const limit = Math.min(profile.resultPageSize, profile.maxResultsPerEngine - loaded);
+            const params = new URLSearchParams({ q: qNode.name, engine: eNode.name, limit: String(limit), offset: String(offset) });
+            setMeta(T('Sonuçlar: ', 'Results: ') + (index + 1) + '/' + total + ' · ' + eNode.name + ' (' + loaded + ')');
+            const payload = await KH.api('/api/graph/results?' + params, { signal: session.signal });
+            ensureCurrent(session.id);
+            const added = appendUnique(eNode, mapResults(payload && payload.results));
+            loaded += added; pages++;
+            if (added > 0) { countLoaded(); scheduleRender(session.id); }
+            const n = Array.isArray(payload && payload.results) ? payload.results.length : 0;
+            const next = Number(payload && payload.nextOffset) || 0;
+            if (n === 0 || next <= offset || n < limit) break;
+            offset = next;
+            if (pages >= MAX_PAGES_PER_ENGINE) break;
+        }
+    }
+
+    function mapResults(items) {
+        if (!Array.isArray(items)) return [];
+        return items.map(item => {
+            const url = String(item.url || '').trim();
+            if (!url) return null;
             const title = String(item.title || '').trim();
             return {
-                name: title || url,
-                url,
-                type: 'result',
+                name: title || url, url, type: 'result',
                 count: Math.max(1, Number(item.sourceCount) || 1),
                 nodeId: Number(item.id) || 0,
                 isExpanded: Boolean(item.isExpanded),
-                domain: String(item.domain || '').trim() || extractDomain(url)
+                domain: String(item.domain || '').trim() || G.domainOf(url)
             };
-        })
-        .filter(Boolean);
-}
-
-function appendUniqueResults(engineNode, incomingItems) {
-    if (!engineNode.children) {
-        engineNode.children = [];
+        }).filter(Boolean);
     }
+    function appendUnique(eNode, items) {
+        eNode.children = eNode.children || [];
+        const seen = new Set(eNode.children.map(i => i.url));
+        let added = 0;
+        items.forEach(i => { if (i.url && !seen.has(i.url)) { seen.add(i.url); eNode.children.push(i); added++; } });
+        return added;
+    }
+    G.domainOf = function (url) {
+        try { return new URL(url).hostname || ''; } catch (_) {
+            const s = String(url).replace(/^https?:\/\//i, ''); const i = s.indexOf('/'); return i > -1 ? s.slice(0, i) : s;
+        }
+    };
 
-    const seenURLs = new Set(engineNode.children.map(item => item.url));
-    let added = 0;
-
-    incomingItems.forEach(item => {
-        if (!item.url || seenURLs.has(item.url)) {
+    // ── Çizim zamanlaması (yükleme sırasında seyreltilmiş) ─────────────
+    let renderTimer = 0, lastRender = 0;
+    function scheduleRender(id, force, final) {
+        if (id !== G.state.activeLoadId || !G.state.data) return;
+        const wait = (G.state.load.profile && G.state.load.profile.renderDebounceMs) || 260;
+        const now = Date.now();
+        if (force || now - lastRender >= wait) {
+            clearTimeout(renderTimer); renderTimer = 0;
+            renderSnapshot(id, final);
             return;
         }
+        if (renderTimer) return;
+        renderTimer = setTimeout(() => { renderTimer = 0; renderSnapshot(id); }, Math.max(60, wait - (now - lastRender)));
+    }
+    function renderSnapshot(id, final) {
+        if (id !== G.state.activeLoadId) return;
+        const data = G.state.data;
+        if (!data || !data.children || !data.children.length) { G.showEmpty(true); return; }
+        // Odaklı sorguda kök, sorgu düğümünün kendisidir
+        G.state.view = (G.state.load.query && data.children.length === 1) ? data.children[0] : data;
+        G.updateStats(G.state.view);
+        G.render({ fit: final ? 'final' : 'auto' });
+        lastRender = Date.now();
+    }
 
-        seenURLs.add(item.url);
-        engineNode.children.push(item);
-        added += 1;
-    });
-
-    return added;
-}
-
-function extractDomain(url) {
-    try {
-        return new URL(url).hostname || '';
-    } catch (_error) {
-        const withoutProtocol = url.replace(/^https?:\/\//i, '');
-        const slashIndex = withoutProtocol.indexOf('/');
-        if (slashIndex > -1) {
-            return withoutProtocol.slice(0, slashIndex);
+    // ── Yükleme durumu ──────────────────────────────────────────────────
+    const STEP_IDS = { queries: 'graph-step-queries', engines: 'graph-step-engines', results: 'graph-step-results' };
+    function markStep(step, status) {
+        const el = $(STEP_IDS[step]);
+        if (!el) return;
+        el.classList.remove('is-active', 'is-done', 'is-error');
+        if (status === 'active' || status === 'done' || status === 'error') el.classList.add('is-' + status);
+    }
+    function activeStep() { return Object.keys(STEP_IDS).find(s => { const el = $(STEP_IDS[s]); return el && el.classList.contains('is-active'); }) || ''; }
+    function setMeta(text) { const el = $('graph-load-meta'); if (el) el.textContent = text || ''; }
+    function countLoaded() {
+        const c = { queries: 0, engines: 0, results: 0 };
+        const root = G.state.data;
+        if (root && root.children) {
+            c.queries = root.children.length;
+            root.children.forEach(q => (q.children || []).forEach(e => { c.engines++; c.results += (e.children || []).length; }));
         }
-        return withoutProtocol;
+        G.state.load.counts = c;
     }
-}
-
-function scheduleGraphRender(options = {}) {
-    const requestId = Number(options.requestId || GraphState.activeLoadId);
-    const force = Boolean(options.force);
-
-    if (requestId !== GraphState.activeLoadId) {
-        return;
+    function summaryText() {
+        const c = G.state.load.counts;
+        return T('Hazır: ', 'Ready: ') + KH.num(c.queries) + T(' sorgu · ', ' queries · ') + KH.num(c.engines) + T(' motor · ', ' engines · ') + KH.num(c.results) + T(' sonuç', ' results');
     }
 
-    if (!GraphState.data || !Array.isArray(GraphState.data.children)) {
-        return;
-    }
+    // ── İstatistik ──────────────────────────────────────────────────────
+    G.updateStats = function (view) {
+        let queries = 0, engines = 0, results = 0, multi = 0;
+        const walkEngine = (e) => { engines++; (e.children || []).forEach(r => { results++; if (Number(r.count) > 1) multi++; }); };
+        if (view && view.type === 'query') { queries = 1; (view.children || []).forEach(walkEngine); }
+        else if (view) (view.children || []).forEach(q => { queries++; (q.children || []).forEach(walkEngine); });
+        const set = (id, n) => { const el = $(id); if (el && el.textContent !== KH.num(n)) { el.textContent = KH.num(n); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); } };
+        set('stat-queries', queries); set('stat-engines', engines); set('stat-results', results); set('stat-multi', multi);
+    };
 
-    const debounceMs = (GraphState.load.profile && GraphState.load.profile.renderDebounceMs) || 220;
-    const now = Date.now();
-
-    if (force || now-lastRenderAt >= debounceMs) {
-        if (renderDebounceHandle) {
-            clearTimeout(renderDebounceHandle);
-            renderDebounceHandle = null;
-        }
-        renderGraphDataSnapshot(requestId);
-        return;
-    }
-
-    if (renderDebounceHandle) {
-        return;
-    }
-
-    const wait = Math.max(60, debounceMs - (now - lastRenderAt));
-    renderDebounceHandle = setTimeout(() => {
-        renderDebounceHandle = null;
-        renderGraphDataSnapshot(requestId);
-    }, wait);
-}
-
-function renderGraphDataSnapshot(requestId) {
-    if (requestId !== GraphState.activeLoadId) {
-        return;
-    }
-
-    if (!GraphState.data || !Array.isArray(GraphState.data.children) || GraphState.data.children.length === 0) {
-        showEmptyState();
-        return;
-    }
-
-    let graphData = GraphState.data;
-    const query = (GraphState.load.query || '').trim();
-
-    if (query && GraphState.data.children.length === 1) {
-        graphData = GraphState.data.children[0];
-        graphData.type = 'query';
-    }
-
-    updateStats(graphData);
-    updateQueryLabel(query);
-    createGraph(graphData);
-
-    lastRenderAt = Date.now();
-}
-
-function ensureCurrentLoad(requestId) {
-    if (requestId !== GraphState.activeLoadId) {
-        throw new DOMException('stale graph request', 'AbortError');
-    }
-}
-
-function isAbortLikeError(error) {
-    return error && (error.name === 'AbortError' || error.message === 'stale graph request');
-}
-
-async function fetchJSON(url, signal) {
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            Accept: 'application/json'
-        },
-        signal
-    });
-
-    if (!response.ok) {
-        let reason = `HTTP ${response.status}`;
-        try {
-            const payload = await response.json();
-            if (payload && payload.error) {
-                reason = payload.error;
-            }
-        } catch (_parseError) {
-            // ignore parse failure
-        }
-        throw new Error(reason);
-    }
-
-    return response.json();
-}
-
-function setLoadStatusVisible(visible) {
-    const panel = document.getElementById('graph-load-status');
-    if (!panel) {
-        return;
-    }
-    panel.style.display = visible ? 'flex' : 'none';
-}
-
-function markLoadStep(step, status) {
-    const elementId = GRAPH_STEP_IDS[step];
-    if (!elementId) {
-        return;
-    }
-
-    const el = document.getElementById(elementId);
-    if (!el) {
-        return;
-    }
-
-    el.classList.remove('is-active', 'is-done', 'is-error');
-
-    if (status === 'active') {
-        el.classList.add('is-active');
-    } else if (status === 'done') {
-        el.classList.add('is-done');
-    } else if (status === 'error') {
-        el.classList.add('is-error');
-    }
-}
-
-function findActiveStep() {
-    const stepNames = Object.keys(GRAPH_STEP_IDS);
-    for (let i = 0; i < stepNames.length; i += 1) {
-        const step = stepNames[i];
-        const elementId = GRAPH_STEP_IDS[step];
-        const el = document.getElementById(elementId);
-        if (el && el.classList.contains('is-active')) {
-            return step;
-        }
-    }
-    return '';
-}
-
-function setLoadMeta(text) {
-    const el = document.getElementById('graph-load-meta');
-    if (!el) {
-        return;
-    }
-    el.textContent = text || '';
-}
-
-function updateLoadCounters() {
-    const root = GraphState.data;
-    let queryCount = 0;
-    let engineCount = 0;
-    let resultCount = 0;
-
-    if (root && Array.isArray(root.children)) {
-        queryCount = root.children.length;
-
-        root.children.forEach(queryNode => {
-            if (!queryNode || !Array.isArray(queryNode.children)) {
-                return;
-            }
-
-            engineCount += queryNode.children.length;
-            queryNode.children.forEach(engineNode => {
-                if (engineNode && Array.isArray(engineNode.children)) {
-                    resultCount += engineNode.children.length;
-                }
-            });
-        });
-    }
-
-    GraphState.load.counts.queries = queryCount;
-    GraphState.load.counts.engines = engineCount;
-    GraphState.load.counts.results = resultCount;
-}
-
-function buildLoadSummaryText() {
-    return `Hazir: ${GraphState.load.counts.queries} sorgu, ${GraphState.load.counts.engines} motor, ${GraphState.load.counts.results} sonuc`;
-}
-
-function showEmptyState() {
-    const container = document.getElementById('graph-container');
-
-    document.querySelectorAll('#graph-container .graph-empty-state').forEach(node => node.remove());
-    d3.select('#graph-container svg').remove();
-
-    const emptyDiv = document.createElement('div');
-    emptyDiv.className = 'graph-empty-state flex items-center justify-center h-full absolute inset-0 pointer-events-none';
-    emptyDiv.innerHTML = `
-        <div class="text-center text-gray-400 pointer-events-auto">
-            <svg class="ico xl" style="width:52px;height:52px;opacity:.4" aria-hidden="true"><use href="#i-empty"/></svg>
-            <p class="text-xl mb-2">Henüz sonuç bulunamadı</p>
-            <p class="mb-4">Arama yaparak başlayın</p>
-            <a href="/search" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg inline-block">
-                Arama Yap
-            </a>
-        </div>
-    `;
-    container.appendChild(emptyDiv);
-}
-
-function handleGraphResize() {
-    if (resizeDebounceHandle) {
-        clearTimeout(resizeDebounceHandle);
-    }
-
-    resizeDebounceHandle = setTimeout(() => {
-        GraphState.width = window.innerWidth;
-        GraphState.height = window.innerHeight - 106;
-
-        if (!GraphState.root || !GraphState.svg) {
-            return;
-        }
-
-        renderLayout();
-        setTimeout(fitToScreen, 120);
-    }, 140);
-}
-
-window.addEventListener('resize', handleGraphResize);
-
-function updateStats(data) {
-    let queries = 0, engines = 0, results = 0, multi = 0;
-
-    if (data.type === 'query') {
-        queries = 1;
-        if (data.children) {
-            engines = data.children.length;
-            data.children.forEach(engine => {
-                if (engine.children) {
-                    results += engine.children.length;
-                    engine.children.forEach(result => {
-                        if (result.count > 1) multi++;
-                    });
-                }
-            });
-        }
-    } else if (data.children) {
-        queries = data.children.length;
-        data.children.forEach(query => {
-            if (query.children) {
-                engines += query.children.length;
-                query.children.forEach(engine => {
-                    if (engine.children) {
-                        results += engine.children.length;
-                        engine.children.forEach(result => {
-                            if (result.count > 1) multi++;
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    document.getElementById('stat-queries').textContent = queries;
-    document.getElementById('stat-engines').textContent = engines;
-    document.getElementById('stat-results').textContent = results;
-    document.getElementById('stat-multi').textContent = multi;
-}
+    G.showEmpty = function (on) {
+        const el = $('graph-empty');
+        if (el) el.hidden = !on;
+        if (on) { G.clearCanvas && G.clearCanvas(); G.updateStats(null); }
+    };
+})();

@@ -325,7 +325,7 @@
             series: [1, 2, 3, 4, 5, 6, 7, 8].map(i => v('--chart-' + i)),
             sev: [1, 2, 3, 4, 5].map(i => v('--sev-' + i)),
             grid: v('--chart-grid'), text: v('--chart-text'), fg: v('--text'), fg2: v('--text-2'),
-            surface: v('--surface-solid'), border: v('--border-strong'), primary: v('--primary'),
+            bg: v('--bg'), fg3: v('--text-3'), surface: v('--surface-solid'), border: v('--border-strong'), primary: v('--primary'),
             ok: v('--ok'), err: v('--err'), warn: v('--warn'), violet: v('--violet'),
             font: v('--font-sans'), mono: v('--font-mono')
         };
@@ -408,7 +408,8 @@
         doc.querySelectorAll('.kh-menu.open').forEach(m => m.classList.remove('open'));
         doc.querySelectorAll('[data-action="menu-toggle"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
     }
-    doc.addEventListener('click', (e) => { if (!e.target.closest('.kh-menu')) closeMenus(); });
+    // e.khKeepMenu: aynı tıklamada bir menü açan sayfalar (ör. dokunmatik bağlam menüsü) kapanmayı atlatır
+    doc.addEventListener('click', (e) => { if (!e.target.closest('.kh-menu') && !e.khKeepMenu) closeMenus(); });
     doc.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenus(); root.classList.remove('nav-open'); } });
 
     async function changeMyPassword() {

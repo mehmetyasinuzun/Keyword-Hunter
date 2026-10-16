@@ -1,415 +1,301 @@
-function gi(name){return '<svg class="ico" aria-hidden="true"><use href="#i-'+name+'"/></svg>';}
 /**
- * KeywordHunter - Graph Visualization JavaScript (UI)
- * UI Interactions, Event Handlers, Controls
+ * KeywordHunter — İlişki haritası: etkileşimler (ipucu, bağlam menüsü, ayarlar,
+ * hızlı arama, derinleştirme, izleme listesi, detay modalı).
+ * Tüm güvenilmez metinler textContent ile basılır; HTML dizgisi yalnızca
+ * KH.html (otomatik kaçışlı) ile kurulur.
  */
+(function () {
+    'use strict';
 
-// Settings Panel
-function toggleSettingsPanel() {
-    const panel = document.getElementById('settings-panel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-}
+    const G = window.KHGraph = window.KHGraph || {};
+    const T = (tr, en) => KH.tr(tr, en);
+    const $ = (id) => document.getElementById(id);
+    const S = () => G.state;
 
-function updateGraphSettings() {
-    const fontSize = document.getElementById('font-size-slider').value;
-    const spacing = document.getElementById('spacing-slider').value;
-    const truncateLength = document.getElementById('truncate-slider').value;
-    const showAllLabels = document.getElementById('show-all-labels').checked;
+    const KIND_LABEL = {
+        root: ['Kök', 'Root'], query: ['Sorgu', 'Query'], engine: ['Motor', 'Engine'], result: ['Sonuç', 'Result'],
+        multi: ['Çoklu kaynak', 'Multi-source'], internal: ['İç link', 'Internal link'], external: ['Dış link', 'External link']
+    };
+    G.kindLabel = (k) => { const l = KIND_LABEL[k] || KIND_LABEL.result; return T(l[0], l[1]); };
+    const isOnion = (url) => { try { return /\.onion$/i.test(new URL(url).hostname); } catch (_) { return /\.onion(\/|$|:)/i.test(String(url || '')); } };
 
-    document.getElementById('font-size-value').textContent = fontSize + 'px';
-    document.getElementById('spacing-value').textContent = spacing + 'x';
-    document.getElementById('truncate-value').textContent = truncateLength + ' kar.';
-
-    GraphSettings.fontSize = parseInt(fontSize);
-    GraphSettings.spacing = parseFloat(spacing);
-    GraphSettings.truncateLength = parseInt(truncateLength);
-    GraphSettings.showAllLabels = showAllLabels;
-
-    if (GraphState.root) {
-        renderLayout();
-    }
-}
-
-function applyGraphSettings() {
-    updateGraphSettings();
-    showToast('Ayarlar uygulandı', 'success');
-}
-
-function resetGraphSettings() {
-    document.getElementById('font-size-slider').value = 14;
-    document.getElementById('spacing-slider').value = 1;
-    document.getElementById('truncate-slider').value = 25;
-    document.getElementById('show-all-labels').checked = true;
-
-    GraphSettings.fontSize = 14;
-    GraphSettings.spacing = 1;
-    GraphSettings.truncateLength = 25;
-    GraphSettings.showAllLabels = true;
-
-    updateGraphSettings();
-    showToast('Ayarlar sıfırlandı', 'info');
-}
-
-// Event Handlers
-function handleNodeClick(event, d) {
-    event.stopPropagation();
-    if (d.children || d._children) {
-        toggle(d);
-        renderLayout();
-    } else if (d.data.url) {
-        GraphState.selectedNode = d;
-        copyLink();
-    }
-}
-
-function handleContextMenu(event, d) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (d.data.url || d.children || d._children) {
-        GraphState.selectedNode = d;
-        showContextMenu(event.pageX, event.pageY);
-    }
-}
-
-// Zoom Controls
-function zoomIn() {
-    if (!GraphState.svg || !GraphState.zoom) return;
-    GraphState.svg.transition().duration(300).call(GraphState.zoom.scaleBy, 1.5);
-}
-
-function zoomOut() {
-    if (!GraphState.svg || !GraphState.zoom) return;
-    GraphState.svg.transition().duration(300).call(GraphState.zoom.scaleBy, 0.67);
-}
-
-function resetView() {
-    if (!GraphState.svg || !GraphState.zoom) return;
-    GraphState.svg.transition().duration(500).call(GraphState.zoom.transform, d3.zoomIdentity);
-}
-
-function fitToScreen() {
-    if (!GraphState.g || !GraphState.svg || !GraphState.zoom) return;
-
-    const bounds = GraphState.g.node().getBBox();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
-
-    const scale = 0.85 / Math.max(bounds.width / GraphState.width, bounds.height / GraphState.height);
-    const tx = (GraphState.width - bounds.width * scale) / 2 - bounds.x * scale;
-    const ty = (GraphState.height - bounds.height * scale) / 2 - bounds.y * scale;
-
-    GraphState.svg.transition().duration(500).call(
-        GraphState.zoom.transform,
-        d3.zoomIdentity.translate(tx, ty).scale(scale)
-    );
-}
-
-function updateSemanticZoom(scale) {
-    const container = document.getElementById('graph-container');
-    container.classList.remove('zoom-level-1', 'zoom-level-2', 'zoom-level-3');
-
-    if (scale < 0.4) container.classList.add('zoom-level-1');
-    else if (scale < 0.8) container.classList.add('zoom-level-2');
-    else container.classList.add('zoom-level-3');
-}
-
-function focusNode() {
-    closeContextMenu();
-    if (!GraphState.selectedNode || !GraphState.svg || !GraphState.zoom) return;
-
-    GraphState.svg.transition().duration(500).call(
-        GraphState.zoom.transform,
-        d3.zoomIdentity
-            .translate(GraphState.width / 2 - (GraphState.selectedNode.y || 0) * 2,
-                GraphState.height / 2 - (GraphState.selectedNode.x || 0) * 2)
-            .scale(2)
-    );
-}
-
-function setLayout(layout) {
-    GraphState.currentLayout = layout;
-
-    document.querySelectorAll('.layout-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(`layout-${layout}`).classList.add('active');
-
-    if (GraphState.root) {
-        renderLayout();
-        setTimeout(fitToScreen, 100);
-    }
-}
-
-// Güvenli HTML: düğüm adları ve URL'ler düşman .onion sayfalarından gelir,
-// innerHTML'e ham basılmaz.
-function escapeHTML(value) {
-    return String(value == null ? '' : value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-// Tooltip
-function showTooltip(event, d) {
-    const tooltip = document.getElementById('tooltip');
-    let content = `<div class="title">${escapeHTML(d.data.name)}</div>`;
-
-    if (d.data.url) {
-        content += `<div class="url">${escapeHTML(d.data.url)}</div>`;
-        if (d.data.url.includes('.onion')) {
-            content += `<div class="onion-warning">${gi('onion')} Tor Browser gerektirir</div>`;
-        }
-    }
-
-    if (d.data.count > 1) {
-        content += `<div class="badge">${gi('fire')} ${d.data.count} motorda bulundu</div>`;
-    }
-
-    const childCount = (d._children || d.children || []).length;
-    if (childCount > 0) {
-        content += `<div style="margin-top: 8px; color: var(--text-muted); font-size: 11px;">${gi('folder')} ${childCount} alt öğe</div>`;
-    }
-
-    tooltip.innerHTML = content;
-    tooltip.style.display = 'block';
-    tooltip.style.left = (event.pageX + 15) + 'px';
-    tooltip.style.top = (event.pageY - 10) + 'px';
-}
-
-function hideTooltip() {
-    document.getElementById('tooltip').style.display = 'none';
-}
-
-// Context Menu
-function showContextMenu(x, y) {
-    const menu = document.getElementById('context-menu');
-    const expandItem = document.getElementById('expand-menu-item');
-
-    const watchItem = document.getElementById('watch-menu-item');
-    if (watchItem) watchItem.style.display = (GraphState.selectedNode && GraphState.selectedNode.data.url && GraphState.selectedNode.data.url.includes('.onion')) ? 'flex' : 'none';
-    if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
-        const isOnion = GraphState.selectedNode.data.url.includes('.onion');
-        if (GraphState.selectedNode.data.isExpanded) {
-            expandItem.innerHTML = gi('check') + ' Derinleştirildi';
-            expandItem.style.opacity = '0.5';
-        } else if (!isOnion) {
-            expandItem.innerHTML = gi('warn') + ' Sadece .onion';
-            expandItem.style.opacity = '0.5';
-        } else {
-            expandItem.innerHTML = gi('search') + ' Derinleştir';
-            expandItem.style.opacity = '1';
-        }
-        expandItem.style.display = 'flex';
-    } else {
-        expandItem.style.display = 'none';
-    }
-
-    menu.style.display = 'block';
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-}
-
-function closeContextMenu() {
-    document.getElementById('context-menu').style.display = 'none';
-}
-
-// Copy
-function copyLink() {
-    closeContextMenu();
-    if (GraphState.selectedNode && GraphState.selectedNode.data.url) {
-        navigator.clipboard.writeText(GraphState.selectedNode.data.url).then(() => {
-            showToast('Link kopyalandı!');
-        }).catch(() => fallbackCopy(GraphState.selectedNode.data.url));
-    }
-}
-
-// Toast
-function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.style.borderColor = '';
-    toast.className = `toast show ${type}`;
-
-    setTimeout(() => {
-        toast.className = 'toast';
-    }, 3000);
-}
-
-function fallbackCopy(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-
-    try {
-        document.execCommand('copy');
-        showToast('Kopyalandı', 'success');
-    } catch (e) {
-        showToast('Kopyalanamadı', 'error');
-    }
-
-    document.body.removeChild(textarea);
-}
-
-function copyTitle() {
-    closeContextMenu();
-    if (!GraphState.selectedNode || !GraphState.selectedNode.data) return;
-
-    const title = GraphState.selectedNode.data.name || '';
-    if (!title) return;
-
-    navigator.clipboard.writeText(title)
-        .then(() => showToast('Başlık kopyalandı', 'success'))
-        .catch(() => fallbackCopy(title));
-}
-
-let _expandInProgress = false;
-
-function expandNode() {
-    closeContextMenu();
-    if (_expandInProgress) {
-        showToast('⏳ Derinleştirme devam ediyor...', 'info');
-        return;
-    }
-
-    const node = GraphState.selectedNode;
-    if (!node || !node.data || !node.data.url) {
-        showToast('Derinleştirilecek node seçilmedi', 'warning');
-        return;
-    }
-
-    if (!node.data.url.includes('.onion')) {
-        showToast('Derinleştirme yalnızca .onion adreslerinde çalışır', 'warning');
-        return;
-    }
-
-    if (node.data.isExpanded) {
-        showToast('Bu node zaten derinleştirilmiş', 'info');
-        return;
-    }
-
-    _expandInProgress = true;
-    const loading = document.getElementById('expand-loading');
-    if (loading) loading.style.display = 'flex';
-
-    fetch('/api/expand', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            url: node.data.url,
-            parentId: node.data.nodeId || 0,
-            query: window.currentQuery || ''
-        })
-    })
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                throw new Error(data.error || 'Derinleştirme başarısız');
-            }
-            showToast(`Derinleştirildi: ${data.savedLinks || 0} kayıt`, 'success');
-            node.data.isExpanded = true;
-
-            const graphNodeId = Number(data.graphNodeId) || 0;
-            if (graphNodeId > 0 && GraphState.root) {
-                fetch('/api/graph/children/' + graphNodeId)
-                    .then(r => r.json())
-                    .then(childData => {
-                        if (childData.success && Array.isArray(childData.children) && childData.children.length > 0) {
-                            node.data.children = childData.children;
-                            if (GraphState.root && GraphState.root.data) {
-                                createGraph(GraphState.root.data);
-                            } else {
-                                initGraph(window.currentQuery || '');
-                                return;
-                            }
-                            setTimeout(fitToScreen, 150);
-                        } else {
-                            initGraph(window.currentQuery || '');
-                        }
-                    })
-                    .catch(() => initGraph(window.currentQuery || ''));
-            } else {
-                initGraph(window.currentQuery || '');
-            }
-        })
-        .catch(err => {
-            showToast('' + err.message, 'error');
-        })
-        .finally(() => {
-            _expandInProgress = false;
-            if (loading) loading.style.display = 'none';
+    // ── Açıklama (legend) + istatistik noktaları: çizimle aynı palet ────
+    G.paintLegend = function () {
+        document.querySelectorAll('#gx [data-type] .sw').forEach(sw => {
+            const type = sw.closest('[data-type]').dataset.type;
+            sw.style.setProperty('--c', G.colors[type] || G.colors.result);
         });
-}
+    };
 
-// Seçili düğümün alan adını izleme listesine ekler
-function watchNode() {
-    closeContextMenu();
-    const node = GraphState.selectedNode;
-    if (!node || !node.data || !node.data.url) { showToast('Önce bir sonuç düğümü seçin', 'warning'); return; }
-    let host = '';
-    try { host = new URL(node.data.url).hostname; } catch (_) { showToast('Geçersiz URL', 'warning'); return; }
-    if (!host.endsWith('.onion')) { showToast('Yalnızca .onion siteleri izlenebilir', 'warning'); return; }
-    fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: (node.data.name || host).slice(0, 100), url: 'http://' + host, category: 'Harita', notes: 'Haritadan eklendi' }) })
-        .then(r => r.json()).then(d => { if (d.success) showToast('İzleme listesine eklendi', 'success'); else throw new Error(d.error || 'Eklenemedi'); })
-        .catch(e => showToast('' + e.message, 'error'));
-}
-
-function showLinkInfo() {
-    closeContextMenu();
-    const node = GraphState.selectedNode;
-    if (!node || !node.data) return;
-
-    const modal = document.getElementById('link-modal');
-    const content = document.getElementById('link-modal-content');
-    if (!modal || !content) return;
-
-    content.innerHTML = `
-        <div style="display: grid; gap: 10px; font-size: 14px;">
-            <div><strong>Başlık:</strong> ${escapeHTML(node.data.name || '-')}</div>
-            <div><strong>Tür:</strong> ${escapeHTML(node.data.type || '-')}</div>
-            <div><strong>URL:</strong><br><span style="color:#63b3ed; word-break: break-all;">${escapeHTML(node.data.url || '-')}</span></div>
-            <div><strong>Domain:</strong> ${escapeHTML(node.data.domain || '-')}</div>
-            <div><strong>Node ID:</strong> ${node.data.nodeId || '-'}</div>
-            <div><strong>Çoklu Kaynak Sayısı:</strong> ${node.data.count || 1}</div>
-        </div>
-    `;
-
-    modal.style.display = 'flex';
-}
-
-function closeLinkModal() {
-    const modal = document.getElementById('link-modal');
-    if (modal) {
-        modal.style.display = 'none';
+    // ── İpucu ───────────────────────────────────────────────────────────
+    const tip = () => $('graph-tooltip');
+    function tipContent(d) {
+        const kids = (d.children || d._children || []).length;
+        const url = d.data.url || '';
+        return KH.html`
+            <div class="gx-tip-kind"><i class="sw"></i>${G.kindLabel(d.depth === 0 && d.data.type === 'root' ? 'root' : d.kind)}${d.data.isExpanded ? KH.html` · <span class="ok">${T('derinleştirildi', 'expanded')}</span>` : ''}</div>
+            <div class="gx-tip-title">${d.data.name || '—'}</div>
+            ${url ? KH.html`<div class="gx-tip-url">${url}</div>` : ''}
+            <div class="gx-tip-meta">
+              ${url && isOnion(url) ? KH.html`<span>${KH.raw(KH.icon('onion', 'sm'))} ${T('Tor Browser gerektirir', 'Requires Tor Browser')}</span>` : ''}
+              ${Number(d.data.count) > 1 && (d.kind === 'multi') ? KH.html`<span class="multi">${KH.raw(KH.icon('fire', 'sm'))} ${d.data.count} ${T('motorda bulundu', 'engines matched')}</span>` : ''}
+              ${(d.kind === 'query' || d.kind === 'engine') && d.data.count ? KH.html`<span>${KH.raw(KH.icon('results', 'sm'))} ${KH.num(d.data.count)} ${T('sonuç', 'results')}</span>` : ''}
+              ${kids ? KH.html`<span>${KH.raw(KH.icon('folder', 'sm'))} ${kids} ${T('alt öğe', 'children')} · ${d.children ? T('kapatmak için tıkla', 'click to collapse') : T('açmak için tıkla', 'click to expand')}</span>` : ''}
+            </div>`;
     }
-}
-
-function copyLinkFromModal() {
-    const node = GraphState.selectedNode;
-    if (!node || !node.data || !node.data.url) {
-        showToast('Kopyalanacak link yok', 'warning');
-        return;
+    function placeTip(e) {
+        const el = tip(); if (!el || el.hidden) return;
+        const pad = 14, w = el.offsetWidth, h = el.offsetHeight;
+        let x = e.clientX + pad, y = e.clientY + pad;
+        if (x + w > window.innerWidth - 8) x = e.clientX - w - pad;
+        if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+        el.style.transform = 'translate(' + Math.max(8, x) + 'px,' + Math.max(8, y) + 'px)';
     }
+    G.onNodeEnter = function (e, d) {
+        const m = $('graph-ctx');
+        if (m && m.classList.contains('open')) return; // menü açıkken ipucu/vurgu yok
+        G.highlight(d);
+        if (e.pointerType === 'touch' || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents)) return;
+        const el = tip(); if (!el) return;
+        KH.render(el, tipContent(d));
+        el.querySelector('.sw').style.setProperty('--c', G.colors[d.kind] || G.colors.result);
+        el.hidden = false;
+        placeTip(e);
+    };
+    G.onNodeMove = function (e) { placeTip(e); };
+    G.onNodeLeave = function () { G.highlight(null); const el = tip(); if (el) el.hidden = true; };
+    G.hideTip = G.onNodeLeave;
 
-    navigator.clipboard.writeText(node.data.url)
-        .then(() => showToast('Link kopyalandı', 'success'))
-        .catch(() => fallbackCopy(node.data.url));
-}
+    // ── Tıklama: aç/kapat; yaprakta (fare) linki kopyala, dokunmada menü ─
+    G.toggle = function (d) {
+        if (!d.children && !d._children) return false;
+        const opening = !!d._children;
+        S().open.set(d.id, opening);
+        if (opening) (d._children || []).forEach(c => S().fresh.add(c.id));
+        G.render({ anchor: d.id });
+        return true;
+    };
+    G.onNodeClick = function (e, d) {
+        if (e.defaultPrevented) return; // sürükleme
+        G.hideTip();
+        if (G.toggle(d)) return;
+        // Dokunmatikte menü: aynı tıklamanın belge düzeyindeki "menüleri kapat" dinleyicisinden sonra aç
+        if (e.pointerType === 'touch' || e.pointerType === 'pen') { const x = e.clientX, y = e.clientY; setTimeout(() => G.openMenu(d, x, y), 0); return; }
+        if (d.data.url) KH.copy(d.data.url, T('Link kopyalandı', 'Link copied'));
+    };
+    G.onNodeMenu = function (e, d) {
+        e.preventDefault();
+        G.hideTip();
+        G.openMenu(d, e.clientX, e.clientY);
+    };
+    G.onNodeKey = function (e, d) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!G.toggle(d)) { const p = G.screenPos(d); G.openMenu(d, p.x, p.y); } }
+        else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const p = G.screenPos(d); G.openMenu(d, p.x, p.y); }
+    };
 
-document.addEventListener('click', (event) => {
-    const menu = document.getElementById('context-menu');
-    if (!menu) return;
+    // ── Bağlam menüsü ───────────────────────────────────────────────────
+    const menu = () => $('graph-ctx');
+    G.openMenu = function (d, x, y) {
+        const m = menu(); if (!m) return;
+        S().selected = d;
+        const url = d.data.url || '';
+        const onion = url && isOnion(url);
+        $('graph-ctx-head').textContent = G.truncate(d.data.name || url || '—', 48);
+        m.querySelectorAll('[data-need="url"]').forEach(el => { el.hidden = !url; });
+        m.querySelectorAll('[data-need="onion"]').forEach(el => { el.hidden = !onion; });
+        const ex = $('expand-menu-item');
+        if (ex && url) {
+            const label = ex.querySelector('span');
+            ex.classList.remove('is-muted');
+            if (d.data.isExpanded) { label.textContent = T('Derinleştirildi', 'Already expanded'); ex.classList.add('is-muted'); }
+            else if (!onion) { label.textContent = T('Derinleştir (yalnız .onion)', 'Expand (.onion only)'); ex.classList.add('is-muted'); }
+            else label.textContent = T('Derinleştir', 'Expand');
+        }
+        // Önce görünür yap, sonra ölç ve ekrana sığdır
+        m.style.left = '0px'; m.style.top = '0px';
+        m.classList.add('open');
+        const w = m.offsetWidth, h = m.offsetHeight;
+        const left = Math.min(Math.max(8, x + 2), window.innerWidth - w - 8);
+        const top = Math.min(Math.max(8, y + 2), window.innerHeight - h - 8);
+        m.style.left = left + 'px'; m.style.top = top + 'px';
+        m.style.transformOrigin = (x > left + 1 ? 'right' : 'left') + ' ' + (y > top + 1 ? 'bottom' : 'top');
+        setTimeout(() => { const first = m.querySelector('.kh-menu-item:not([hidden])'); if (first) first.focus({ preventScroll: true }); }, 20);
+    };
+    G.closeMenu = function () { const m = menu(); if (m) m.classList.remove('open'); };
 
-    if (menu.style.display === 'block' && !menu.contains(event.target)) {
-        closeContextMenu();
+    function selected(needUrl) {
+        const d = S().selected;
+        if (!d || !d.data) return null;
+        if (needUrl && !d.data.url) { KH.toast(T('Bu düğümün linki yok', 'This node has no link'), 'warn'); return null; }
+        return d;
     }
-});
+    G.copyLink = function () { G.closeMenu(); const d = selected(true); if (d) KH.copy(d.data.url, T('Link kopyalandı', 'Link copied')); };
+    G.copyTitle = function () { G.closeMenu(); const d = selected(false); if (d && d.data.name) KH.copy(d.data.name, T('Başlık kopyalandı', 'Title copied')); };
+    G.focusSelected = function () { G.closeMenu(); const d = selected(false); if (d) G.focusOn(d); };
 
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        closeContextMenu();
-        closeLinkModal();
-    }
-});
+    // ── Derinleştir (/api/expand) ───────────────────────────────────────
+    let expanding = false;
+    G.expandSelected = async function () {
+        G.closeMenu();
+        const d = selected(true); if (!d) return;
+        if (expanding) { KH.toast(T('Derinleştirme sürüyor…', 'Expansion in progress…'), 'info'); return; }
+        if (!isOnion(d.data.url)) { KH.toast(T('Derinleştirme yalnızca .onion adreslerinde çalışır', 'Expansion only works on .onion addresses'), 'warn'); return; }
+        if (d.data.isExpanded && d.data.children && d.data.children.length) { KH.toast(T('Bu düğüm zaten derinleştirilmiş', 'This node is already expanded'), 'info'); return; }
+        expanding = true;
+        const busy = $('expand-loading'); if (busy) busy.hidden = false;
+        const data = d.data;
+        try {
+            const res = await KH.api('/api/expand', { method: 'POST', body: { url: data.url, parentId: data.nodeId || 0, query: S().query || '' } });
+            if (!res || !res.success) throw new Error((res && res.error) || T('Derinleştirme başarısız', 'Expansion failed'));
+            data.isExpanded = true;
+            const gid = Number(res.graphNodeId) || 0;
+            let kids = [];
+            if (gid > 0) {
+                const cd = await KH.api('/api/graph/children/' + encodeURIComponent(gid));
+                kids = (cd && cd.success && Array.isArray(cd.children)) ? cd.children : [];
+            }
+            if (kids.length) {
+                data.children = kids;
+                // d.id yeni çizimde değişmez (yol kimliği) → açık işaretle + yeni bağlantıları canlandır
+                S().open.set(d.id, true);
+                const prefix = d.id + '>';
+                kids.forEach(k => S().fresh.add(prefix + (k.type || '') + ':' + (k.url || k.name || '')));
+                G.updateStats(S().view);
+                G.render({ anchor: d.id });
+                KH.toast(T('Derinleştirildi: ', 'Expanded: ') + KH.num(res.savedLinks || kids.length) + T(' bağlantı', ' links'), 'ok');
+            } else {
+                G.render({ anchor: d.id, fit: 'none' });
+                KH.toast(T('Sayfa tarandı ancak yeni bağlantı bulunamadı', 'Page crawled but no new links were found'), 'info');
+            }
+        } catch (e) {
+            KH.toast(T('Derinleştirilemedi: ', 'Could not expand: ') + e.message, 'err');
+        } finally {
+            expanding = false;
+            if (busy) busy.hidden = true;
+        }
+    };
+
+    // ── İzleme listesine ekle ───────────────────────────────────────────
+    G.watchSelected = async function () {
+        G.closeMenu();
+        const d = selected(true); if (!d) return;
+        let host = '';
+        try { host = new URL(d.data.url).hostname; } catch (_) { KH.toast(T('Geçersiz URL', 'Invalid URL'), 'warn'); return; }
+        if (!/\.onion$/i.test(host)) { KH.toast(T('Yalnızca .onion siteleri izlenebilir', 'Only .onion sites can be watched'), 'warn'); return; }
+        try {
+            const r = await KH.api('/api/watchlist', { method: 'POST', body: { name: String(d.data.name || host).slice(0, 100), url: 'http://' + host, category: 'Harita', notes: T('Haritadan eklendi', 'Added from the map') } });
+            if (r && r.success === false) throw new Error(r.error || T('Eklenemedi', 'Could not add'));
+            KH.toast(T('İzleme listesine eklendi: ', 'Added to watchlist: ') + host, 'ok');
+        } catch (e) { KH.toast(e.message, 'err'); }
+    };
+
+    // ── Detay modalı ────────────────────────────────────────────────────
+    G.showDetails = function () {
+        G.closeMenu();
+        const d = selected(false); if (!d) return;
+        const x = d.data;
+        const kids = (d.children || d._children || []).length;
+        const rows = [
+            [T('Başlık', 'Title'), x.name || '—', ''],
+            [T('Tür', 'Type'), G.kindLabel(d.depth === 0 && x.type === 'root' ? 'root' : d.kind), ''],
+            [T('URL', 'URL'), x.url || '—', 'mono break-all c-primary'],
+            [T('Alan adı', 'Domain'), x.domain || (x.url ? G.domainOf(x.url) : '—'), 'mono break-all'],
+            [T('Düğüm ID', 'Node ID'), x.nodeId ? String(x.nodeId) : '—', 'mono'],
+            [T('Kaynak sayısı', 'Source count'), String(x.count || 1), 'mono'],
+            [T('Alt öğe', 'Children'), String(kids), 'mono']
+        ];
+        KH.render($('link-modal-content'), KH.html`${rows.map(r => KH.html`<div><dt>${r[0]}</dt><dd class="${r[2]}">${r[1]}</dd></div>`)}`);
+        const findings = $('link-modal-findings');
+        findings.hidden = !x.url;
+        if (x.url) findings.href = '/results?text=' + encodeURIComponent(x.url);
+        $('link-modal-copy').hidden = !x.url;
+        KH.openModal('link-modal');
+    };
+    G.copyFromModal = function () { const d = selected(true); if (d) KH.copy(d.data.url, T('Link kopyalandı', 'Link copied')); };
+
+    // ── Hızlı arama (POST /search, HTML döner; yalnız durum kodu kullanılır) ─
+    let searching = false;
+    G.quickSearch = async function () {
+        const input = $('quick-search'), btn = $('quick-search-btn');
+        const q = input.value.replace(/\s+/g, ' ').trim();
+        if (!q) { KH.toast(T('Sorgu girin', 'Enter a query'), 'warn'); input.focus(); return; }
+        if (q.length > 200) { KH.toast(T('Sorgu 200 karakteri aşamaz', 'Query cannot exceed 200 characters'), 'warn'); return; }
+        if (searching) return;
+        searching = true;
+        KH.busy(btn, true);
+        input.disabled = true;
+        KH.toast(T('Tor üzerinden aranıyor… (10-90 sn)', 'Searching over Tor… (10-90 s)'), 'info');
+        try {
+            const res = await fetch('/search', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'text/html' },
+                body: 'query=' + encodeURIComponent(q)
+            });
+            if (res.status === 401 || res.redirected && /\/login/.test(res.url)) { KH.toast(T('Oturum süresi doldu', 'Session expired'), 'warn'); setTimeout(() => { location.href = '/login'; }, 900); return; }
+            if (res.status === 403) throw new Error(T('Bu işlem için yetkiniz yok', 'You are not allowed to do this'));
+            if (res.status === 429) throw new Error(T('Çok fazla istek; birkaç saniye bekleyin', 'Too many requests; wait a few seconds'));
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            input.value = '';
+            G.state.query = q;
+            await G.loadQueries();
+            const known = G.state.queries.find(x => x.query === q);
+            KH.toast(known ? T('Arama tamamlandı: ', 'Search finished: ') + KH.num(known.count) + T(' sonuç', ' results') : T('Arama tamamlandı, sonuç bulunamadı', 'Search finished with no results'), known ? 'ok' : 'warn');
+            G.selectQuery(q);
+        } catch (e) {
+            KH.toast(T('Arama başarısız: ', 'Search failed: ') + e.message, 'err');
+        } finally {
+            searching = false;
+            KH.busy(btn, false);
+            input.disabled = false;
+        }
+    };
+
+    // ── Yerleşim ────────────────────────────────────────────────────────
+    G.setLayout = function (layout) {
+        if (!['radial', 'tree', 'force'].includes(layout)) return;
+        S().layout = layout;
+        document.querySelectorAll('[data-action="graph-layout"]').forEach(b => {
+            const on = b.dataset.layout === layout;
+            b.setAttribute('aria-pressed', String(on)); b.classList.toggle('active', on);
+        });
+        G.saveSettings();
+        if (S().view) { S().userZoomed = false; G.render({ fit: 'force' }); }
+    };
+
+    // ── Ayarlar ─────────────────────────────────────────────────────────
+    G.syncSettingsUI = function () {
+        const s = G.settings;
+        $('font-size-slider').value = s.fontSize;
+        $('spacing-slider').value = s.spacing;
+        $('truncate-slider').value = s.truncateLength;
+        $('show-all-labels').checked = s.showAllLabels;
+        $('font-size-value').textContent = s.fontSize + 'px';
+        $('spacing-value').textContent = s.spacing + '×';
+        $('truncate-value').textContent = s.truncateLength + T(' kar.', ' ch');
+    };
+    const rerender = KH.debounce(() => { if (S().view) G.render({ fit: S().userZoomed ? 'none' : 'auto', instant: false }); }, 120);
+    G.readSettings = function () {
+        G.settings.fontSize = parseInt($('font-size-slider').value, 10) || 14;
+        G.settings.spacing = parseFloat($('spacing-slider').value) || 1;
+        G.settings.truncateLength = parseInt($('truncate-slider').value, 10) || 25;
+        G.settings.showAllLabels = $('show-all-labels').checked;
+        G.syncSettingsUI();
+        G.saveSettings();
+        rerender();
+    };
+    G.resetSettings = function () {
+        Object.assign(G.settings, G.DEFAULT_SETTINGS);
+        G.syncSettingsUI();
+        G.saveSettings();
+        if (S().view) G.render({ fit: 'force' });
+        KH.toast(T('Ayarlar sıfırlandı', 'Settings reset'), 'info', 1800);
+    };
+    G.toggleSettings = function (force) {
+        const p = $('settings-panel'), btn = $('settings-toggle');
+        const open = typeof force === 'boolean' ? force : p.hidden;
+        p.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        btn.classList.toggle('is-on', open);
+        if (open) setTimeout(() => $('font-size-slider').focus({ preventScroll: true }), 30);
+    };
+})();

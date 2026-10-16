@@ -890,6 +890,12 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 		return
 	}
 
+	// Doğrulama hatası istemci hatasıdır (400): Tor'a gitmeden reddedilir.
+	if !shared.IsOnionURL(req.URL) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Derinleştirme yalnızca geçerli .onion adresleri için çalışır"})
+		return
+	}
+
 	logger.Info("Derinleştirme başlatıldı: %s", req.URL)
 
 	// URL'yi scrape et ve linkleri çıkar

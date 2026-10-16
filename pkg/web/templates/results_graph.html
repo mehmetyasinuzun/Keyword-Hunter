@@ -1,238 +1,156 @@
-﻿<!DOCTYPE html>
-<html lang="tr">
+﻿{{template "doc" .}}
+<title>{{t .Lang "graph.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/graph.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page full">
+  <section class="gx" id="gx" data-query="{{.query}}">
+    <h1 class="kh-sr">{{t .Lang "graph.title"}}</h1>
+    <div class="gx-canvas" id="graph-canvas" role="group" aria-label="{{t .Lang "graph.canvas"}}"></div>
 
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Sonuç Haritası</title>
-    <script src="/static/js/vendor/d3.v7.min.js?v={{version}}"></script>
-    <link rel="stylesheet" href="/static/css/graph.css?v={{version}}">
-</head>
+    <div class="gx-empty" id="graph-empty" hidden>
+      <div class="kh-empty">
+        <div class="icon">{{icon "graph"}}</div>
+        <h3>{{t .Lang "graph.empty"}}</h3>
+        <p>{{t .Lang "graph.emptyS"}}</p>
+        <div class="kh-inline"><a href="/search" class="kh-btn primary" data-write>{{icon "search"}} {{t .Lang "graph.emptyBtn"}}</a></div>
+      </div>
+    </div>
 
-<body class="min-h-screen graph-page">
-    {{template "navbar" .}}
-
-    <!-- Query Panel -->
-    <div class="query-panel">
-        <div class="query-selector">
-            <label>Sorgu</label>
-            <select id="query-select" onchange="loadSelectedQuery()">
-                <option value="">Yükleniyor...</option>
+    <!-- Üst: sorgu + hızlı arama + yükleme durumu | yerleşim + araçlar -->
+    <div class="gx-top" aria-label="{{t .Lang "graph.controls"}}">
+      <div class="gx-panel gx-query">
+        <div class="gx-query-row">
+          <label class="gx-select">
+            <span class="kh-sr">{{t .Lang "graph.query"}}</span>
+            {{icon "target"}}
+            <select id="query-select" class="kh-select sm" data-change="graph-query">
+              <option value="">{{t .Lang "common.loading"}}</option>
             </select>
+          </label>
+          <div class="gx-search" data-write>
+            <div class="kh-input-icon">{{icon "search"}}<input type="search" id="quick-search" class="kh-input sm" placeholder="{{t .Lang "graph.searchPh"}}" maxlength="200" autocomplete="off" spellcheck="false" data-enter="graph-search" aria-label="{{t .Lang "graph.searchTip"}}"></div>
+            <button type="button" class="kh-btn sm primary" id="quick-search-btn" data-action="graph-search" title="{{t .Lang "graph.searchTip"}}">{{t .Lang "graph.searchBtn"}}</button>
+          </div>
         </div>
-        <div class="query-search">
-            <input type="text" id="quick-search" placeholder="Yeni arama (Tor, ~10-90 sn)…" maxlength="200"
-                onkeypress="if(event.key==='Enter') quickSearch()">
-            <button onclick="quickSearch()" class="search-btn" title="Ara ve haritaya ekle">Ara</button>
+        <div class="gx-status" id="graph-load-status" hidden>
+          <ol class="gx-steps">
+            <li id="graph-step-queries" class="is-active"><span class="dot"></span>{{t .Lang "graph.step.queries"}}</li>
+            <li id="graph-step-engines"><span class="dot"></span>{{t .Lang "graph.step.engines"}}</li>
+            <li id="graph-step-results"><span class="dot"></span>{{t .Lang "graph.step.results"}}</li>
+          </ol>
+          <span class="gx-meta" id="graph-load-meta" aria-live="polite"></span>
         </div>
-        <div class="query-info">
-            <span id="current-query-label"></span>
+      </div>
+
+      <div class="gx-panel gx-tools">
+        <div class="kh-segment" role="group" aria-label="{{t .Lang "graph.layout"}}">
+          <button type="button" data-action="graph-layout" data-layout="radial" aria-pressed="true" title="{{t .Lang "graph.layout.radial"}}" aria-label="{{t .Lang "graph.layout.radial"}}">{{icon "target"}}<span>{{t .Lang "graph.layout.radial"}}</span></button>
+          <button type="button" data-action="graph-layout" data-layout="tree" aria-pressed="false" title="{{t .Lang "graph.layout.tree"}}" aria-label="{{t .Lang "graph.layout.tree"}}">{{icon "layers"}}<span>{{t .Lang "graph.layout.tree"}}</span></button>
+          <button type="button" data-action="graph-layout" data-layout="force" aria-pressed="false" title="{{t .Lang "graph.layout.force"}}" aria-label="{{t .Lang "graph.layout.force"}}">{{icon "graph"}}<span>{{t .Lang "graph.layout.force"}}</span></button>
         </div>
-        <div class="graph-load-status" id="graph-load-status" style="display: none;">
-            <div class="graph-load-steps">
-                <div class="graph-load-step is-active" id="graph-step-queries">
-                    <span class="graph-load-dot"></span>
-                    <span>Sorgular</span>
-                </div>
-                <div class="graph-load-step" id="graph-step-engines">
-                    <span class="graph-load-dot"></span>
-                    <span>Motorlar</span>
-                </div>
-                <div class="graph-load-step" id="graph-step-results">
-                    <span class="graph-load-dot"></span>
-                    <span>Sonuçlar</span>
-                </div>
-            </div>
-            <div class="graph-load-meta" id="graph-load-meta">Yükleme başlatılıyor…</div>
-        </div>
+        <span class="gx-sep" aria-hidden="true"></span>
+        <button type="button" class="kh-btn sm ghost" data-action="graph-full" aria-label="{{t .Lang "graph.fullMap"}}" title="{{t .Lang "graph.fullMapTip"}}">{{icon "map"}}<span>{{t .Lang "graph.fullMap"}}</span></button>
+        <button type="button" class="kh-btn sm subtle" data-action="graph-collapse" aria-label="{{t .Lang "graph.collapse"}}" title="{{t .Lang "graph.collapseTip"}}">{{icon "chevron-down"}}<span>{{t .Lang "graph.collapse"}}</span></button>
+        <button type="button" class="kh-btn sm subtle" data-action="graph-reset" aria-label="{{t .Lang "graph.reset"}}" title="{{t .Lang "graph.resetTip"}}">{{icon "refresh"}}<span>{{t .Lang "graph.reset"}}</span></button>
+      </div>
     </div>
 
-    <!-- Graph Container -->
-    <div id="graph-container">
-        <!-- Stats Panel -->
-        <div class="panel stats">
-            <h3>İstatistikler</h3>
-            <div class="stats-item">
-                <span>Sorgu:</span>
-                <span class="stats-value" id="stat-queries">0</span>
-            </div>
-            <div class="stats-item">
-                <span>Motor:</span>
-                <span class="stats-value" id="stat-engines">0</span>
-            </div>
-            <div class="stats-item">
-                <span>Sonuç:</span>
-                <span class="stats-value" id="stat-results">0</span>
-            </div>
-            <div class="stats-item">
-                <span>Çoklu:</span>
-                <span class="stats-value" style="color: #ed8936;" id="stat-multi">0</span>
-            </div>
-        </div>
+    <!-- Sol alt: istatistik + açıklama -->
+    <aside class="gx-panel gx-side" id="graph-side" aria-label="{{t .Lang "graph.stats"}}">
+      <dl class="gx-stats">
+        <div data-type="query"><dt><i class="sw"></i>{{t .Lang "graph.t.query"}}</dt><dd id="stat-queries">0</dd></div>
+        <div data-type="engine"><dt><i class="sw"></i>{{t .Lang "graph.t.engine"}}</dt><dd id="stat-engines">0</dd></div>
+        <div data-type="result"><dt><i class="sw"></i>{{t .Lang "graph.t.result"}}</dt><dd id="stat-results">0</dd></div>
+        <div data-type="multi"><dt><i class="sw"></i>{{t .Lang "graph.t.multi"}}</dt><dd id="stat-multi">0</dd></div>
+      </dl>
+      <button type="button" class="gx-legend-toggle" data-action="graph-legend" aria-expanded="true" aria-controls="graph-legend" title="{{t .Lang "graph.legendToggle"}}">{{icon "info"}}<span>{{t .Lang "graph.legend"}}</span>{{icon "chevron-down"}}</button>
+      <ul class="gx-legend" id="graph-legend">
+        <li data-type="query"><i class="sw"></i>{{t .Lang "graph.t.query"}}</li>
+        <li data-type="engine"><i class="sw"></i>{{t .Lang "graph.t.engine"}}</li>
+        <li data-type="result"><i class="sw"></i>{{t .Lang "graph.t.result"}}</li>
+        <li data-type="multi"><i class="sw glow"></i>{{t .Lang "graph.t.multiLong"}}</li>
+        <li data-type="internal"><i class="sw line"></i>{{t .Lang "graph.t.internal"}}</li>
+        <li data-type="external"><i class="sw line"></i>{{t .Lang "graph.t.external"}}</li>
+      </ul>
+    </aside>
 
-        <!-- Controls -->
-        <div class="panel controls">
-            <button class="control-btn primary" onclick="showFullMap()" title="Tüm derinleştirmeleri aç">
-                {{icon "map"}} Full Map
-            </button>
-            <button class="control-btn" onclick="collapseAll()" title="Tüm node'ları kapat">
-                Kapat
-            </button>
-            <button class="control-btn" onclick="resetView()" title="Görünümü sıfırla">
-                Sıfırla
-            </button>
-            <button class="control-btn" onclick="fitToScreen()" title="Ekrana sığdır">
-                {{icon "expand"}} Sığdır
-            </button>
-        </div>
-
-        <!-- Layout Selector -->
-        <div class="layout-selector">
-            <button class="layout-btn active" onclick="setLayout('radial')" id="layout-radial"
-                title="Dairesel yerleşim">
-                {{icon "target"}} Radial
-            </button>
-            <button class="layout-btn" onclick="setLayout('tree')" id="layout-tree" title="Yatay ağaç">
-                {{icon "results"}} Tree
-            </button>
-            <button class="layout-btn" onclick="setLayout('force')" id="layout-force" title="Force-directed">
-                {{icon "graph"}} Force
-            </button>
-        </div>
-
-        <!-- Zoom Controls -->
-        <div class="zoom-controls">
-            <button class="zoom-btn" onclick="zoomIn()" title="Yakınlaştır">+</button>
-            <button class="zoom-btn" onclick="zoomOut()" title="Uzaklaştır">−</button>
-        </div>
-
-        <!-- Legend -->
-        <div class="panel legend">
-            <h3>Açıklama</h3>
-            <div class="legend-item">
-                <div class="legend-color" style="background: #4299e1;"></div>
-                <span>Sorgu</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: #48bb78;"></div>
-                <span>Motor</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: #718096;"></div>
-                <span>Sonuç</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: #ed8936;"></div>
-                <span>Çoklu </span>
-            </div>
-            <div class="legend-divider">
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #48bb78;"></div>
-                    <span>İç Link</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ed64a6;"></div>
-                    <span>Dış Link</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Graf Ayarları Paneli -->
-        <div class="panel settings-panel" id="settings-panel" style="display: none;">
-            <h3>{{icon "settings"}} Graf Ayarları</h3>
-            <div class="settings-group">
-                <label>Yazı Boyutu</label>
-                <input type="range" id="font-size-slider" min="10" max="22" value="14" oninput="updateGraphSettings()">
-                <span id="font-size-value">14px</span>
-            </div>
-            <div class="settings-group">
-                <label>Node Aralığı</label>
-                <input type="range" id="spacing-slider" min="0.5" max="3" step="0.25" value="1"
-                    oninput="updateGraphSettings()">
-                <span id="spacing-value">1x</span>
-            </div>
-            <div class="settings-group">
-                <label>Yazı Uzunluğu</label>
-                <input type="range" id="truncate-slider" min="10" max="50" value="25" oninput="updateGraphSettings()">
-                <span id="truncate-value">25 kar.</span>
-            </div>
-            <div class="settings-group">
-                <label style="display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="show-all-labels" checked onchange="updateGraphSettings()">
-                    Tüm Yazıları Göster
-                </label>
-            </div>
-            <div class="settings-actions">
-                <button class="settings-btn" onclick="resetGraphSettings()">Varsayılan</button>
-                <button class="settings-btn primary" onclick="applyGraphSettings()">Uygula</button>
-            </div>
-        </div>
-
-        <div class="graph-help"><b>Kullanım:</b> sol tık aç/kapat · sağ tık menü (derinleştir, kopyala, odaklan) · tekerlek yakınlaştır · sürükle kaydır. Derinleştirme sayfadaki linkleri Tor'dan çekip grafa ekler.</div>
-
-        <!-- Ayarlar Butonu -->
-        <button class="settings-toggle" id="settings-toggle" onclick="toggleSettingsPanel()" title="Graf Ayarları">
-            {{icon "settings"}}
-        </button>
-
-        <!-- Tooltip -->
-        <div class="tooltip" id="tooltip" style="display: none;"></div>
+    <!-- Alt orta: yardım -->
+    <div class="gx-help" id="graph-help">
+      {{icon "info"}}
+      <span>{{t .Lang "graph.help"}}<br><small>{{t .Lang "graph.helpExpand"}}</small></span>
+      <button type="button" class="kh-iconbtn" data-action="graph-help-hide" aria-label="{{t .Lang "graph.helpHide"}}">{{icon "close"}}</button>
     </div>
 
-    <!-- Context Menu -->
-    <div class="context-menu" id="context-menu">
-        <div class="context-menu-item" onclick="copyLink()">{{icon "copy"}} Linki Kopyala</div>
-        <div class="context-menu-item" onclick="copyTitle()">{{icon "copy"}} Başlığı Kopyala</div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item" id="expand-menu-item" onclick="expandNode()">{{icon "target"}} Derinleştir</div>
-        <div class="context-menu-item" id="watch-menu-item" onclick="watchNode()">{{icon "watchlist"}} İzleme Listesine Ekle</div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="focusNode()">{{icon "eye"}} Odaklan</div>
-        <div class="context-menu-item" onclick="showLinkInfo()">{{icon "info"}} Detaylar</div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item danger" onclick="closeContextMenu()">{{icon "close"}} Kapat</div>
+    <!-- Sağ alt: yakınlaştırma + ayarlar -->
+    <div class="gx-zoom gx-panel" role="group" aria-label="{{t .Lang "graph.controls"}}">
+      <button type="button" class="kh-iconbtn" data-action="graph-zoom-in" aria-label="{{t .Lang "graph.zoomIn"}}" title="{{t .Lang "graph.zoomIn"}}">{{icon "plus"}}</button>
+      <button type="button" class="kh-iconbtn" data-action="graph-zoom-out" aria-label="{{t .Lang "graph.zoomOut"}}" title="{{t .Lang "graph.zoomOut"}}"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <button type="button" class="kh-iconbtn" data-action="graph-fit" aria-label="{{t .Lang "graph.fit"}}" title="{{t .Lang "graph.fit"}}">{{icon "expand"}}</button>
+      <span class="gx-zoom-sep" aria-hidden="true"></span>
+      <button type="button" class="kh-iconbtn" id="settings-toggle" data-action="graph-settings" aria-expanded="false" aria-controls="settings-panel" aria-label="{{t .Lang "graph.settings"}}" title="{{t .Lang "graph.settings"}}">{{icon "settings"}}</button>
     </div>
 
-    <!-- Toast -->
-    <div class="toast" id="toast"></div>
-
-    <!-- Loading -->
-    <div class="expand-loading" id="expand-loading">
-        <div class="spinner"></div>
-        <div style="color: #e2e8f0; font-weight: 500;">Sayfa taranıyor...</div>
-        <div style="color: #a0aec0; font-size: 12px; margin-top: 8px;">Linkler çıkarılıyor</div>
+    <div class="gx-panel gx-settings" id="settings-panel" hidden>
+      <div class="gx-settings-head">{{icon "settings"}} <b>{{t .Lang "graph.settings"}}</b>
+        <button type="button" class="kh-iconbtn ml-auto" data-action="graph-settings" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+      </div>
+      <label class="gx-range"><span>{{t .Lang "graph.s.font"}}</span><output id="font-size-value">14px</output>
+        <input type="range" id="font-size-slider" min="10" max="22" value="14" data-input="graph-setting"></label>
+      <label class="gx-range"><span>{{t .Lang "graph.s.spacing"}}</span><output id="spacing-value">1x</output>
+        <input type="range" id="spacing-slider" min="0.5" max="3" step="0.25" value="1" data-input="graph-setting"></label>
+      <label class="gx-range"><span>{{t .Lang "graph.s.truncate"}}</span><output id="truncate-value">25</output>
+        <input type="range" id="truncate-slider" min="10" max="50" value="25" data-input="graph-setting"></label>
+      <label class="kh-check"><input type="checkbox" id="show-all-labels" checked data-change="graph-setting"> {{t .Lang "graph.s.labels"}}</label>
+      <div class="gx-settings-actions">
+        <button type="button" class="kh-btn sm subtle" data-action="graph-settings-reset">{{t .Lang "graph.s.default"}}</button>
+        <button type="button" class="kh-btn sm ghost" data-action="graph-settings-apply">{{t .Lang "graph.s.apply"}}</button>
+      </div>
     </div>
+  </section>
+</main>
+{{template "shell_end" .}}
 
-    <!-- Link Info Modal -->
-    <div id="link-modal">
-        <div>
-            <h3 style="color: #63b3ed; font-size: 18px; margin-bottom: 20px;">{{icon "external"}} Link Detayları</h3>
-            <div id="link-modal-content"></div>
-            <div class="kh-modal-actions">
-                <button class="kh-btn subtle" onclick="closeLinkModal()">Kapat</button>
-                <button class="kh-btn primary" onclick="copyLinkFromModal()"> Kopyala</button>
-            </div>
-        </div>
+<div class="gx-tooltip" id="graph-tooltip" role="tooltip" hidden></div>
+
+<div class="kh-menu gx-ctx" id="graph-ctx" role="menu" aria-label="{{t .Lang "graph.menu"}}">
+  <div class="gx-ctx-head" id="graph-ctx-head"></div>
+  <button type="button" class="kh-menu-item" role="menuitem" data-action="graph-copy-link" data-need="url">{{icon "copy"}} {{t .Lang "graph.m.copyLink"}}</button>
+  <button type="button" class="kh-menu-item" role="menuitem" data-action="graph-copy-title">{{icon "copy"}} {{t .Lang "graph.m.copyTitle"}}</button>
+  <div class="kh-menu-sep" data-need="url"></div>
+  <button type="button" class="kh-menu-item" role="menuitem" id="expand-menu-item" data-action="graph-expand" data-need="url" data-write>{{icon "search"}} <span>{{t .Lang "graph.m.expand"}}</span></button>
+  <button type="button" class="kh-menu-item" role="menuitem" id="watch-menu-item" data-action="graph-watch" data-need="onion" data-write>{{icon "watchlist"}} {{t .Lang "graph.m.watch"}}</button>
+  <div class="kh-menu-sep"></div>
+  <button type="button" class="kh-menu-item" role="menuitem" data-action="graph-focus">{{icon "eye"}} {{t .Lang "graph.m.focus"}}</button>
+  <button type="button" class="kh-menu-item" role="menuitem" data-action="graph-details">{{icon "info"}} {{t .Lang "graph.m.details"}}</button>
+  <div class="kh-menu-sep"></div>
+  <button type="button" class="kh-menu-item" role="menuitem" data-action="graph-ctx-close">{{icon "close"}} {{t .Lang "common.close"}}</button>
+</div>
+
+<div class="gx-busy" id="expand-loading" hidden role="status">
+  <div class="gx-busy-card">
+    <span class="kh-spinner" aria-hidden="true"></span>
+    <div><b>{{t .Lang "graph.busy"}}</b><small>{{t .Lang "graph.busyHint"}}</small></div>
+  </div>
+</div>
+
+<div class="kh-modal-overlay" id="link-modal">
+  <div class="kh-modal" role="dialog" aria-modal="true" aria-labelledby="link-modal-title">
+    <button type="button" class="kh-iconbtn kh-modal-x" data-action="modal-close" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+    <h2 id="link-modal-title">{{icon "external"}} {{t .Lang "graph.d.title"}}</h2>
+    <dl class="gx-details" id="link-modal-content"></dl>
+    <div class="kh-modal-actions">
+      <a class="kh-btn subtle" id="link-modal-findings" href="/results">{{icon "results"}} {{t .Lang "graph.d.findings"}}</a>
+      <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.close"}}</button>
+      <button type="button" class="kh-btn primary view-ok" id="link-modal-copy" data-action="graph-copy-modal">{{icon "copy"}} {{t .Lang "graph.m.copyLink"}}</button>
     </div>
+  </div>
+</div>
 
-    <!-- Load Graph JS -->
-    <!-- Load Graph JS Modules -->
-    <script src="/static/js/graph-core.js?v={{version}}"></script>
-    <script src="/static/js/graph-render.js?v={{version}}"></script>
-    <script src="/static/js/graph-ui.js?v={{version}}"></script>
-    <script>
-        // Pass query parameter to JS
-        window.currentQuery = '{{.query}}';
-
-
-
-        // Load available queries and initialize
-        loadQueries().then(() => {
-            if (window.currentQuery) {
-                document.getElementById('query-select').value = window.currentQuery;
-            }
-            initGraph(window.currentQuery);
-        });
-    </script>
+<script src="/static/js/vendor/d3.v7.min.js?v={{version}}" defer></script>
+<script src="/static/js/graph-core.js?v={{version}}" defer></script>
+<script src="/static/js/graph-render.js?v={{version}}" defer></script>
+<script src="/static/js/graph-ui.js?v={{version}}" defer></script>
+<script src="/static/js/pages/graph.js?v={{version}}" defer></script>
 </body>
-
 </html>

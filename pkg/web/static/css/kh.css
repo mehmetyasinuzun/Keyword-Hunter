@@ -746,3 +746,5 @@ details.kh-details[open] > summary::before { transform: rotate(90deg); }
 /* Filtre olarak kullanılan istatistik kutusu */
 button.kh-stat { display: block; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 button.kh-stat[aria-pressed="true"] { border-color: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent); }
+/* İmleç konumunda açılan menü (bağlam menüsü) */
+.kh-menu.at-cursor { position: fixed; left: 0; top: 0; right: auto; transform-origin: top left; }
