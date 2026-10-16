@@ -1,236 +1,169 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Panel</title>
-    <style>
-        .health-ring { --p: 0; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; flex: none;
-            background: conic-gradient(var(--ring) calc(var(--p) * 1%), rgba(255,255,255,.06) 0); }
-        .health-ring > div { width: 66px; height: 66px; border-radius: 50%; background: var(--bg-secondary); display: grid; place-items: center; font-weight: 800; font-family: var(--font-mono); font-size: 1.05rem; }
-        .feed-item { display: flex; gap: 12px; align-items: center; padding: 10px 6px; border-bottom: 1px solid rgba(99,179,237,.06); }
-        .feed-item:last-child { border-bottom: 0; }
-        .feed-item .body { min-width: 0; flex: 1; }
-        .feed-item .t { font-weight: 600; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .feed-item .u { font-family: var(--font-mono); font-size: .7rem; color: var(--accent-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bar-row { display: grid; grid-template-columns: 130px 1fr 44px; gap: 10px; align-items: center; font-size: .82rem; padding: 6px 0; }
-        .bar-row .name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bar-row .num { text-align: right; font-family: var(--font-mono); }
-        .crit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-        .crit-cell { text-align: center; padding: 12px 6px; border-radius: 10px; border: 1px solid; cursor: help; position: relative; text-decoration: none; }
-        .crit-cell .n { font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono); color: #fff; }
-        .crit-cell .l { font-size: .68rem; color: var(--text-muted); }
-        .c1 { background: rgba(99,179,237,.08); border-color: rgba(99,179,237,.25); } .c2 { background: rgba(118,228,247,.08); border-color: rgba(118,228,247,.25); }
-        .c3 { background: rgba(246,224,94,.08); border-color: rgba(246,224,94,.25); } .c4 { background: rgba(246,173,85,.1); border-color: rgba(246,173,85,.3); } .c5 { background: rgba(245,101,101,.12); border-color: rgba(245,101,101,.35); }
-        .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-        .quick a { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--bg-card-border); background: rgba(255,255,255,.02); text-decoration: none; color: var(--text-primary); transition: all .15s; }
-        .quick a:hover { border-color: var(--accent-primary); background: rgba(99,179,237,.08); transform: translateY(-1px); }
-        .quick a .k { font-size: .72rem; color: var(--text-muted); }
-        .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-        .shots a { display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--bg-card-border); background: #000; aspect-ratio: 16/10; position: relative; }
-        .shots img { width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: .9; }
-        .shots .cap { position: absolute; left: 0; right: 0; bottom: 0; font-size: .62rem; padding: 3px 6px; background: rgba(0,0,0,.7); color: #cbd5e0; font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    </style>
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page">
-        <div class="kh-header">
-            <div>
-                <h1 class="kh-title" data-i18n="dash.title">Operasyon Paneli</h1>
-                <p class="kh-subtitle" data-i18n="dash.subtitle">Bulgu hacmi, sınıflandırma kalitesi, motor sağlığı ve son 24 saatin özeti</p>
-            </div>
-            <div class="kh-actions">
-                <a href="/search" class="kh-btn primary">{{icon "search"}} <span data-i18n="dash.newSearch">Yeni Arama</span></a>
-                <a href="/scheduled#new" class="kh-btn ghost">{{icon "scheduled"}} <span data-i18n="dash.planScan">Tarama Planla</span></a>
-                <a href="/api/export/results?format=csv" class="kh-btn subtle" title="Tüm bulguları CSV indir">{{icon "download"}} CSV</a>
-            </div>
-        </div>
+{{template "doc" .}}
+<title>{{t .Lang "dash.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/dashboard.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow"><span class="kh-dot up pulse"></span> {{t .Lang "dash.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "dash.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "dash.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <a href="/api/export/results?format=csv" class="kh-btn subtle" title="CSV">{{icon "download"}} CSV</a>
+      <a href="/scheduled#new" class="kh-btn ghost" data-write>{{icon "scheduled"}} {{t .Lang "dash.planScan"}}</a>
+      <a href="/search" class="kh-btn primary" data-write>{{icon "search"}} {{t .Lang "dash.newSearch"}}</a>
+    </div>
+  </header>
 
-        <!-- KPI -->
-        <section class="kh-grid cols-4" style="margin-bottom:18px">
-            <div class="kh-stat blue"><div class="label" data-i18n="dash.totalFindings">Toplam Bulgu</div><div class="value">{{.totalResults}}</div><div class="sub">{{.totalURLs}} benzersiz kayıt</div><div class="icon">{{icon "database"}}</div></div>
-            <div class="kh-stat purple"><div class="label" data-i18n="dash.totalSearches">Toplam Arama</div><div class="value">{{.totalSearches}}</div><div class="sub">manuel + planlı çalışma</div><div class="icon">{{icon "search"}}</div></div>
-            <div class="kh-stat red"><div class="label" data-i18n="dash.critical">Acil (Sev 5)</div><div class="value">{{index .criticalityStats 5}}</div><div class="sub">{{.highRiskCount}} yüksek risk (Sev 3+)</div><div class="icon">{{icon "siren"}}</div></div>
-            <div class="kh-stat green" id="engine-stat"><div class="label" data-i18n="dash.engineHealth">Motor Sağlığı</div><div class="value" id="engine-up">—</div><div class="sub" id="engine-sub">yükleniyor…</div><div class="icon">{{icon "monitor"}}</div></div>
-        </section>
+  <section class="kh-grid cols-4 kh-section">
+    <a class="kh-stat blue" href="/results">
+      <div class="label">{{t .Lang "dash.totalFindings"}}</div>
+      <div class="value" data-countup>{{.totalResults}}</div>
+      <div class="sub">{{.totalURLs}} {{t .Lang "dash.uniqueRecs"}}</div>
+      <div class="icon">{{icon "database"}}</div>
+    </a>
+    <a class="kh-stat purple" href="/analytics">
+      <div class="label">{{t .Lang "dash.totalSearches"}}</div>
+      <div class="value" data-countup>{{.totalSearches}}</div>
+      <div class="sub">{{t .Lang "dash.searchesSub"}}</div>
+      <div class="icon">{{icon "search"}}</div>
+    </a>
+    <a class="kh-stat red" href="/results?minCriticality=5">
+      <div class="label">{{t .Lang "dash.critical"}}</div>
+      <div class="value" data-countup>{{index .criticalityStats 5}}</div>
+      <div class="sub">{{.highRiskCount}} {{t .Lang "dash.highRisk"}}</div>
+      <div class="icon">{{icon "siren"}}</div>
+    </a>
+    <a class="kh-stat green" href="/monitor" id="engine-stat">
+      <div class="label">{{t .Lang "dash.engineHealth"}}</div>
+      <div class="value" id="engine-up">—</div>
+      <div class="sub" id="engine-sub">{{t .Lang "dash.loading"}}</div>
+      <div class="icon">{{icon "monitor"}}</div>
+    </a>
+  </section>
 
-        <!-- Quick actions + health -->
-        <section class="kh-grid cols-3" style="margin-bottom:18px">
-            <div class="kh-card" style="grid-column: span 2">
-                <div class="kh-card-title">{{icon "lightning"}} Hızlı Erişim <span class="hint">klavye: <span class="kh-kbd">/</span> arama · <span class="kh-kbd">g</span>+<span class="kh-kbd">r</span> bulgular</span></div>
-                <div class="quick">
-                    <a href="/search"><span>{{icon "search"}} Arama</span><span class="k">Aktif motorlarda eşzamanlı tarama</span></a>
-                    <a href="/results?minCriticality=4"><span>{{icon "siren"}} Kritik Bulgular</span><span class="k">Sev 4-5 filtresiyle</span></a>
-                    <a href="/results?sort=hits"><span>{{icon "target"}} En Yüksek Sıklık</span><span class="k">Anahtar kelime yoğunluğu</span></a>
-                    <a href="/watchlist"><span>{{icon "radar"}} İzleme Listesi</span><span class="k">Uptime, değişiklik, görüntü</span></a>
-                    <a href="/monitor"><span>{{icon "monitor"}} Motorlar</span><span class="k">Sağlık ve aç/kapat</span></a>
-                    <a href="/analytics"><span>{{icon "analytics"}} Analiz</span><span class="k">Zaman serisi ve dağılımlar</span></a>
-                </div>
-            </div>
-            <div class="kh-card">
-                <div class="kh-card-title">{{icon "lab"}} Sınıflandırma Sağlığı</div>
-                <div class="kh-inline" style="gap:16px">
-                    <div class="health-ring" style="--p: {{.healthScore}}; --ring: {{if eq .healthColor "green"}}#48bb78{{else if eq .healthColor "yellow"}}#ecc94b{{else}}#f56565{{end}}"><div>%{{.healthScore}}</div></div>
-                    <div style="font-size:.8rem;line-height:1.7;color:var(--text-secondary)">
-                        <div>Sınıflandırılan: <strong>%{{.classificationRate}}</strong> ({{.classifiedCount}}/{{.totalResults}})</div>
-                        <div>Seviye çeşitliliği: <strong>{{.usedLevels}}/5</strong></div>
-                        <div>Yüksek risk oranı: <strong>%{{.highRiskRate}}</strong></div>
-                        <div>"Genel" kalan: <strong>{{.genelCount}}</strong></div>
-                    </div>
-                </div>
-                <p class="kh-hint" style="margin-top:10px">Skor = %40 sınıflandırma + %30 çeşitlilik + %30 yüksek-risk tespiti. Düşükse <a href="/results" style="color:var(--accent-primary)">Bulgular</a>'da toplu etiketleme çalıştırın.</p>
-            </div>
-        </section>
+  <section class="kh-grid cols-3 kh-section">
+    <div class="kh-card span-2">
+      <div class="kh-card-title">{{icon "fire"}} {{t .Lang "dash.sevDist"}} <span class="hint">{{t .Lang "dash.sevHint"}}</span></div>
+      <div class="sev-stack" role="img" aria-label="{{t .Lang "dash.sevDist"}}">
+        {{range .sevList}}{{if .Count}}<a class="sev-seg s{{.Level}}" href="/results?minCriticality={{.Level}}" data-bar="{{.Pct}}" title="SEV {{.Level}} · {{.Count}} ({{.Pct}}%)"></a>{{end}}{{end}}
+      </div>
+      <div class="sev-cells kh-stagger">
+        {{range .sevList}}
+        <a class="sev-cell s{{.Level}}" href="/results?minCriticality={{.Level}}" title="{{.Desc}}">
+          <span class="n" data-countup>{{.Count}}</span>
+          <span class="l">SEV {{.Level}}</span>
+          <span class="p">{{.Pct}}%</span>
+        </a>
+        {{end}}
+      </div>
+      <hr class="kh-divider">
+      <div class="kh-card-title mb-2">{{icon "folder"}} {{t .Lang "dash.catDist"}}</div>
+      {{range .categoryList}}
+      <a class="kh-meter cat-row" href="/results?category={{.Name}}">
+        <span class="name" title="{{.Name}}">{{.Name}}</span>
+        <div class="kh-progress thin"><div data-bar="{{.Pct}}" style="width:0"></div></div>
+        <span class="num">{{.Count}}</span>
+      </a>
+      {{else}}
+      <p class="kh-hint">{{t .Lang "dash.noData"}}</p>
+      {{end}}
+    </div>
 
-        <section class="kh-grid cols-2" style="margin-bottom:18px">
-            <div class="kh-card">
-                <div class="kh-card-title">{{icon "fire"}} Kritiklik Dağılımı <span class="hint">tıkla → filtrele</span></div>
-                <div class="crit-grid">
-                    {{range $i := (seq 1 5)}}
-                    <a class="crit-cell c{{$i}}" href="/results?minCriticality={{$i}}" title="{{index $.critDescs $i}}">
-                        <div class="n">{{index $.criticalityStats $i}}</div>
-                        <div class="l">Seviye {{$i}}</div>
-                    </a>
-                    {{end}}
-                </div>
-                <div class="kh-divider"></div>
-                <div class="kh-card-title" style="margin-bottom:6px">{{icon "folder"}} Kategori Dağılımı</div>
-                <div id="cat-bars">
-                    {{range $cat, $count := .categoryStats}}
-                    <div class="bar-row"><span class="name" title="{{$cat}}">{{$cat}}</span><div class="kh-progress thin"><div data-count="{{$count}}" style="width:0%"></div></div><span class="num">{{$count}}</span></div>
-                    {{else}}
-                    <p class="kh-muted" style="font-size:.85rem">Henüz veri yok.</p>
-                    {{end}}
-                </div>
-            </div>
-            <div class="kh-card">
-                <div class="kh-card-title">{{icon "dna"}} IOC / Artifact Özeti <span class="hint">etiketleme sırasında çıkarılır</span></div>
-                <div id="artifact-stats"><div class="kh-skel" style="width:60%"></div></div>
-                <div class="kh-divider"></div>
-                <div class="kh-card-title" style="margin-bottom:6px">{{icon "radar"}} İzleme Listesi</div>
-                <div id="watch-summary"><div class="kh-skel" style="width:40%"></div></div>
-            </div>
-        </section>
+    <div class="kh-card">
+      <div class="kh-card-title">{{icon "lab"}} {{t .Lang "dash.health"}}</div>
+      <div class="health">
+        <div class="kh-ring tone-{{.healthColor}}" data-ring="{{.healthScore}}"><span>%{{.healthScore}}</span></div>
+        <dl class="health-list">
+          <div><dt>{{t .Lang "dash.classified"}}</dt><dd>%{{.classificationRate}} <small>({{.classifiedCount}}/{{.totalResults}})</small></dd></div>
+          <div><dt>{{t .Lang "dash.diversity"}}</dt><dd>{{.usedLevels}}/5</dd></div>
+          <div><dt>{{t .Lang "dash.highRiskRate"}}</dt><dd>%{{.highRiskRate}}</dd></div>
+          <div><dt>{{t .Lang "dash.generic"}}</dt><dd>{{.genelCount}}</dd></div>
+        </dl>
+      </div>
+      <p class="kh-hint mt-4">{{t .Lang "dash.healthNote"}}</p>
+      <hr class="kh-divider">
+      <div class="kh-card-title mb-3">{{icon "lightning"}} {{t .Lang "dash.quick"}}</div>
+      <nav class="quick">
+        <a href="/results?minCriticality=4"><span class="qi c-sev-5">{{icon "siren"}}</span><span><b>{{t .Lang "dash.q.critical"}}</b><small>{{t .Lang "dash.q.criticalS"}}</small></span>{{icon "arrow-right"}}</a>
+        <a href="/results?sort=hits"><span class="qi c-sev-3">{{icon "target"}}</span><span><b>{{t .Lang "dash.q.hits"}}</b><small>{{t .Lang "dash.q.hitsS"}}</small></span>{{icon "arrow-right"}}</a>
+        <a href="/watchlist"><span class="qi c-ok">{{icon "radar"}}</span><span><b>{{t .Lang "nav.watchlistLong"}}</b><small>{{t .Lang "dash.q.watchS"}}</small></span>{{icon "arrow-right"}}</a>
+        <a href="/analytics"><span class="qi c-violet">{{icon "analytics"}}</span><span><b>{{t .Lang "nav.analytics"}}</b><small>{{t .Lang "dash.q.analyticsS"}}</small></span>{{icon "arrow-right"}}</a>
+      </nav>
+    </div>
+  </section>
 
-        <section class="kh-grid cols-2" style="margin-bottom:18px">
-            <div class="kh-card">
-                <div class="kh-card-title">
-                    <span class="kh-dot up pulse"></span> Yeni Bulgular <span id="new-results-badge" class="hint"></span>
-                    <span style="margin-left:auto" class="kh-inline">
-                        <select id="new-results-hours" class="kh-select sm" onchange="loadNewResults()">
-                            <option value="1">Son 1 saat</option><option value="6">Son 6 saat</option><option value="24" selected>Son 24 saat</option><option value="72">Son 3 gün</option>
-                        </select>
-                    </span>
-                </div>
-                <div id="new-results-feed"><div class="kh-skel"></div><div class="kh-skel" style="width:80%;margin-top:8px"></div></div>
-            </div>
-            <div class="kh-card">
-                <div class="kh-card-title">{{icon "clock"}} Son Aramalar</div>
-                {{if .searchHistory}}
-                <div class="kh-table-wrap"><table class="kh-table">
-                    <thead><tr><th>Sorgu</th><th class="num">Sonuç</th><th>Zaman</th><th></th></tr></thead>
-                    <tbody>
-                    {{range .searchHistory}}
-                    <tr><td class="kh-mono">{{.Query}}</td><td class="num">{{.ResultCount}}</td><td class="muted">{{formatTime .SearchedAt}}</td>
-                        <td><a class="kh-btn xs subtle" href="/results?q={{.Query}}">Bulgular</a> <a class="kh-btn xs subtle" href="/results/graph?q={{.Query}}">Harita</a></td></tr>
-                    {{end}}
-                    </tbody></table></div>
-                {{else}}
-                <div class="kh-empty"><div class="icon">{{icon "search"}}</div><h3>Henüz arama yapılmadı</h3><a href="/search" class="kh-btn primary" style="margin-top:8px">İlk aramayı başlat</a></div>
-                {{end}}
-            </div>
-        </section>
+  <section class="kh-grid cols-3 kh-section">
+    <div class="kh-card span-2">
+      <div class="kh-card-title">
+        <span class="kh-dot up pulse"></span> {{t .Lang "dash.newFindings"}} <span id="new-results-badge" class="kh-badge info" hidden></span>
+        <span class="end">
+          <select id="new-results-hours" class="kh-select sm" data-change="load-new" aria-label="{{t .Lang "dash.newFindings"}}">
+            <option value="1">{{t .Lang "dash.last1"}}</option><option value="6">{{t .Lang "dash.last6"}}</option>
+            <option value="24" selected>{{t .Lang "dash.last24"}}</option><option value="72">{{t .Lang "dash.last72"}}</option>
+          </select>
+        </span>
+      </div>
+      <div id="new-results-feed" class="kh-feed"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></div>
+    </div>
+    <div class="kh-card">
+      <div class="kh-card-title">{{icon "dna"}} {{t .Lang "dash.ioc"}}</div>
+      <p class="kh-hint mb-3">{{t .Lang "dash.iocHint"}}</p>
+      <div id="artifact-stats"><div class="kh-skel w-60"></div></div>
+      <hr class="kh-divider">
+      <div class="kh-card-title mb-3">{{icon "radar"}} {{t .Lang "dash.watch"}}</div>
+      <div id="watch-summary"><div class="kh-skel w-40"></div></div>
+    </div>
+  </section>
 
-        <section class="kh-card" style="margin-bottom:18px">
-            <div class="kh-card-title">{{icon "camera"}} Son Ekran Görüntüleri <span class="hint" id="shots-hint"></span></div>
-            <div class="shots" id="shots"></div>
-        </section>
+  <section class="kh-grid cols-2 kh-section">
+    <div class="kh-card flush">
+      <div class="kh-card-head"><h2>{{icon "clock"}} {{t .Lang "dash.recentSearches"}}</h2></div>
+      {{if .searchHistory}}
+      <div class="kh-table-wrap"><table class="kh-table">
+        <thead><tr><th>{{t .Lang "dash.query"}}</th><th class="num">{{t .Lang "dash.results"}}</th><th>{{t .Lang "dash.time"}}</th><th></th></tr></thead>
+        <tbody>
+        {{range .searchHistory}}
+        <tr>
+          <td class="kh-mono fw-6">{{.Query}}</td>
+          <td class="num">{{.ResultCount}}</td>
+          <td class="muted nowrap" data-ago="{{isoTime .SearchedAt}}">{{formatTime .SearchedAt}}</td>
+          <td class="right nowrap"><a class="kh-btn xs subtle" href="/results?q={{.Query}}">{{t $.Lang "dash.findings"}}</a> <a class="kh-btn xs subtle" href="/results/graph?q={{.Query}}">{{icon "graph"}}</a></td>
+        </tr>
+        {{end}}
+        </tbody></table></div>
+      {{else}}
+      <div class="kh-empty"><div class="icon">{{icon "search"}}</div><h3>{{t .Lang "dash.noSearch"}}</h3><div class="kh-inline"><a href="/search" class="kh-btn primary" data-write>{{t .Lang "dash.firstSearch"}}</a></div></div>
+      {{end}}
+    </div>
+    <div class="kh-card">
+      <div class="kh-card-title">{{icon "camera"}} {{t .Lang "dash.shots"}} <span class="hint" id="shots-hint"></span></div>
+      <div class="shots" id="shots"><div class="kh-skel block"></div></div>
+    </div>
+  </section>
 
-        <section class="kh-card flush">
-            <div class="kh-card-title">{{icon "results"}} Son Bulgular <a href="/results" class="kh-btn xs ghost" style="margin-left:auto">Tümünü gör →</a></div>
-            <div class="kh-table-wrap"><table class="kh-table">
-                <thead><tr><th>Başlık / URL</th><th>Kategori</th><th class="center">Kritiklik</th><th class="center">Sıklık</th><th>Tarih</th></tr></thead>
-                <tbody>
-                {{range .recentResults}}
-                <tr>
-                    <td><span class="title" title="{{.Title}}">{{truncate .Title 80}}</span><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{truncate .URL 70}}</a></td>
-                    <td><span class="kh-badge neutral">{{.Category}}</span></td>
-                    <td class="center"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span></td>
-                    <td class="center kh-mono">{{.KeywordCount}}</td>
-                    <td class="muted kh-mono">{{formatTime .CreatedAt}}</td>
-                </tr>
-                {{else}}
-                <tr><td colspan="5"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>Henüz bulgu yok</h3><p>Arama yaparak başlayın.</p></div></td></tr>
-                {{end}}
-                </tbody></table></div>
-        </section>
-        <p class="kh-footer">KeywordHunter v{{version}} · Tüm trafik Tor üzerinden · Veriler yalnızca bu makinede</p>
-    </main>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var total = parseInt('{{.totalResults}}') || 1;
-            document.querySelectorAll('#cat-bars .kh-progress > div[data-count]').forEach(function (bar) {
-                var c = parseInt(bar.dataset.count) || 0;
-                bar.style.width = Math.max(2, Math.round(c / total * 100)) + '%';
-            });
-            loadNewResults(); loadEngineHealth(); loadArtifactStats(); loadWatchSummary(); loadShots();
-        });
-
-        function loadEngineHealth() {
-            KH.api('/api/monitor/summary').then(function (d) {
-                var up = d.enginesActiveUp || 0, act = d.enginesActive || 0;
-                document.getElementById('engine-up').textContent = up + '/' + act;
-                document.getElementById('engine-sub').textContent = 'aktif motorlardan çevrimiçi · ' + (d.scheduledActive || 0) + ' planlı tarama';
-                var st = document.getElementById('engine-stat');
-                st.className = 'kh-stat ' + (up === 0 ? 'red' : (up < act / 2 ? 'amber' : 'green'));
-            }).catch(function () { document.getElementById('engine-sub').textContent = 'alınamadı'; });
-        }
-
-        function loadArtifactStats() {
-            var box = document.getElementById('artifact-stats');
-            var names = { email: 'mail|E-posta', bitcoin: 'coin|Bitcoin', monero: 'coin|Monero', ip: 'globe|IP', onion: 'onion|Onion', credit_card: 'card|Kart', phone: 'phone|Telefon', ssh_key: 'key|SSH', api_key: 'key|API Key', username: 'user|Kullanıcı', hash: 'hash|Hash' };
-            KH.api('/api/artifacts/stats').then(function (d) {
-                if (!d.types || d.types.length === 0) { box.innerHTML = '<p class="kh-hint">Henüz IOC çıkarılmadı. Bulgular sayfasında <strong>Etiketle</strong> çalıştırdığınızda sayfa metninden e-posta, cüzdan, IP, hash ve onion adresleri otomatik toplanır.</p>'; return; }
-                box.innerHTML = '<div class="kh-inline">' + d.types.map(function (t) { var nm = (names[t.type]||('info|'+t.type)).split('|'); return '<a class="kh-chip" href="/results" title="' + KH.esc(t.type) + '">' + KH.icon(nm[0]) + ' ' + KH.esc(nm[1]) + ' <span class="count">' + t.count + '</span></a>'; }).join('') + '</div><p class="kh-hint" style="margin-top:8px">Toplam ' + KH.num(d.total) + ' artifact</p>';
-            }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
-        }
-
-        function loadWatchSummary() {
-            var box = document.getElementById('watch-summary');
-            KH.api('/api/watchlist').then(function (d) {
-                var items = d.items || [];
-                if (items.length === 0) { box.innerHTML = '<p class="kh-hint">İzlenen site yok. <a href="/watchlist" style="color:var(--accent-primary)">Ekle →</a></p>'; return; }
-                var up = items.filter(function (i) { return i.status === 'up'; }).length;
-                var down = items.filter(function (i) { return i.status === 'down'; }).length;
-                var blocked = items.filter(function (i) { return i.status === 'engel'; }).length;
-                var changed = items.filter(function (i) { return i.changed; }).length;
-                box.innerHTML = '<div class="kh-inline"><span class="kh-badge ok">' + up + ' ayakta</span><span class="kh-badge err">' + down + ' kapalı</span><span class="kh-badge warn">' + blocked + ' engel</span>' + (changed ? '<span class="kh-badge info">' + changed + ' değişti</span>' : '') + '<a href="/watchlist" class="kh-btn xs subtle">Detay</a></div>';
-            }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
-        }
-
-        function loadShots() {
-            var box = document.getElementById('shots'), hint = document.getElementById('shots-hint');
-            KH.api('/api/screenshots?limit=6').then(function (d) {
-                var s = d.screenshots || [];
-                if (!d.available) hint.textContent = 'ekran görüntüsü yalnızca Docker imajında (chromium) etkin';
-                if (s.length === 0) { box.innerHTML = '<p class="kh-hint">Henüz görüntü yok.</p>'; return; }
-                box.innerHTML = s.map(function (x) { return '<a href="/screenshot/file/' + x.id + '" target="_blank" rel="noopener" title="' + KH.esc(x.targetUrl) + '"><img loading="lazy" src="/screenshot/file/' + x.id + '" alt=""><span class="cap">' + (x.challenge ? KH.icon('warn') + ' ' : '') + KH.esc(KH.short(x.targetUrl.replace(/^https?:\/\//, ''), 30)) + '</span></a>'; }).join('');
-            }).catch(function () { box.innerHTML = '<p class="kh-hint">Alınamadı.</p>'; });
-        }
-
-        function loadNewResults() {
-            var hours = document.getElementById('new-results-hours').value;
-            var feed = document.getElementById('new-results-feed'), badge = document.getElementById('new-results-badge');
-            KH.api('/api/new-results?hours=' + hours + '&limit=20').then(function (d) {
-                var r = d.results || [];
-                badge.textContent = r.length ? '(' + r.length + ' yeni)' : '';
-                if (!r.length) { feed.innerHTML = '<p class="kh-hint" style="padding:12px 0">Bu aralıkta yeni bulgu yok.</p>'; return; }
-                feed.innerHTML = r.map(function (x) {
-                    return '<div class="feed-item">' + KH.sev(x.Criticality) + '<div class="body"><div class="t">' + KH.esc(KH.short(x.Title, 80)) + '</div><div class="u">' + KH.esc(KH.short(x.URL, 70)) + '</div></div><span class="kh-badge neutral mono">' + KH.esc(x.Source) + '</span></div>';
-                }).join('');
-            }).catch(function () { feed.innerHTML = '<p class="kh-hint">Feed yüklenemedi.</p>'; });
-        }
-    </script>
+  <section class="kh-card flush">
+    <div class="kh-card-head"><h2>{{icon "results"}} {{t .Lang "dash.recent"}}</h2><span class="end"><a href="/results" class="kh-btn xs ghost">{{t .Lang "dash.seeAll"}} {{icon "arrow-right"}}</a></span></div>
+    <div class="kh-table-wrap"><table class="kh-table">
+      <thead><tr><th>{{t .Lang "dash.titleUrl"}}</th><th>{{t .Lang "common.category"}}</th><th class="center">SEV</th><th class="num">{{t .Lang "dash.freq"}}</th><th>{{t .Lang "common.date"}}</th></tr></thead>
+      <tbody>
+      {{range .recentResults}}
+      <tr>
+        <td><span class="title" title="{{.Title}}">{{truncate .Title 90}}</span><a class="link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{truncate .URL 70}}</a></td>
+        <td><span class="kh-badge neutral">{{.Category}}</span></td>
+        <td class="center"><span class="kh-badge sev-{{.Criticality}}">SEV {{.Criticality}}</span></td>
+        <td class="num">{{.KeywordCount}}</td>
+        <td class="muted nowrap kh-mono text-xs">{{formatTime .CreatedAt}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5"><div class="kh-empty"><div class="icon">{{icon "empty"}}</div><h3>{{t .Lang "dash.noFindings"}}</h3><p>{{t .Lang "dash.noFindingsS"}}</p><div class="kh-inline"><a href="/search" class="kh-btn primary" data-write>{{icon "search"}} {{t .Lang "dash.newSearch"}}</a></div></div></td></tr>
+      {{end}}
+      </tbody></table></div>
+  </section>
+</main>
+{{template "shell_end" .}}
+<script src="/static/js/pages/dashboard.js?v={{version}}" defer></script>
 </body>
 </html>

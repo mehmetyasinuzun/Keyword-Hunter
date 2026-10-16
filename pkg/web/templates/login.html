@@ -1,249 +1,75 @@
-<!DOCTYPE html>
-<html lang="tr">
+{{template "doc" .}}
+<title>{{t .Lang "login.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/login.css?v={{version}}">
+{{template "body" .}}
+{{template "icons" .}}
+<div class="auth">
+  <section class="auth-hero" aria-hidden="true">
+    <div class="auth-radar"><span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="sweep"></span>
+      <span class="blip b1"></span><span class="blip b2"></span><span class="blip b3"></span><span class="blip b4"></span>
+      <svg class="core"><use href="#i-brand"/></svg>
+    </div>
+    <div class="auth-hero-copy">
+      <div class="kh-eyebrow"><span class="kh-dot up pulse"></span> Dark Web CTI</div>
+      <h2>{{t .Lang "login.hero"}}</h2>
+      <p>{{t .Lang "login.heroLede"}}</p>
+      <ul class="auth-feats kh-stagger">
+        <li>{{icon "search"}} {{t .Lang "login.f1"}}</li>
+        <li>{{icon "dna"}} {{t .Lang "login.f2"}}</li>
+        <li>{{icon "radar"}} {{t .Lang "login.f3"}}</li>
+        <li>{{icon "shield"}} {{t .Lang "login.f4"}}</li>
+      </ul>
+    </div>
+    <div class="auth-ticker"><span>TOR · SOCKS5</span><span>STIX 2.1</span><span>CSP strict</span><span>bcrypt</span><span>SQLite · local</span></div>
+  </section>
 
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Giriş</title>
-    <style>
-        .auth-shell {
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            padding: var(--space-lg);
-        }
-
-        .auth-card {
-            width: 100%;
-            max-width: 420px;
-            background: var(--bg-card);
-            border: 1px solid var(--bg-card-border);
-            border-radius: var(--radius-xl);
-            padding: var(--space-2xl) var(--space-xl);
-            backdrop-filter: blur(18px) saturate(160%);
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
-            animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
-        }
-
-        .auth-brand {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: var(--space-sm);
-            margin-bottom: var(--space-xl);
-        }
-
-        .auth-logo {
-            width: 56px;
-            height: 56px;
-            display: grid;
-            place-items: center;
-            border-radius: var(--radius-lg);
-            background: linear-gradient(135deg, rgba(99, 179, 237, 0.18), rgba(128, 90, 213, 0.18));
-            border: 1px solid var(--bg-card-border);
-            font-size: 1.75rem;
-            filter: drop-shadow(0 0 12px var(--glow-primary));
-        }
-
-        .auth-title {
-            font-size: 1.5rem;
-            font-weight: 800;
-            letter-spacing: -0.01em;
-            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .auth-subtitle {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            letter-spacing: 0.02em;
-        }
-
-        .field {
-            margin-bottom: var(--space-md);
-        }
-
-        .field-label {
-            display: block;
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: var(--space-xs);
-        }
-
-        .field-input-wrap {
-            position: relative;
-        }
-
-        .field-input {
-            width: 100%;
-            padding: 0.75rem 0.95rem;
-            background: rgba(7, 8, 13, 0.6);
-            border: 1px solid var(--bg-card-border);
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-family: var(--font-primary);
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .field-input::placeholder {
-            color: var(--text-muted);
-        }
-
-        .field-input:focus {
-            outline: none;
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 0 3px var(--glow-primary);
-        }
-
-        .pw-toggle {
-            position: absolute;
-            top: 50%;
-            right: 0.6rem;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            font-size: 1rem;
-            padding: 0.25rem;
-            line-height: 1;
-        }
-
-        .pw-toggle:hover {
-            color: var(--accent-primary);
-        }
-
-        .auth-btn {
-            width: 100%;
-            margin-top: var(--space-sm);
-            padding: 0.8rem 1rem;
-            border: none;
-            border-radius: var(--radius-md);
-            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 0.15s ease, box-shadow 0.2s ease;
-        }
-
-        .auth-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 8px 28px var(--glow-primary);
-        }
-
-        .auth-alert {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            padding: 0.7rem 0.9rem;
-            border-radius: var(--radius-md);
-            font-size: 0.85rem;
-            margin-bottom: var(--space-md);
-        }
-
-        .auth-alert.error {
-            background: rgba(245, 101, 101, 0.12);
-            border: 1px solid rgba(245, 101, 101, 0.4);
-            color: #fca5a5;
-        }
-
-        .auth-alert.info {
-            background: rgba(99, 179, 237, 0.12);
-            border: 1px solid rgba(99, 179, 237, 0.4);
-            color: #93c5fd;
-        }
-
-        .auth-footer {
-            margin-top: var(--space-xl);
-            text-align: center;
-            font-size: 0.72rem;
-            color: var(--text-muted);
-            letter-spacing: 0.03em;
-        }
-
-        .auth-footer .dot {
-            color: var(--accent-tertiary);
-        }
-    </style>
-</head>
-
-<body>
-    {{template "icons" .}}
-    <div class="auth-shell">
-        <main class="auth-card">
-            <div class="auth-brand">
-                <div class="auth-logo"><svg style="width:34px;height:34px" aria-hidden="true"><use href="#i-brand"/></svg></div>
-                <h1 class="auth-title">KeywordHunter</h1>
-                <p class="auth-subtitle" data-i18n="login.subtitle">Dark Web Tehdit İstihbarat Platformu</p>
-            </div>
-
-            {{if eq .error "locked"}}
-            <div class="auth-alert error" role="alert">
-                <span aria-hidden="true">{{icon "shield"}}</span>
-                <span>Çok fazla başarısız deneme. <span id="lock-wait">{{.wait}}</span> saniye sonra tekrar deneyin.</span>
-            </div>
-            {{else if .error}}
-            <div class="auth-alert error" role="alert">
-                <span aria-hidden="true">{{icon "warn"}}</span>
-                <span>Kullanıcı adı veya şifre hatalı.</span>
-            </div>
-            {{end}}
-
-            {{if .message}}
-            <div class="auth-alert info" role="status">
-                <span aria-hidden="true">{{icon "info"}}</span>
-                <span>{{if eq .message "session"}}Oturum başlatılamadı. Lütfen tekrar deneyin.{{else}}{{.message}}{{end}}</span>
-            </div>
-            {{end}}
-
-            <form method="POST" action="/login" autocomplete="on">
-                <div class="field">
-                    <label class="field-label" for="username" data-i18n="login.username">Kullanıcı Adı</label>
-                    <div class="field-input-wrap">
-                        <input class="field-input" id="username" name="username" type="text"
-                            autocomplete="username" required autofocus placeholder="admin">
-                    </div>
-                </div>
-
-                <div class="field">
-                    <label class="field-label" for="password" data-i18n="login.password">Şifre</label>
-                    <div class="field-input-wrap">
-                        <input class="field-input" id="password" name="password" type="password"
-                            autocomplete="current-password" required placeholder="••••••••" style="padding-right: 2.5rem;">
-                        <button type="button" class="pw-toggle" id="pwToggle" aria-label="Şifreyi göster/gizle"
-                            onclick="togglePw()">{{icon "eye"}}</button>
-                    </div>
-                </div>
-
-                <button type="submit" class="auth-btn"><span data-i18n="login.submit">Giriş Yap</span> →</button>
-            </form>
-
-            <p class="auth-footer">
-<span class="dot">●</span> Yetkili analistlere özel · CTI Operasyon Konsolu · v{{version}}
-            </p>
-            <p class="auth-footer" id="caps-warn" style="display:none;color:#f6e05e">⇪ Caps Lock açık</p>
-        </main>
+  <main class="auth-panel" id="main">
+    <div class="auth-tools">
+      <button class="kh-iconbtn" type="button" data-action="theme-cycle" aria-label="Tema">
+        <svg class="ico kh-theme-ico auto" aria-hidden="true"><use href="#i-contrast"/></svg>
+        <svg class="ico kh-theme-ico light" aria-hidden="true"><use href="#i-sun"/></svg>
+        <svg class="ico kh-theme-ico dark" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
     </div>
 
-    <div style="position:fixed;top:16px;right:16px"><button onclick="KH.setLang((document.cookie.match(/lang=(\w+)/)||[])[1]==='en'?'tr':'en')" style="font-family:var(--font-mono);font-size:.72rem;font-weight:700;color:var(--text-secondary);background:rgba(255,255,255,.04);border:1px solid var(--bg-card-border);border-radius:6px;padding:5px 10px;cursor:pointer" id="login-lang">TR</button></div>
-    <script>
-        if (window.KH) { KH.applyI18n(); var lb=document.getElementById('login-lang'); if(lb){ var cur=(document.cookie.match(/lang=(\w+)/)||[])[1]||'tr'; lb.textContent=cur.toUpperCase(); } }
-        (function () {
-            var w = document.getElementById('lock-wait');
-            if (w) { var n = parseInt(w.textContent) || 0; var t = setInterval(function () { n--; if (n <= 0) { clearInterval(t); location.href = '/login'; } else w.textContent = n; }, 1000); }
-            var pw = document.getElementById('password');
-            pw.addEventListener('keyup', function (e) { document.getElementById('caps-warn').style.display = e.getModifierState && e.getModifierState('CapsLock') ? '' : 'none'; });
-        })();
-        function togglePw() {
-            var input = document.getElementById('password');
-            var btn = document.getElementById('pwToggle');
-            input.type = input.type === 'password' ? 'text' : 'password';
-        }
-    </script>
-</body>
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="kh-brand-mark">{{template "logo" .}}</span>
+        <span class="kh-brand-name">KeywordHunter</span>
+      </div>
+      <h1 class="auth-title">{{t .Lang "login.welcome"}}</h1>
+      <p class="auth-lede">{{t .Lang "login.lede"}}</p>
 
+      {{if eq .error "locked"}}
+      <div class="kh-alert err mb-4" role="alert">{{icon "shield"}}<span>{{t .Lang "login.locked"}} <strong id="lock-wait" data-wait="{{.wait}}">{{.wait}}</strong> {{t .Lang "login.lockedWait"}}</span></div>
+      {{else if .error}}
+      <div class="kh-alert err mb-4 auth-shake" role="alert">{{icon "warn"}}<span>{{t .Lang "login.error"}}</span></div>
+      {{end}}
+      {{if .message}}
+      <div class="kh-alert info mb-4" role="status">{{icon "info"}}<span>{{if eq .message "session"}}{{t .Lang "login.session"}}{{else}}{{.message}}{{end}}</span></div>
+      {{end}}
+
+      <form method="POST" action="/login" autocomplete="on" class="auth-form" id="login-form">
+        <div class="kh-field">
+          <label class="kh-label" for="username">{{t .Lang "login.username"}}</label>
+          <div class="kh-input-icon">{{icon "user"}}<input class="kh-input lg" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus maxlength="128"></div>
+        </div>
+        <div class="kh-field">
+          <label class="kh-label" for="password">{{t .Lang "login.password"}}</label>
+          <div class="kh-input-icon auth-pw">{{icon "lock"}}<input class="kh-input lg" id="password" name="password" type="password" autocomplete="current-password" required maxlength="512">
+            <button type="button" class="kh-iconbtn auth-eye" data-action="toggle-pw" aria-label="{{t .Lang "login.showPw"}}" aria-pressed="false">{{icon "eye"}}</button>
+          </div>
+          <span class="kh-hint c-warn" id="caps-warn" hidden>{{icon "warn"}} {{t .Lang "login.caps"}}</span>
+        </div>
+        <button type="submit" class="kh-btn primary lg block" id="login-btn" data-busy-text="{{t .Lang "login.signingIn"}}">{{t .Lang "login.submit"}} {{icon "arrow-right"}}</button>
+      </form>
+
+      <p class="auth-foot"><span class="kh-dot up"></span> {{t .Lang "login.footer"}} · v{{version}}</p>
+    </div>
+  </main>
+</div>
+<div class="kh-toasts" id="kh-toasts" aria-live="polite"></div>
+<script src="/static/js/pages/login.js?v={{version}}" defer></script>
+</body>
 </html>

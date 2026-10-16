@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ func (s *Server) handleIndex(c *gin.Context) {
 }
 
 // brandFaviconSVG yeni marka logosuyla uyumlu favicon (hedef halkası + tarama + düğüm).
-const brandFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#63b3ed"/><stop offset="1" stop-color="#805ad5"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="#07080d"/><circle cx="14" cy="14" r="7.5" fill="none" stroke="url(#g)" stroke-width="2.2"/><circle cx="14" cy="14" r="2.3" fill="url(#g)"/><path d="M14 4.5V7M14 21v2.5M4.5 14H7M21 14h2.5" stroke="url(#g)" stroke-width="1.8" stroke-linecap="round"/><path d="M19.5 19.5l6 6" stroke="url(#g)" stroke-width="2.4" stroke-linecap="round"/></svg>`
+const brandFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="10" y1="6" x2="54" y2="60" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#c084fc"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="#070a12"/><path d="M32 8C36 15.5 50.5 23 50.5 38A18.5 18.5 0 0 1 13.5 38C13.5 23 28 15.5 32 8Z" fill="none" stroke="url(#g)" stroke-width="4.4" stroke-linejoin="round"/><path d="M32 27.5v4.5M32 44v4.5M21.5 38H26M38 38h4.5" stroke="url(#g)" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="38" r="4.4" fill="url(#g)"/></svg>`
 
 // handleI18nCatalog seçili (veya sorgudaki) dilin çeviri kataloğunu döndürür.
 func (s *Server) handleI18nCatalog(c *gin.Context) {
@@ -88,7 +89,7 @@ func (s *Server) handleLoginPage(c *gin.Context) {
 	if wait < 0 || wait > 3600 {
 		wait = 0
 	}
-	c.HTML(http.StatusOK, "login.html", gin.H{
+	s.render(c, http.StatusOK, "login.html", gin.H{
 		"error":   c.Query("error"),
 		"message": c.Query("message"),
 		"wait":    wait,
@@ -265,7 +266,41 @@ func (s *Server) handleDashboard(c *gin.Context) {
 		healthColor = "yellow"
 	}
 
-	c.HTML(http.StatusOK, "dashboard.html", gin.H{
+	// Kategori listesi: sayıya göre azalan, yüzde ile (şablonda ilerleme çubuğu)
+	type catRow struct {
+		Name  string
+		Count int
+		Pct   int
+	}
+	cats := make([]catRow, 0, len(categoryStats))
+	for name, n := range categoryStats {
+		if name == "" {
+			name = "Genel"
+		}
+		cats = append(cats, catRow{Name: name, Count: n, Pct: percent(n, totalResults)})
+	}
+	sort.Slice(cats, func(i, j int) bool {
+		if cats[i].Count != cats[j].Count {
+			return cats[i].Count > cats[j].Count
+		}
+		return cats[i].Name < cats[j].Name
+	})
+	if len(cats) > 8 {
+		cats = cats[:8]
+	}
+	// Kritiklik seviyeleri: yığılmış çubuk + hücreler için
+	type sevRow struct {
+		Level, Count, Pct int
+		Desc              string
+	}
+	sevs := make([]sevRow, 0, 5)
+	for i := 1; i <= 5; i++ {
+		sevs = append(sevs, sevRow{Level: i, Count: criticalityStats[i], Pct: percent(criticalityStats[i], totalResults), Desc: critDescs[i]})
+	}
+
+	s.render(c, http.StatusOK, "dashboard.html", gin.H{
+		"categoryList":     cats,
+		"sevList":          sevs,
 		"ActivePage":       "dashboard",
 		"totalResults":     totalResults,
 		"totalSearches":    totalSearches,
@@ -288,6 +323,14 @@ func (s *Server) handleDashboard(c *gin.Context) {
 		"healthStatus":       healthStatus,
 		"healthColor":        healthColor,
 	})
+}
+
+// percent n/total oranını 0-100 tamsayı yüzdeye çevirir (total 0 ise 0).
+func percent(n, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	return int(float64(n)/float64(total)*100 + 0.5)
 }
 
 // getCategoryStats kategori bazlı sayıları getirir
@@ -327,8 +370,15 @@ func (s *Server) getCriticalityStats() (map[int]int, error) {
 
 // handleSearchPage arama sayfası
 func (s *Server) handleSearchPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "search.html", gin.H{
+	// ?q= ile gelen sorgu (komut paleti / derin bağlantı) kutuya önceden doldurulur;
+	// arama yine kullanıcının onayıyla (Ara) başlar.
+	q := strings.Join(strings.Fields(c.Query("q")), " ")
+	if len([]rune(q)) > maxSearchQueryLen {
+		q = ""
+	}
+	s.render(c, http.StatusOK, "search.html", gin.H{
 		"ActivePage": "search",
+		"query":      q,
 	})
 }
 
@@ -352,7 +402,7 @@ const maxSearchQueryLen = 200
 func (s *Server) handleSearch(c *gin.Context) {
 	query := strings.Join(strings.Fields(c.PostForm("query")), " ")
 	if query == "" || len([]rune(query)) > maxSearchQueryLen {
-		c.HTML(http.StatusBadRequest, "search.html", gin.H{
+		s.render(c, http.StatusBadRequest, "search.html", gin.H{
 			"ActivePage": "search",
 			"error":      "Arama sorgusu boş olamaz ve 200 karakteri aşamaz",
 		})
@@ -411,7 +461,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 		go scheduler.DispatchGlobalAlert(s.db, query, len(results), len(newFindings), newFindings, startTime)
 	}
 
-	c.HTML(http.StatusOK, "search.html", gin.H{
+	s.render(c, http.StatusOK, "search.html", gin.H{
 		"ActivePage": "search",
 		"query":      query,
 		"results":    results[:min(20, len(results))],
@@ -474,7 +524,7 @@ func (s *Server) handleResults(c *gin.Context) {
 	qs.Del("page")
 	baseQuery := qs.Encode()
 
-	c.HTML(http.StatusOK, "results.html", gin.H{
+	s.render(c, http.StatusOK, "results.html", gin.H{
 		"ActivePage":   "results",
 		"results":      results,
 		"query":        f.Query,
@@ -497,7 +547,7 @@ func (s *Server) handleResults(c *gin.Context) {
 // handleResultsGraph sonuçları graf olarak gösterir
 func (s *Server) handleResultsGraph(c *gin.Context) {
 	query := c.Query("q")
-	c.HTML(http.StatusOK, "results_graph.html", gin.H{
+	s.render(c, http.StatusOK, "results_graph.html", gin.H{
 		"ActivePage": "graph",
 		"query":      query,
 	})
@@ -505,13 +555,13 @@ func (s *Server) handleResultsGraph(c *gin.Context) {
 
 // handleAnalytics analitik sayfasini sunar
 func (s *Server) handleAnalytics(c *gin.Context) {
-	c.HTML(http.StatusOK, "analytics.html", gin.H{
+	s.render(c, http.StatusOK, "analytics.html", gin.H{
 		"ActivePage": "analytics",
 	})
 }
 
 func (s *Server) handleSettingsPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "settings.html", gin.H{
+	s.render(c, http.StatusOK, "settings.html", gin.H{
 		"ActivePage": "settings",
 	})
 }
@@ -531,7 +581,7 @@ func (s *Server) handleScheduledPage(c *gin.Context) {
 		cp.WebhookURL = shared.RedactURL(cp.WebhookURL)
 		cfg = &cp
 	}
-	c.HTML(http.StatusOK, "scheduled.html", gin.H{
+	s.render(c, http.StatusOK, "scheduled.html", gin.H{
 		"ActivePage":  "scheduled",
 		"alertConfig": cfg,
 		"searches":    searches,
@@ -541,14 +591,14 @@ func (s *Server) handleScheduledPage(c *gin.Context) {
 
 // handleMonitorPage arama motoru sağlık izleme sayfası
 func (s *Server) handleMonitorPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "monitor.html", gin.H{
+	s.render(c, http.StatusOK, "monitor.html", gin.H{
 		"ActivePage": "monitor",
 	})
 }
 
 // handleWatchlistPage izleme listesi sayfası
 func (s *Server) handleWatchlistPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "watchlist.html", gin.H{
+	s.render(c, http.StatusOK, "watchlist.html", gin.H{
 		"ActivePage": "watchlist",
 		"interval":   int(watchlistInterval().Minutes()),
 	})

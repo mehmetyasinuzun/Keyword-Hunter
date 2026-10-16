@@ -188,7 +188,7 @@ func (s *Server) handleTorNewNym(c *gin.Context) {
 // ─────────────────────────── Örümcek (crawl) ───────────────────────────
 
 func (s *Server) handleCrawlPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "crawl.html", gin.H{"ActivePage": "crawl"})
+	s.render(c, http.StatusOK, "crawl.html", gin.H{"ActivePage": "crawl"})
 }
 
 func (s *Server) handleCrawlSubmit(c *gin.Context) {

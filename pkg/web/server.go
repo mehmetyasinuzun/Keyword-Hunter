@@ -23,7 +23,6 @@ import (
 	"keywordhunter-mvp/pkg/scheduler"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/search"
-	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tagging"
 	"keywordhunter-mvp/pkg/tor"
@@ -293,15 +292,20 @@ func (s *Server) startScheduler() {
 	s.engineMonitor = em
 }
 
-// contentSecurityPolicy tüm kaynakları aynı origin'e kilitler. Şablonlar
-// satır içi script/stil kullandığı için 'unsafe-inline' gerekir; buna rağmen
-// harici script/bağlantı/iframe tamamen engellenir (CDN bağımlılığı yok).
-// Bilinen ödünleşim: script-src içindeki 'unsafe-inline' şablonlardaki satır içi
-// onclick= işleyicileri ve <script> blokları için gereklidir; bu, enjekte edilmiş bir
-// satır içi betiğin çalışmasına izin verir. XSS yüzeyi html/template otomatik
-// kaçışıyla kapalı tutulur (tek template.HTML sitesi kaçışlıdır). Kaldırma yolu:
-// tüm satır içi betikleri harici dosyalara taşıyıp istek başına nonce'lu CSP.
-const contentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+// contentSecurityPolicy tüm kaynakları aynı origin'e kilitler.
+//
+// script-src yalnızca 'self'tir: şablonlarda satır içi <script> bloğu ya da
+// on*= olay işleyicisi YOKTUR (templates_csp_test.go bunu her şablon için
+// zorlar). Tüm davranış /static/js altındaki dosyalardan gelir ve DOM'a
+// data-action öznitelikleriyle bağlanır; sayfa verisi çalıştırılmayan
+// <script type="application/json"> bloklarıyla taşınır. Böylece dark web'den
+// gelen bir metin bir şekilde HTML'e sızsa bile tarayıcı onu betik olarak
+// çalıştırmaz (XSS'e karşı ikinci savunma hattı).
+//
+// style-src 'unsafe-inline' bilinçli bir ödünleşimdir: D3/Chart.js ve dinamik
+// ilerleme çubukları style özniteliği kullanır; stil enjeksiyonu betik
+// çalıştıramaz.
+const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; " +
 	"base-uri 'self'; form-action 'self'; object-src 'none'"
 
@@ -458,41 +462,7 @@ func (s *Server) captureAndStore(source string, refID int64, targetURL string) {
 // setupRoutes rotaları ayarlar
 func (s *Server) setupRoutes() {
 	// Template'leri yükle (ana sayfalar + partials)
-	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"truncate": func(str string, length int) string {
-			return shared.Truncate(str, length)
-		},
-		"formatTime": func(t time.Time) string {
-			if t.IsZero() {
-				return "—"
-			}
-			return t.Local().Format("02.01.2006 15:04")
-		},
-		"version": func() string { return Version },
-		"seq": func(start, end int) []int {
-			var res []int
-			for i := start; i <= end; i++ {
-				res = append(res, i)
-			}
-			return res
-		},
-		"split": func(s, sep string) []string {
-			if s == "" {
-				return []string{}
-			}
-			return strings.Split(s, sep)
-		},
-		"eq": func(a, b interface{}) bool {
-			return a == b
-		},
-		// icon özgün SVG ikon setinden bir simgeyi güvenli HTML olarak basar.
-		"icon": func(name string) template.HTML {
-			return iconSVG(name, "")
-		},
-		"iconc": func(name, cls string) template.HTML {
-			return iconSVG(name, cls)
-		},
-	}).ParseFS(templateFS, "templates/*.html", "templates/partials/*.html"))
+	tmpl := template.Must(template.New("").Funcs(templateFuncs()).ParseFS(templateFS, "templates/*.html", "templates/partials/*.html"))
 	s.router.SetHTMLTemplate(tmpl)
 
 	// Static files - use sub filesystem to strip "static" prefix
@@ -524,7 +494,9 @@ func (s *Server) setupRoutes() {
 	{
 		protected.GET("/dashboard", s.handleDashboard)
 		protected.GET("/search", s.handleSearchPage)
-		protected.POST("/search", s.handleSearch)
+		// Arama DB'ye yazar ve Tor trafiği üretir: analyst+ ve CSRF zorunlu
+		// (form alanı _csrf ya da X-CSRF-Token başlığı).
+		protected.POST("/search", s.requireRole("analyst"), s.csrfMiddleware(), s.handleSearch)
 		protected.GET("/results", s.handleResults)
 		protected.GET("/results/graph", s.handleResultsGraph)
 		protected.GET("/settings", s.handleSettingsPage)

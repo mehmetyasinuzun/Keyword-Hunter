@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -303,14 +304,29 @@ func SystemStartup(torProxy, dbPath, webAddr string) {
 	Info("-----------------------------------------------------------")
 	Info("CONFIG: Tor Proxy: %s", torProxy)
 	Info("CONFIG: Database Path: %s", dbPath)
-	Info("CONFIG: Web Address: http://localhost%s", webAddr)
+	Info("CONFIG: Web Address: %s", BrowseURL(webAddr))
+}
+
+// BrowseURL dinleme adresini tarayıcıda açılabilir bir URL'ye çevirir:
+// ":8080" → http://localhost:8080, "127.0.0.1:8080" → http://127.0.0.1:8080,
+// "0.0.0.0:8080" / "[::]:8080" → http://localhost:8080.
+func BrowseURL(webAddr string) string {
+	host, port, err := net.SplitHostPort(webAddr)
+	if err != nil {
+		return "http://" + webAddr
+	}
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 // SystemReady sistem hazır
 func SystemReady(webAddr, username string) {
 	Info("-----------------------------------------------------------")
 	Info("SYSTEM READY: Listening for requests")
-	Info("URL: http://localhost%s", webAddr)
+	Info("URL: %s", BrowseURL(webAddr))
 	Info("AUTH: Login user: %s", username)
 	Info("-----------------------------------------------------------")
 }

@@ -14,7 +14,7 @@ import (
 
 // handleUsersPage kullanıcı yönetimi sayfası (yalnız admin).
 func (s *Server) handleUsersPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "users.html", gin.H{"ActivePage": "users", "role": c.GetString("role")})
+	s.render(c, http.StatusOK, "users.html", gin.H{"ActivePage": "users", "role": c.GetString("role")})
 }
 
 // handleUsersList tüm kullanıcıları döndürür.

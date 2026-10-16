@@ -1,0 +1,28 @@
+{{/* KeywordHunter marka işareti — "Onion Reticle".
+     Tor'un soğan katmanları (onion space) + nişangah (hunt) + merkezde kilitlenen hedef.
+     Satır içi SVG: CSS ile animasyonlu (katmanlar çizilerek belirir, merkez radar
+     ping'i atar, dış yörüngede tarama yayı döner; hover'da hızlanır). */}}
+{{define "logo"}}
+<svg class="kh-logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="khl-g" x1="10" y1="6" x2="54" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <linearGradient id="khl-s" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0"/><stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <radialGradient id="khl-c" cx="32" cy="38" r="5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#67e8f9"/><stop offset="1" stop-color="#6366f1"/>
+    </radialGradient>
+  </defs>
+  <circle class="l-orbit" cx="32" cy="38" r="25" fill="none" stroke="url(#khl-g)" stroke-width="1" stroke-dasharray="1.5 4.5" opacity=".35"/>
+  <path class="l-sweep" d="M32 13 A25 25 0 0 1 55.8 30.3" fill="none" stroke="url(#khl-s)" stroke-width="2.2" stroke-linecap="round"/>
+  <path class="l-outer" pathLength="100" d="M32 6C36 14 52 22 52 38A20 20 0 0 1 12 38C12 22 28 14 32 6Z" fill="none" stroke="url(#khl-g)" stroke-width="3.2" stroke-linejoin="round"/>
+  <path class="l-mid" pathLength="100" d="M32 17.4C34.6 22.6 45.2 27.6 45.2 38A13.2 13.2 0 0 1 18.8 38C18.8 27.6 29.4 22.6 32 17.4Z" fill="none" stroke="url(#khl-g)" stroke-width="2" stroke-linejoin="round" opacity=".7"/>
+  <g class="l-reticle" stroke="url(#khl-g)" stroke-width="2" stroke-linecap="round">
+    <path d="M32 27.5v4M32 44.5v4M21.5 38h4M38.5 38h4"/>
+  </g>
+  <circle class="l-ping" cx="32" cy="38" r="4" fill="none" stroke="#67e8f9" stroke-width="1.4"/>
+  <circle class="l-core" cx="32" cy="38" r="3.6" fill="url(#khl-c)"/>
+</svg>
+{{end}}

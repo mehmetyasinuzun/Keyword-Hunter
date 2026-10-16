@@ -61,3 +61,17 @@ func Catalog(lang string) map[string]string {
 	}
 	return out
 }
+
+// register bir dilin anahtarlarını kataloğa ekler. Sayfa/alan bazlı katalog
+// dosyaları (catalog_*.go) bunu init() içinde çağırır; böylece çeviriler tek dev
+// bir haritada değil, ilgili ekranın yanında tutulur.
+func register(lang string, msgs map[string]string) {
+	m, ok := catalog[lang]
+	if !ok {
+		m = make(map[string]string, len(msgs))
+		catalog[lang] = m
+	}
+	for k, v := range msgs {
+		m[k] = v
+	}
+}

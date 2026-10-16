@@ -42,3 +42,17 @@ func TestLogger_LevelFilterAndDailyFile(t *testing.T) {
 		t.Errorf("dosyaya ANSI kaçış kodu yazıldı:\n%s", s)
 	}
 }
+
+func TestBrowseURL(t *testing.T) {
+	for in, want := range map[string]string{
+		":8080":          "http://localhost:8080",
+		"127.0.0.1:8080": "http://127.0.0.1:8080",
+		"0.0.0.0:9000":   "http://localhost:9000",
+		"[::]:8080":      "http://localhost:8080",
+		"[::1]:8080":     "http://[::1]:8080",
+	} {
+		if got := BrowseURL(in); got != want {
+			t.Errorf("BrowseURL(%q)=%q want %q", in, got, want)
+		}
+	}
+}
