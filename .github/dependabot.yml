@@ -1,18 +1,30 @@
 version: 2
 updates:
+  # Go modülleri: tek haftalık grup PR'ı. chromedp/cdproto birlikte güncellenmeli
+  # (cdproto'nun API'si chromedp sürümüne bağlıdır), bu yüzden ayrı grupta.
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
     groups:
+      chromedp:
+        patterns: ["github.com/chromedp/*"]
       go-dependencies:
         patterns: ["*"]
+        exclude-patterns: ["github.com/chromedp/*"]
     open-pull-requests-limit: 5
+  # Actions ve Docker güncellemeleri tek PR'da toplanır (PR gürültüsünü azaltır).
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    groups:
+      docker-images:
+        patterns: ["*"]

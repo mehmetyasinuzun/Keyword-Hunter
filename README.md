@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/mehmetyasinuzun/Keyword-Hunter/actions/workflows/ci.yml/badge.svg)](https://github.com/mehmetyasinuzun/Keyword-Hunter/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/mehmetyasinuzun/Keyword-Hunter?display_name=tag&sort=semver&color=6366f1)](https://github.com/mehmetyasinuzun/Keyword-Hunter/releases)
-[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/GHCR-keyword--hunter-2496ED?logo=docker&logoColor=white)](https://github.com/mehmetyasinuzun/Keyword-Hunter/pkgs/container/keyword-hunter)
 [![CSP](https://img.shields.io/badge/CSP-script--src%20'self'-34d399)](docs/FRONTEND.md)
@@ -84,7 +84,7 @@ docker pull ghcr.io/mehmetyasinuzun/keyword-hunter:latest
 - Kalıcı veri `./data/` altında: `keywordhunter.db`, `.env`, `logs/`, `screenshots/`. `docker compose down -v && rm -rf data` tümünü siler.
 - Windows: `temiz_baslat.bat` aynı adımları yapar.
 
-### Yerel (macOS / Linux / Windows, Go 1.26+)
+### Yerel (macOS / Linux / Windows, Go 1.27+)
 
 | Platform | Başlat | Not |
 |---|---|---|
