@@ -1,0 +1,84 @@
+/* Arama Motorları — sağlık tablosu, gecikme/başarı çubukları, anahtar, mobil kart görünümü */
+
+.mon-updated { display: inline-flex; align-items: center; gap: 8px; font: .74rem var(--font-mono); color: var(--text-3); white-space: nowrap; }
+.mon-kpi-bar { margin-top: 10px; }
+#newnym-btn.is-off { opacity: .6; }
+
+.mon-head { flex-wrap: wrap; }
+.mon-search .kh-input { width: 200px; }
+.kh-input-icon.mon-search > .ico { left: 10px; width: 14px; height: 14px; }
+.kh-input-icon.mon-search > .kh-input { padding-left: 32px; }
+
+.mon-table td { padding-top: 11px; padding-bottom: 11px; }
+.mon-table tbody tr { transition: background var(--dur-2), opacity var(--dur-3); }
+.mon-table tbody tr.off > td:not(.mon-c-switch) { opacity: .55; }
+.mon-table tbody tr.off:hover > td { opacity: .9; }
+.mon-c-engine { min-width: 240px; max-width: 340px; }
+
+.mon-engine { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.mon-engine > .kh-dot { margin-top: 7px; }
+.mon-id { min-width: 0; flex: 1; }
+.mon-name { font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mon-name .kh-badge { height: 18px; font-size: .6rem; padding: 0 7px; }
+.mon-url { display: flex; align-items: center; gap: 2px; min-width: 0; margin-top: 2px; }
+.mon-url .u { font-size: .7rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mon-url .kh-copy { width: 22px; height: 22px; flex: none; opacity: 0; }
+.mon-table tr:hover .mon-url .kh-copy, .mon-url .kh-copy:focus-visible { opacity: 1; }
+@media (hover: none) { .mon-url .kh-copy { opacity: .75; } }
+.mon-note { display: flex; gap: 5px; align-items: flex-start; margin-top: 4px; font-size: .72rem; line-height: 1.4; color: var(--warn); }
+.mon-note .ico { margin-top: 2px; }
+
+/* Gecikme & başarı: değer + ince çubuk */
+.mon-lat, .mon-rate { --c: var(--text-3); display: grid; grid-template-columns: auto; gap: 5px; min-width: 96px; }
+.mon-lat .v, .mon-rate .v { font: 700 .82rem var(--font-mono); color: var(--c); font-variant-numeric: tabular-nums; }
+.mon-lat .bar, .mon-rate .bar { display: block; height: 4px; border-radius: 999px; background: var(--surface-hover); overflow: hidden; }
+.mon-lat .bar i, .mon-rate .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--c); transition: width .9s var(--ease-out); }
+.mon-rate { grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; min-width: 130px; }
+.mon-rate .bar { grid-column: 1 / -1; grid-row: 2; }
+.mon-rate .s { font: .68rem var(--font-mono); color: var(--text-3); justify-self: end; }
+.t-ok { --c: var(--ok); } .t-warn { --c: var(--warn); } .t-bad { --c: var(--err); } .t-none { --c: var(--text-3); }
+
+/* Anahtar: gerçek düğme; satır içi span olmadığından genişlik korunur */
+.mon-table .kh-switch { display: inline-block; vertical-align: middle; }
+.mon-table .kh-switch.busy { opacity: .6; cursor: progress; }
+.mon-table .kh-switch[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+
+/* Mobil: satırlar kartlara dönüşür */
+@media (max-width: 860px) {
+  .mon-head .end { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .mon-search { flex: 1; min-width: 160px; }
+  .mon-search .kh-input { width: 100%; }
+  .mon-table thead { display: none; }
+  .mon-table, .mon-table tbody { display: block; }
+  .mon-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); position: relative; }
+  .mon-table tbody tr:last-child { border-bottom: 0; }
+  .mon-table td { display: block; padding: 0; border: 0; min-width: 0; text-align: left; }
+  .mon-table td.num { text-align: left; }
+  .mon-table td[data-label]::before { content: attr(data-label); display: block; font-size: .6rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin-bottom: 4px; }
+  .mon-table td.mon-c-engine { grid-column: 1 / -1; max-width: none; min-width: 0; padding-right: 56px; }
+  .mon-table td.mon-c-switch { position: absolute; top: 14px; right: 16px; }
+  .mon-table td.mon-c-switch::before { display: none; }
+  .mon-table td[colspan] { grid-column: 1 / -1; }
+  .mon-table tbody tr:has(td[colspan]) { display: block; }
+  .mon-lat, .mon-rate { min-width: 0; }
+  /* Yoğun kart: durum · yanıt · son kontrol / başarı (2 sütun) · ardışık; hata sayısı başarı oranında zaten var */
+  .mon-table tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mon-table td:nth-child(2) { order: 1; } .mon-table td:nth-child(3) { order: 2; } .mon-table td:nth-child(7) { order: 3; }
+  .mon-table td:nth-child(4) { order: 4; grid-column: span 2; } .mon-table td:nth-child(6) { order: 5; }
+  .mon-table td:nth-child(5) { display: none; }
+  .mon-table td:nth-child(2) .kh-badge { padding: 0 7px; font-size: .62rem; }
+  .mon-table td:nth-child(2) .kh-badge .ico { display: none; }
+}
+
+/* Kapalı anahtar izi koyu temada da seçilebilir olsun */
+.mon-table .kh-switch:not(.on):not([aria-checked="true"]) { background: color-mix(in srgb, var(--text-3) 42%, transparent); }
+
+/* Mobil: KPI kutuları 2×2 ve sıkı */
+@media (max-width: 720px) {
+  .mon-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px; }
+  .mon-kpis .kh-stat { padding: 14px; }
+  .mon-kpis .kh-stat .value { font-size: 1.55rem; }
+  .mon-kpis .kh-stat .icon { width: 30px; height: 30px; right: 12px; top: 12px; font-size: .95rem; }
+  .mon-kpis .kh-stat .label { font-size: .62rem; padding-right: 34px; }
+  .mon-kpis .kh-stat .sub { font-size: .72rem; }
+}

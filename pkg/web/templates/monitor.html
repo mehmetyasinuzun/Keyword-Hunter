@@ -1,81 +1,88 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Motorlar</title>
-    <style>
-        .engine-row { display: grid; grid-template-columns: minmax(220px, 1.6fr) 110px 100px 90px 80px 90px 110px 120px; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid rgba(99,179,237,.06); transition: background .15s; }
-        .engine-row:hover { background: rgba(99,179,237,.04); }
-        .engine-row.header { background: rgba(7,8,13,.6); font-size: .66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
-        .engine-row.off { opacity: .5; }
-        .engine-name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .engine-url { font-family: var(--font-mono); font-size: .68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .engine-note { font-size: .7rem; color: #f6ad55; margin-top: 2px; }
-        .stat-v { font-family: var(--font-mono); font-weight: 700; }
-        .stat-s { font-size: .68rem; color: var(--text-muted); }
-        @media (max-width: 1000px) { .engine-row { grid-template-columns: 1fr 100px 100px; } .engine-row > :nth-child(n+4):not(:last-child) { display: none; } }
-    </style>
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page wide">
-        <div class="kh-header">
-            <div><h1 class="kh-title">Arama Motorları</h1><p class="kh-subtitle">Gerçek zamanlı sağlık durumu · her 5 dakikada otomatik kontrol · pasif motorlar aramaya dahil edilmez</p></div>
-            <div class="kh-actions"><span class="kh-hint" id="lastUpdated">Yükleniyor…</span><button class="kh-btn primary" onclick="checkNow()" id="checkBtn">{{icon "refresh"}} Şimdi Kontrol Et</button></div>
-        </div>
-        <section class="kh-grid cols-4" style="margin-bottom:18px">
-            <div class="kh-stat green"><div class="label">Çevrimiçi</div><div class="value" id="sumUp">—</div><div class="sub">son kontrolde yanıt verdi</div></div>
-            <div class="kh-stat red"><div class="label">Çevrimdışı</div><div class="value" id="sumDown">—</div><div class="sub">zaman aşımı / hata</div></div>
-            <div class="kh-stat blue"><div class="label">Aktif (aramada)</div><div class="value" id="sumActive">—</div><div class="sub" id="sumTotal">toplam —</div></div>
-            <div class="kh-stat purple"><div class="label">Ortalama Yanıt</div><div class="value" id="sumAvg">—</div><div class="sub">çevrimiçi motorlar</div></div>
-        </section>
-        <section class="kh-card flush">
-            <div class="engine-row header"><div>Motor</div><div>Durum</div><div>Yanıt</div><div>Başarı</div><div>Hata</div><div>Ardışık</div><div>Son Kontrol</div><div>Aramada</div></div>
-            <div id="enginesBody"><div class="kh-empty"><div class="kh-skel" style="width:40%;margin:0 auto"></div></div></div>
-        </section>
-        <div class="kh-alert info" style="margin-top:14px"><span></span><div>Motor listesi Tor üzerinden canlı doğrulanır; captcha isteyen, JavaScript gerektiren veya erişilemeyen motorlar varsayılan olarak <strong>pasif</strong> gelir. Bir motoru <strong>Aramada</strong> anahtarıyla açıp kapatabilirsiniz; değişiklik bir sonraki aramada geçerlidir. Ardışık 3+ hata alan motorları kapatmanız aramayı hızlandırır.</div></div>
-    </main>
-    <script>
-        let notes = {};
-        async function loadEngines() {
-            try {
-                const d = await KH.api('/api/engines'); notes = d.notes || {};
-                const list = d.engines || [];
-                document.getElementById('sumUp').textContent = d.upCount || 0; document.getElementById('sumDown').textContent = d.downCount || 0;
-                document.getElementById('sumActive').textContent = list.filter(e => e.isActive).length; document.getElementById('sumTotal').textContent = 'toplam ' + list.length;
-                const ups = list.filter(e => e.lastStatus === 'up' && e.lastResponseMs > 0);
-                document.getElementById('sumAvg').textContent = ups.length ? Math.round(ups.reduce((a, e) => a + e.lastResponseMs, 0) / ups.length / 100) / 10 + 's' : '—';
-                render(list); document.getElementById('lastUpdated').textContent = 'Güncellendi: ' + new Date().toLocaleTimeString('tr-TR');
-            } catch (e) { document.getElementById('enginesBody').innerHTML = '<div class="kh-empty"><h3>Veri yüklenemedi</h3><p>' + KH.esc(e.message) + '</p></div>'; }
-        }
-        function render(list) {
-            const order = { down: 1, unknown: 2, up: 0 };
-            const sorted = [...list].sort((a, b) => (b.isActive - a.isActive) || ((order[a.lastStatus] ?? 2) - (order[b.lastStatus] ?? 2)) || a.name.localeCompare(b.name));
-            document.getElementById('enginesBody').innerHTML = sorted.map(e => {
-                const st = e.lastStatus || 'unknown'; const total = e.successCount + e.failCount; const rate = total ? Math.round(e.successCount / total * 100) : 0;
-                const ms = e.lastResponseMs > 0 ? (e.lastResponseMs / 1000).toFixed(1) + 's' : '—'; const msCol = e.lastResponseMs < 5000 ? '#68d391' : e.lastResponseMs < 15000 ? '#f6e05e' : '#fc8181';
-                return `<div class="engine-row ${e.isActive ? '' : 'off'}">
-                    <div><div class="engine-name"><span class="kh-dot ${st} ${st === 'up' ? 'pulse' : ''}"></span>${KH.esc(e.name)}</div><div class="engine-url" title="${KH.esc(e.url)}">${KH.esc(e.url.replace('{query}', '…'))}</div>${notes[e.name] ? '<div class="engine-note">ⓘ ' + KH.esc(notes[e.name]) + '</div>' : ''}</div>
-                    <div><span class="kh-badge ${st === 'up' ? 'ok' : st === 'down' ? 'err' : 'neutral'}">${st === 'up' ? 'çevrimiçi' : st === 'down' ? 'çevrimdışı' : 'bilinmiyor'}</span></div>
-                    <div class="stat-v" style="color:${msCol}">${ms}</div>
-                    <div><div class="stat-v" style="color:#68d391">${e.successCount}</div><div class="stat-s">%${rate}</div><div class="kh-progress thin" style="margin-top:3px"><div style="width:${rate}%"></div></div></div>
-                    <div class="stat-v" style="color:${e.failCount ? '#fc8181' : 'var(--text-muted)'}">${e.failCount}</div>
-                    <div class="stat-v" style="color:${e.consecutiveFails >= 3 ? '#fc8181' : e.consecutiveFails ? '#f6e05e' : '#68d391'}">${e.consecutiveFails}</div>
-                    <div class="stat-s" title="${KH.esc(KH.fmtTime(e.lastCheckedAt, true))}">${e.lastCheckedAt ? KH.ago(e.lastCheckedAt) : '—'}</div>
-                    <div><span class="kh-switch ${e.isActive ? 'on' : ''}" role="switch" aria-checked="${e.isActive}" title="${e.isActive ? 'Aramadan çıkar' : 'Aramaya dahil et'}" onclick="toggleEngine('${KH.esc(e.name)}', ${!e.isActive})"></span></div>
-                </div>`;
-            }).join('');
-        }
-        async function checkNow() {
-            const btn = document.getElementById('checkBtn'); KH.busy(btn, true, 'Kontrol ediliyor (~30 sn)…');
-            try { await KH.api('/api/engines/check-now', { method: 'POST', body: {} }); KH.toast('Kontrol başlatıldı; sonuçlar ~30 sn içinde güncellenir', 'info'); setTimeout(() => { loadEngines(); KH.busy(btn, false); }, 32000); }
-            catch (e) { KH.busy(btn, false); KH.toast(e.message, 'err'); }
-        }
-        async function toggleEngine(name, active) {
-            try { await KH.api('/api/engines/' + encodeURIComponent(name) + '/toggle', { method: 'POST', body: { active } }); KH.toast(name + (active ? ' aramaya dahil edildi' : ' aramadan çıkarıldı'), 'ok'); loadEngines(); }
-            catch (e) { KH.toast(e.message, 'err'); }
-        }
-        loadEngines(); setInterval(loadEngines, 60000);
-    </script>
+{{template "doc" .}}
+<title>{{t .Lang "mon.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/monitor.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow"><span class="kh-dot up pulse" id="live-dot"></span> {{t .Lang "mon.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "mon.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "mon.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <span class="mon-updated" id="last-updated" aria-live="polite">{{t .Lang "mon.loading"}}</span>
+      {{if .IsAdmin}}<button type="button" class="kh-btn subtle" id="newnym-btn" data-action="mon-newnym" data-write title="{{t .Lang "mon.newnymTip"}}">{{icon "onion"}} {{t .Lang "mon.newnym"}}</button>{{end}}
+      <button type="button" class="kh-btn primary" id="check-btn" data-action="mon-check" data-write>{{icon "refresh"}} {{t .Lang "mon.checkNow"}}</button>
+    </div>
+  </header>
+
+  <section class="kh-grid cols-4 kh-section mon-kpis">
+    <div class="kh-stat green">
+      <div class="label">{{t .Lang "mon.up"}}</div>
+      <div class="value" id="sum-up">—</div>
+      <div class="sub">{{t .Lang "mon.upSub"}}</div>
+      <div class="icon">{{icon "online"}}</div>
+    </div>
+    <div class="kh-stat red">
+      <div class="label">{{t .Lang "mon.down"}}</div>
+      <div class="value" id="sum-down">—</div>
+      <div class="sub">{{t .Lang "mon.downSub"}}</div>
+      <div class="icon">{{icon "offline"}}</div>
+    </div>
+    <div class="kh-stat blue">
+      <div class="label">{{t .Lang "mon.active"}}</div>
+      <div class="value" id="sum-active">—</div>
+      <div class="sub" id="sum-active-sub">—</div>
+      <div class="kh-progress thin mon-kpi-bar"><div id="sum-active-bar" style="width:0"></div></div>
+      <div class="icon">{{icon "search"}}</div>
+    </div>
+    <div class="kh-stat purple">
+      <div class="label">{{t .Lang "mon.avg"}}</div>
+      <div class="value" id="sum-avg">—</div>
+      <div class="sub">{{t .Lang "mon.avgSub"}}</div>
+      <div class="icon">{{icon "clock"}}</div>
+    </div>
+  </section>
+
+  <section class="kh-card flush kh-section">
+    <div class="kh-card-head mon-head">
+      <h2>{{icon "monitor"}} {{t .Lang "mon.engines"}}</h2>
+      <span class="kh-badge neutral mono" id="engine-count">—</span>
+      <span class="end">
+        <span class="kh-segment" role="group" aria-label="{{t .Lang "common.filter"}}">
+          <button type="button" data-action="mon-filter" data-filter="all" aria-pressed="true">{{t .Lang "mon.fAll"}}</button>
+          <button type="button" data-action="mon-filter" data-filter="up" aria-pressed="false">{{t .Lang "mon.fUp"}}</button>
+          <button type="button" data-action="mon-filter" data-filter="down" aria-pressed="false">{{t .Lang "mon.fDown"}}</button>
+          <button type="button" data-action="mon-filter" data-filter="off" aria-pressed="false">{{t .Lang "mon.fOff"}}</button>
+        </span>
+        <span class="kh-input-icon mon-search">{{icon "search"}}<input class="kh-input sm" id="engine-search" type="search" placeholder="{{t .Lang "mon.search"}}" aria-label="{{t .Lang "mon.search"}}" data-input="mon-search" autocomplete="off" spellcheck="false"></span>
+      </span>
+    </div>
+    <div class="kh-table-wrap">
+      <table class="kh-table mon-table">
+        <thead>
+          <tr>
+            <th>{{t .Lang "mon.colEngine"}}</th>
+            <th>{{t .Lang "mon.colStatus"}}</th>
+            <th>{{t .Lang "mon.colLatency"}}</th>
+            <th>{{t .Lang "mon.colSuccess"}}</th>
+            <th class="num">{{t .Lang "mon.colFails"}}</th>
+            <th class="num">{{t .Lang "mon.colStreak"}}</th>
+            <th>{{t .Lang "mon.colChecked"}}</th>
+            <th class="center">{{t .Lang "mon.colActive"}}</th>
+          </tr>
+        </thead>
+        <tbody id="engines-body">
+          <tr><td colspan="8"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="kh-alert info">{{icon "info"}}<span>{{t .Lang "mon.note"}}</span></div>
+</main>
+{{template "shell_end" .}}
+<script src="/static/js/pages/monitor.js?v={{version}}" defer></script>
 </body>
 </html>

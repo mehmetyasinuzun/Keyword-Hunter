@@ -1,63 +1,139 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    {{template "head" .}}
-    <title>KeywordHunter - Analiz</title>
-    <script src="/static/js/vendor/chart.umd.min.js?v={{version}}"></script>
-    <link rel="stylesheet" href="/static/css/analytics.css?v={{version}}">
-</head>
-<body>
-    {{template "navbar" .}}
-    <main class="kh-page wide">
-        <div class="kh-header">
-            <div><h1 class="kh-title">Analiz Merkezi</h1><p class="kh-subtitle">Zaman serisi, kaynak/sorgu/kritiklik/kategori dağılımları, domain haritası ve IOC özeti</p></div>
-            <div class="kh-actions"><a class="kh-btn subtle" id="export-link" href="/api/export/results?format=csv">{{icon "download"}} CSV</a><button class="kh-btn ghost" onclick="loadAnalyticsData()">{{icon "refresh"}} Yenile</button></div>
-        </div>
+{{template "doc" .}}
+<title>{{t .Lang "an.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/analytics.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "analytics"}} {{t .Lang "an.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "an.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "an.subtitle"}}</p>
+    </div>
+    <div class="kh-actions">
+      <a class="kh-btn subtle" id="export-link" href="/api/export/results?format=csv" title="{{t .Lang "an.exportTip"}}">{{icon "download"}} {{t .Lang "an.export"}}</a>
+      <button type="button" class="kh-btn ghost" id="refresh-btn" data-action="an-refresh">{{icon "refresh"}} {{t .Lang "common.refresh"}}</button>
+    </div>
+  </header>
 
-        <section class="kh-card" style="margin-bottom:16px">
-            <div class="kh-card-title">{{icon "filter"}} Sorgu Filtresi <span class="hint">bir sorgu seçince tüm grafikler o sorguya odaklanır</span><button class="kh-btn xs subtle" style="margin-left:auto" onclick="clearFilters()">Temizle</button></div>
-            <div id="filter-chips" class="an-filters"><div class="kh-skel" style="width:40%"></div></div>
-        </section>
+  <section class="kh-card an-filter kh-section">
+    <div class="kh-card-head">
+      <h2>{{icon "filter"}} {{t .Lang "an.filter"}}</h2>
+      <span class="kh-hint hide-sm">{{t .Lang "an.filterHint"}}</span>
+      <span class="end">
+        <span class="kh-input-icon an-chip-search" id="chip-search-wrap" hidden>{{icon "search"}}<input class="kh-input sm" id="chip-search" type="search" placeholder="{{t .Lang "an.chipSearch"}}" aria-label="{{t .Lang "an.chipSearch"}}" data-input="an-chip-filter" autocomplete="off"></span>
+        <button type="button" class="kh-btn xs subtle" id="clear-filter" data-action="an-clear" disabled>{{icon "close"}} {{t .Lang "an.clear"}}</button>
+      </span>
+    </div>
+    <div id="filter-chips" class="an-chips" role="group" aria-label="{{t .Lang "an.filter"}}"><div class="kh-skel w-60"></div></div>
+  </section>
 
-        <section class="kh-grid cols-4" style="margin-bottom:16px">
-            <div class="kh-stat blue"><div class="label">Benzersiz Site</div><div class="value" id="stat-total">—</div><div class="sub" id="stat-total-sub">tüm sorgular</div><div class="icon">{{icon "globe"}}</div></div>
-            <div class="kh-stat green"><div class="label">Toplam Sıklık</div><div class="value" id="stat-freq">—</div><div class="sub">anahtar kelime eşleşmesi</div><div class="icon">{{icon "analytics"}}</div></div>
-            <div class="kh-stat cyan"><div class="label">Sıklık Oranı</div><div class="value" id="stat-rate">—</div><div class="sub">en az 1 eşleşmeli kayıt</div><div class="icon">{{icon "pulse"}}</div></div>
-            <div class="kh-stat amber"><div class="label">Yüksek Risk</div><div class="value" id="stat-high">—</div><div class="sub">Sev 3+ kayıt</div><div class="icon">{{icon "siren"}}</div></div>
-        </section>
+  <section class="kh-grid cols-4 kh-section an-kpis">
+    <div class="kh-stat blue">
+      <div class="label">{{t .Lang "an.kpiSites"}}</div>
+      <div class="value" id="stat-total">—</div>
+      <div class="sub" id="stat-total-sub">{{t .Lang "an.kpiSitesSub"}}</div>
+      <div class="icon">{{icon "globe"}}</div>
+    </div>
+    <div class="kh-stat green">
+      <div class="label">{{t .Lang "an.kpiFreq"}}</div>
+      <div class="value" id="stat-freq">—</div>
+      <div class="sub">{{t .Lang "an.kpiFreqSub"}}</div>
+      <div class="icon">{{icon "target"}}</div>
+    </div>
+    <div class="kh-stat cyan">
+      <div class="label">{{t .Lang "an.kpiRate"}}</div>
+      <div class="value" id="stat-rate">—</div>
+      <div class="sub">{{t .Lang "an.kpiRateSub"}}</div>
+      <div class="kh-progress thin an-kpi-bar"><div id="stat-rate-bar" style="width:0"></div></div>
+      <div class="icon">{{icon "pulse"}}</div>
+    </div>
+    <div class="kh-stat red">
+      <div class="label">{{t .Lang "an.kpiHigh"}}</div>
+      <div class="value" id="stat-high">—</div>
+      <div class="sub" id="stat-high-sub">{{t .Lang "an.kpiHighSub"}}</div>
+      <div class="icon">{{icon "siren"}}</div>
+    </div>
+  </section>
 
-        <div class="chart-row full">
-            <div class="chart-card">
-                <div class="chart-header"><h3 class="chart-title" id="query-chart-title">{{icon "analytics"}} Sorgu Bazlı Sonuç Dağılımı</h3>
-                    <div class="chart-controls" id="query-chart-controls" style="display:none"><button class="chart-control-btn" data-interval="hour" onclick="changeQueryChartInterval('hour')">Saatlik</button><button class="chart-control-btn active" data-interval="day" onclick="changeQueryChartInterval('day')">Günlük</button><button class="chart-control-btn" data-interval="week" onclick="changeQueryChartInterval('week')">Haftalık</button></div></div>
-                <div class="chart-container large"><canvas id="queryBarChart"></canvas></div>
-            </div>
-        </div>
+  <section class="kh-grid cols-3 kh-section">
+    <article class="kh-card an-card span-2">
+      <div class="kh-card-head">
+        <h2>{{icon "analytics"}} <span id="query-chart-title">{{t .Lang "an.queryChart"}}</span></h2>
+        <span class="hint an-hint" id="query-chart-hint"></span>
+        <span class="end" id="query-chart-controls" hidden>
+          <span class="kh-segment" role="group" aria-label="{{t .Lang "an.periodic"}} / {{t .Lang "an.cumulative"}}">
+            <button type="button" data-action="an-qmode" data-mode="periodic" aria-pressed="true">{{t .Lang "an.periodic"}}</button>
+            <button type="button" data-action="an-qmode" data-mode="cumulative" aria-pressed="false">{{t .Lang "an.cumulative"}}</button>
+          </span>
+          <span class="kh-segment" role="group" aria-label="{{t .Lang "an.timeline"}}">
+            <button type="button" data-action="an-qinterval" data-interval="hour" aria-pressed="false">{{t .Lang "an.hour"}}</button>
+            <button type="button" data-action="an-qinterval" data-interval="day" aria-pressed="true">{{t .Lang "an.day"}}</button>
+            <button type="button" data-action="an-qinterval" data-interval="week" aria-pressed="false">{{t .Lang "an.week"}}</button>
+          </span>
+        </span>
+      </div>
+      <div class="an-qstats" id="query-stats" hidden></div>
+      <div class="an-chart lg" data-chart="queryBar"><canvas id="queryBarChart" role="img" aria-label="{{t .Lang "an.queryChart"}}"></canvas><div class="an-state"><div class="kh-skel block"></div></div></div>
+    </article>
 
-        <div class="chart-row full">
-            <div class="chart-card">
-                <div class="chart-header"><h3 class="chart-title" id="timeline-title">{{icon "clock"}} Zaman Tüneli <span class="hint">motor bazlı</span></h3>
-                    <div class="chart-controls"><button class="chart-control-btn" data-interval="hour" onclick="changeInterval('hour')">Saatlik</button><button class="chart-control-btn active" data-interval="day" onclick="changeInterval('day')">Günlük</button><button class="chart-control-btn" data-interval="week" onclick="changeInterval('week')">Haftalık</button></div></div>
-                <div class="chart-container large"><canvas id="timelineChart"></canvas></div>
-            </div>
-        </div>
+    <article class="kh-card an-card">
+      <div class="kh-card-head"><h2>{{icon "fire"}} {{t .Lang "an.sevChart"}}</h2></div>
+      <div class="an-chart donut" data-chart="criticality"><canvas id="criticalityChart" role="img" aria-label="{{t .Lang "an.sevChart"}}"></canvas><div class="an-state"><div class="kh-skel block"></div></div></div>
+      <ul class="an-legend" id="criticalityChart-legend"></ul>
+    </article>
+  </section>
 
-        <div class="chart-row thirds">
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "search"}} Sorgu Dağılımı</h3></div><div class="chart-container small"><canvas id="queryPieChart"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "monitor"}} Kaynak Dağılımı</h3></div><div class="chart-container small"><canvas id="sourcePieChart"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "fire"}} Kritiklik Dağılımı</h3></div><div class="chart-container small"><canvas id="criticalityChart"></canvas></div></div>
-        </div>
+  <section class="kh-card an-card kh-section">
+    <div class="kh-card-head">
+      <h2>{{icon "clock"}} {{t .Lang "an.timeline"}}</h2>
+      <span class="hint an-hint">{{t .Lang "an.timelineH"}}</span>
+      <span class="end">
+        <span class="kh-segment" role="group" aria-label="{{t .Lang "an.timeline"}}">
+          <button type="button" data-action="an-interval" data-interval="hour" aria-pressed="false">{{t .Lang "an.hour"}}</button>
+          <button type="button" data-action="an-interval" data-interval="day" aria-pressed="true">{{t .Lang "an.day"}}</button>
+          <button type="button" data-action="an-interval" data-interval="week" aria-pressed="false">{{t .Lang "an.week"}}</button>
+        </span>
+      </span>
+    </div>
+    <div class="an-chart lg" data-chart="timeline"><canvas id="timelineChart" role="img" aria-label="{{t .Lang "an.timeline"}}"></canvas><div class="an-state"><div class="kh-skel block"></div></div></div>
+  </section>
 
-        <div class="chart-row halves">
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "folder"}} Kategori Dağılımı</h3></div><div class="chart-container medium"><canvas id="categoryChart"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">{{icon "dna"}} IOC / Artifact Özeti <span class="hint">etiketleme ile çıkarılır</span></h3></div><div id="ioc-grid" class="ioc-grid"><div class="kh-skel"></div></div></div>
-        </div>
+  <section class="kh-grid cols-3 kh-section">
+    <article class="kh-card an-card">
+      <div class="kh-card-head"><h2>{{icon "monitor"}} {{t .Lang "an.sourceChart"}}</h2></div>
+      <div class="an-chart donut" data-chart="source"><canvas id="sourcePieChart" role="img" aria-label="{{t .Lang "an.sourceChart"}}"></canvas><div class="an-state"><div class="kh-skel block"></div></div></div>
+      <ul class="an-legend" id="sourcePieChart-legend"></ul>
+    </article>
+    <article class="kh-card an-card">
+      <div class="kh-card-head"><h2>{{icon "search"}} {{t .Lang "an.queryPie"}}</h2></div>
+      <div class="an-chart donut" data-chart="queryPie"><canvas id="queryPieChart" role="img" aria-label="{{t .Lang "an.queryPie"}}"></canvas><div class="an-state"><div class="kh-skel block"></div></div></div>
+      <ul class="an-legend" id="queryPieChart-legend"></ul>
+    </article>
+    <article class="kh-card an-card">
+      <div class="kh-card-head"><h2>{{icon "folder"}} {{t .Lang "an.catChart"}}</h2></div>
+      <div class="an-chart md" data-chart="category"><canvas id="categoryChart" role="img" aria-label="{{t .Lang "an.catChart"}}"></canvas><div class="an-state"><div class="kh-skel block"></div></div></div>
+    </article>
+  </section>
 
-        <section class="chart-card">
-            <div class="chart-header"><h3 class="chart-title">{{icon "map"}} Domain Haritası <span class="hint" id="domain-count">0 domain</span></h3><input class="kh-input sm" id="domain-filter" placeholder="domain filtrele…" style="width:220px" oninput="renderDomains()"></div>
-            <div id="domain-list" class="domain-list"><div class="kh-skel"></div></div>
-        </section>
-    </main>
-    <script src="/static/js/analytics.js?v={{version}}"></script>
+  <section class="kh-grid cols-3 kh-section">
+    <article class="kh-card an-card">
+      <div class="kh-card-head"><h2>{{icon "dna"}} {{t .Lang "an.ioc"}}</h2><span class="hint an-hint">{{t .Lang "an.iocHint"}}</span></div>
+      <div id="ioc-grid" class="an-ioc"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></div>
+    </article>
+    <article class="kh-card an-card span-2">
+      <div class="kh-card-head">
+        <h2>{{icon "map"}} {{t .Lang "an.domains"}}</h2>
+        <span class="kh-badge neutral mono" id="domain-count">0</span>
+        <span class="end"><span class="kh-input-icon an-domain-search">{{icon "search"}}<input class="kh-input sm" id="domain-filter" type="search" placeholder="{{t .Lang "an.domainSearch"}}" aria-label="{{t .Lang "an.domainSearch"}}" data-input="an-domains" autocomplete="off" spellcheck="false"></span></span>
+      </div>
+      <div id="domain-list" class="an-domains"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></div>
+    </article>
+  </section>
+</main>
+{{template "shell_end" .}}
+<script src="/static/js/vendor/chart.umd.min.js?v={{version}}" defer></script>
+<script src="/static/js/vendor/chartjs-plugin-datalabels.min.js?v={{version}}" defer></script>
+<script src="/static/js/pages/analytics.js?v={{version}}" defer></script>
 </body>
 </html>
