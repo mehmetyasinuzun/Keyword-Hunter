@@ -73,10 +73,16 @@ var navLayout = []navGroup{
 	}},
 }
 
+// offNavCrumbs yan menüde yer almayan sayfaların konum göstergesi (ör. kullanıcı
+// menüsünden açılan "Hesabım"). Komut paleti bu sayfalara app.js'teki eylemlerle ulaşır.
+var offNavCrumbs = map[string]navCrumb{
+	"account": {GroupKey: "shell.group.system", LabelKey: "nav.account"},
+}
+
 // buildNav rol bazlı süzülmüş menüyü ve etkin sayfanın konumunu üretir.
 // Yönetici olmayanlar admin bağlantılarını HTML'de hiç almaz.
 func buildNav(active, role string) ([]navGroup, navCrumb) {
-	var crumb navCrumb
+	crumb := offNavCrumbs[active]
 	out := make([]navGroup, 0, len(navLayout))
 	for _, g := range navLayout {
 		ng := navGroup{LabelKey: g.LabelKey}

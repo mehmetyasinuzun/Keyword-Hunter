@@ -240,6 +240,11 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("users şeması başarısız: %w", err)
 	}
 
+	// Kişisel API token'ları (yalnız SHA-256 özeti saklanır)
+	if err := db.EnsureAPITokenSchema(); err != nil {
+		return fmt.Errorf("api_tokens şeması başarısız: %w", err)
+	}
+
 	// Vaka yönetimi sütunları (not + durum)
 	if err := db.EnsureCaseColumns(); err != nil {
 		return err

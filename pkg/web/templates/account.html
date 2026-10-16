@@ -1,0 +1,201 @@
+{{template "doc" .}}
+<title>{{t .Lang "acct.title"}} · KeywordHunter</title>
+<link rel="stylesheet" href="/static/css/pages/account.css?v={{version}}">
+{{template "body" .}}
+{{template "shell" .}}
+<main id="main" class="kh-page narrow" data-managed="{{if .profile.managed}}1{{else}}0{{end}}" data-admin="{{if .IsAdmin}}1{{else}}0{{end}}" data-can-write="{{if .CanWrite}}1{{else}}0{{end}}">
+  <header class="kh-header">
+    <div>
+      <div class="kh-eyebrow">{{icon "user"}} {{t .Lang "acct.eyebrow"}}</div>
+      <h1 class="kh-title">{{t .Lang "acct.title"}}</h1>
+      <p class="kh-subtitle">{{t .Lang "acct.subtitle"}}</p>
+    </div>
+  </header>
+
+  <div class="kh-grid acc-top kh-section">
+    <section class="kh-card acc-profile" aria-labelledby="acc-profile-t">
+      <div class="kh-card-head"><h2 id="acc-profile-t">{{icon "user"}} {{t .Lang "acct.profile"}}</h2></div>
+      <div class="acc-id">
+        <span class="acc-av r-{{.Role}}" aria-hidden="true">{{initials .profile.username}}</span>
+        <div class="min-w-0">
+          <div class="acc-name kh-truncate" title="{{.profile.username}}">{{.profile.username}}</div>
+          <span class="kh-badge acc-role r-{{.Role}}">{{t .Lang (printf "role.%s" .Role)}}</span>
+        </div>
+      </div>
+      <dl class="acc-dl">
+        <div><dt>{{t .Lang "acct.role"}}</dt><dd>{{t .Lang (printf "usr.r.%sS" .Role)}}</dd></div>
+        <div><dt>{{t .Lang "acct.lastLogin"}}</dt><dd>{{with .profile.lastLoginAt}}<time datetime="{{isoTime .}}">{{formatTime .}}</time>{{else}}—{{end}}</dd></div>
+        <div><dt>{{t .Lang "acct.created"}}</dt><dd>{{with .profile.createdAt}}<time datetime="{{isoTime .}}">{{formatTime .}}</time>{{else}}—{{end}}</dd></div>
+      </dl>
+      {{if not .profile.managed}}<div class="kh-alert warn mt-4">{{icon "warn"}}<span>{{t .Lang "acct.legacy"}}</span></div>{{end}}
+    </section>
+
+    <section class="kh-card acc-password" id="password" aria-labelledby="acc-pw-t">
+      <div class="kh-card-head"><h2 id="acc-pw-t">{{icon "lock"}} {{t .Lang "acct.pw.title"}}</h2></div>
+      <p class="kh-hint acc-pw-lead">{{t .Lang "acct.pw.lead"}}</p>
+      <form id="acc-pw-form" data-submit="acc-password" novalidate>
+        {{/* Parola yöneticileri için hangi hesabın parolası olduğunu belirtir */}}
+        <input type="text" name="username" value="{{.User}}" autocomplete="username" hidden>
+        <div class="acc-pw-grid">
+          <div class="kh-field acc-pw-current">
+            <label class="kh-label" for="pw-current">{{t .Lang "acct.pw.current"}}</label>
+            <div class="kh-input-icon kh-pw">{{icon "lock"}}<input class="kh-input" id="pw-current" type="password" maxlength="256" required autocomplete="current-password">
+              <button type="button" class="kh-iconbtn kh-pw-eye" data-action="pw-eye" data-target="pw-current" aria-label="{{t .Lang "acct.pw.show"}}" aria-pressed="false">{{icon "eye"}}</button>
+            </div>
+          </div>
+          <div class="kh-field">
+            <label class="kh-label" for="pw-new">{{t .Lang "acct.pw.new"}}</label>
+            <div class="kh-input-icon kh-pw">{{icon "key"}}<input class="kh-input" id="pw-new" type="password" minlength="8" maxlength="256" required autocomplete="new-password" data-input="acc-strength" aria-describedby="pw-meter-l">
+              <button type="button" class="kh-iconbtn kh-pw-eye" data-action="pw-eye" data-target="pw-new" aria-label="{{t .Lang "acct.pw.show"}}" aria-pressed="false">{{icon "eye"}}</button>
+            </div>
+            <div class="pw-meter" id="pw-meter" data-level="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <span class="kh-hint" id="pw-meter-l" aria-live="polite">{{t .Lang "acct.pw.hint"}}</span>
+          </div>
+          <div class="kh-field">
+            <label class="kh-label" for="pw-confirm">{{t .Lang "acct.pw.confirm"}}</label>
+            <div class="kh-input-icon">{{icon "check"}}<input class="kh-input" id="pw-confirm" type="password" minlength="8" maxlength="256" required autocomplete="new-password" data-input="acc-confirm"></div>
+          </div>
+        </div>
+        {{if .profile.managed}}
+        <div class="acc-pw-revoke">
+          <label class="kh-check"><input type="checkbox" id="pw-revoke-tokens" aria-describedby="pw-revoke-h"> {{t .Lang "acct.pw.revokeTokens"}}</label>
+          <span class="kh-hint" id="pw-revoke-h">{{t .Lang "acct.pw.revokeTokensHint"}}</span>
+        </div>
+        {{end}}
+        <div class="acc-form-actions">
+          <button type="submit" class="kh-btn primary" id="pw-submit" data-busy-text="{{t .Lang "acct.pw.saving"}}">{{icon "check"}} {{t .Lang "acct.pw.submit"}}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <section class="kh-card flush kh-section" id="tokens" aria-labelledby="acc-tok-t">
+    <div class="kh-card-head">
+      <h2 id="acc-tok-t">{{icon "key"}} {{t .Lang "acct.tok.title"}} <span class="kh-badge neutral mono" id="tok-count">…</span></h2>
+      <div class="end">
+        {{if .IsAdmin}}
+        <span class="acc-all">
+          <button type="button" class="kh-switch" id="tok-all" role="switch" aria-checked="false" aria-labelledby="tok-all-l" data-action="tok-all"></button>
+          <span id="tok-all-l">{{t .Lang "acct.tok.allUsers"}}</span>
+        </span>
+        {{end}}
+        {{if .profile.managed}}<button type="button" class="kh-btn sm primary" id="tok-new-btn" data-action="tok-new">{{icon "plus"}} {{t .Lang "acct.tok.new"}}</button>{{end}}
+      </div>
+    </div>
+    <p class="acc-lead">{{t .Lang "acct.tok.lead"}}</p>
+    <div class="kh-table-wrap">
+      <table class="kh-table acc-tok-table">
+        <thead><tr>
+          <th>{{t .Lang "acct.tok.c.name"}}</th>
+          <th class="hide-sm">{{t .Lang "acct.tok.c.scope"}}</th>
+          <th class="acc-hide-md">{{t .Lang "acct.tok.c.created"}}</th>
+          <th>{{t .Lang "acct.tok.c.lastUsed"}}</th>
+          <th class="acc-hide-md">{{t .Lang "acct.tok.c.expires"}}</th>
+          <th class="hide-sm">{{t .Lang "common.status"}}</th>
+          <th class="right"><span class="kh-sr">{{t .Lang "common.actions"}}</span></th>
+        </tr></thead>
+        <tbody id="tok-body">
+          <tr><td colspan="7"><div class="kh-skel"></div><div class="kh-skel w-80"></div><div class="kh-skel w-60"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="kh-card kh-section acc-how" aria-labelledby="acc-how-t">
+    <div class="kh-card-head"><h2 id="acc-how-t">{{icon "info"}} {{t .Lang "acct.tok.howTitle"}}</h2></div>
+    <p class="kh-hint">{{t .Lang "acct.tok.howLead"}}</p>
+    <div class="acc-code">
+      <pre id="how-curl" tabindex="0" aria-label="{{t .Lang "acct.r.curl"}}">curl -sS -H 'Authorization: Bearer kh_…' /api/whoami</pre>
+      <button type="button" class="kh-btn xs icon subtle" id="how-copy" data-action="copy" data-copy="" aria-label="{{t .Lang "common.copy"}}" data-tip="{{t .Lang "common.copy"}}" data-tip-end>{{icon "copy"}}</button>
+    </div>
+    <ul class="acc-notes">
+      <li>{{icon "eye"}}<span>{{t .Lang "acct.tok.howScopes"}}</span></li>
+      <li>{{icon "shield"}}<span>{{t .Lang "acct.tok.howForbidden"}}</span></li>
+    </ul>
+  </section>
+
+  {{/* ── İKİ ADIMLI DOĞRULAMA (2FA) — AYRILMIŞ ALAN ──────────────────────────
+       Bir sonraki geliştirici 2FA (TOTP) yönetimini bu bölüme ekler. Bağlantılar
+       /account#security-2fa adresine gelir. 2FA uçları /api/me/2fa/* altında
+       olmalıdır: böylece tokenForbiddenRoutes ("/api/me") onları API token'a
+       karşı otomatik kapatır. Boş bırakıldığında görünür bir şey basmaz. */}}
+  <section id="security-2fa" class="acc-2fa" data-reserved="2fa"></section>
+</main>
+
+<div class="kh-modal-overlay" id="token-modal">
+  <div class="kh-modal" role="dialog" aria-modal="true" aria-labelledby="token-modal-t">
+    <button type="button" class="kh-iconbtn kh-modal-x" data-action="modal-close" aria-label="{{t .Lang "common.close"}}">{{icon "close"}}</button>
+    <h2 id="token-modal-t">{{icon "key"}} {{t .Lang "acct.m.title"}}</h2>
+    <p class="lead">{{t .Lang "acct.m.lead"}}</p>
+    <form id="token-form" data-submit="tok-create" novalidate>
+      <div class="kh-modal-body">
+        <div class="kh-field">
+          <label class="kh-label" for="tok-name">{{t .Lang "acct.m.name"}} <span class="req">*</span></label>
+          <div class="kh-input-icon">{{icon "tag"}}<input class="kh-input" id="tok-name" maxlength="64" required autocomplete="off" spellcheck="false" placeholder="{{t .Lang "acct.m.namePh"}}" autofocus aria-describedby="tok-name-h" data-input="tok-name-input"></div>
+          <span class="kh-hint" id="tok-name-h">{{t .Lang "acct.m.nameHint"}}</span>
+        </div>
+        <fieldset class="acc-scopes">
+          <legend class="kh-label">{{t .Lang "acct.m.scope"}}</legend>
+          <label class="acc-scope-opt s-read">
+            <input type="radio" name="tok-scope" value="read" checked>
+            <span class="acc-scope-ic">{{icon "eye"}}</span>
+            <span class="acc-scope-txt"><b>{{t .Lang "acct.m.read"}} <code>read</code></b><small>{{t .Lang "acct.m.readD"}}</small></span>
+          </label>
+          <label class="acc-scope-opt s-write{{if not .CanWrite}} is-disabled{{end}}">
+            <input type="radio" name="tok-scope" value="write"{{if not .CanWrite}} disabled{{end}}>
+            <span class="acc-scope-ic">{{icon "lightning"}}</span>
+            <span class="acc-scope-txt"><b>{{t .Lang "acct.m.write"}} <code>write</code></b><small>{{if .CanWrite}}{{t .Lang "acct.m.writeD"}}{{else}}{{t .Lang "acct.m.writeViewer"}}{{end}}</small></span>
+          </label>
+        </fieldset>
+        <div class="kh-field">
+          <label class="kh-label" for="tok-expiry">{{t .Lang "acct.m.expiry"}}</label>
+          <select class="kh-select" id="tok-expiry">
+            <option value="7">{{t .Lang "acct.m.d7"}}</option>
+            <option value="30">{{t .Lang "acct.m.d30"}}</option>
+            <option value="90" selected>{{t .Lang "acct.m.d90"}}</option>
+            <option value="180">{{t .Lang "acct.m.d180"}}</option>
+            <option value="365">{{t .Lang "acct.m.d365"}}</option>
+            <option value="0">{{t .Lang "acct.m.never"}}</option>
+          </select>
+          <span class="kh-hint">{{t .Lang "acct.m.expiryHint"}}</span>
+        </div>
+      </div>
+      <div class="kh-modal-actions">
+        <button type="button" class="kh-btn subtle" data-action="modal-close">{{t .Lang "common.cancel"}}</button>
+        <button type="submit" class="kh-btn primary" id="tok-submit" data-busy-text="{{t .Lang "acct.m.creating"}}">{{icon "key"}} {{t .Lang "acct.m.submit"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{/* data-static: arka plana tıklama ya da Esc kapatmaz; düz metin token kapanınca
+     silindiğinden yalnız "Kaydettim, kapat" düğmesi kapatır. */}}
+<div class="kh-modal-overlay" id="token-reveal" data-static>
+  <div class="kh-modal acc-reveal" role="dialog" aria-modal="true" aria-labelledby="token-reveal-t">
+    <h2 id="token-reveal-t">{{icon "check"}} {{t .Lang "acct.r.title"}}</h2>
+    <div class="kh-alert warn">{{icon "warn"}}<span>{{t .Lang "acct.r.warn"}}</span></div>
+    <div class="kh-modal-body">
+      <div class="kh-field">
+        <label class="kh-label" for="tok-value">{{t .Lang "acct.r.token"}}</label>
+        <div class="acc-secret">
+          <textarea class="kh-textarea mono" id="tok-value" rows="2" readonly autocomplete="off" spellcheck="false" data-action="tok-select"></textarea>
+          <button type="button" class="kh-btn primary" id="tok-copy" data-action="copy" data-copy="">{{icon "copy"}} {{t .Lang "common.copy"}}</button>
+        </div>
+      </div>
+      <div class="kh-field">
+        <span class="kh-label">{{t .Lang "acct.r.curl"}}</span>
+        <div class="acc-code">
+          <pre id="tok-curl" tabindex="0" aria-label="{{t .Lang "acct.r.curl"}}"></pre>
+          <button type="button" class="kh-btn xs icon subtle" id="tok-curl-copy" data-action="copy" data-copy="" aria-label="{{t .Lang "common.copy"}}" data-tip="{{t .Lang "common.copy"}}" data-tip-end>{{icon "copy"}}</button>
+        </div>
+      </div>
+    </div>
+    <div class="kh-modal-actions">
+      <button type="button" class="kh-btn primary" data-action="modal-close">{{icon "check"}} {{t .Lang "acct.r.done"}}</button>
+    </div>
+  </div>
+</div>
+{{template "shell_end" .}}
+<script src="/static/js/pages/account.js?v={{version}}" defer></script>
+</body>
+</html>

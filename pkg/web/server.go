@@ -372,6 +372,9 @@ func (s *Server) startSessionCleanup() {
 					s.loginGuard.Cleanup()
 				}
 				s.auditNoise.cleanup(30 * time.Minute)
+				if _, err := s.db.PurgeStaleAPITokens(time.Now().Add(-tokenRetention)); err != nil {
+					logger.Warn("API token temizliği başarısız: %v", err)
+				}
 			case <-s.cleanupStop:
 				return
 			}
@@ -532,6 +535,7 @@ func (s *Server) setupRoutes() {
 		protected.GET("/crawl", s.handleCrawlPage)
 		protected.GET("/users", s.requireRole("admin"), s.handleUsersPage)
 		protected.GET("/audit", s.requireRole("admin"), s.handleAuditPage)
+		protected.GET("/account", s.handleAccountPage)
 		protected.GET("/screenshot/file/:id", s.handleServeScreenshot)
 
 		// SSE Events - Gerçek zamanlı loglar için
@@ -542,14 +546,20 @@ func (s *Server) setupRoutes() {
 		api := protected.Group("/api")
 		api.Use(s.csrfMiddleware())
 		// Yazma işlemleri (POST/DELETE) en az analyst; viewer yalnız okur.
-		// İstisna: kendi parolasını değiştirme öz-hizmettir, her rol yapabilmeli
-		// (aksi halde viewer ele geçirilmiş parolasını asla döndüremez).
+		// İstisna: öz-hizmet uçları (kendi parolası, kendi API token'ları) her
+		// rol için açıktır (bkz. selfServiceRoutes). "read" kapsamlı API token
+		// viewer'a indirgenir ve burada yazmadan döner.
 		api.Use(func(c *gin.Context) {
-			if c.FullPath() == "/api/me/password" {
+			if selfServiceRoutes[c.FullPath()] {
 				c.Next()
 				return
 			}
 			if !isSafeMethod(c.Request.Method) && roleRank(c.GetString("role")) < roleRank("analyst") {
+				if c.GetString("tokenScope") == storage.TokenScopeRead {
+					s.auditDenied(c, "token_scope", storage.TokenScopeWrite)
+					c.AbortWithStatusJSON(403, gin.H{"error": "Okuma (read) kapsamlı API token yazma işlemi yapamaz"})
+					return
+				}
 				s.auditDenied(c, "role", "analyst")
 				c.AbortWithStatusJSON(403, gin.H{"error": "Salt-okunur (viewer) rol bu işlemi yapamaz"})
 				return
@@ -572,6 +582,11 @@ func (s *Server) setupRoutes() {
 			// Herkes: kimlik + kendi parolası
 			api.GET("/whoami", s.handleWhoami)
 			api.POST("/me/password", s.handleMyPassword)
+
+			// Kişisel API token'ları (yalnız etkileşimli oturum; token ile çağrılamaz)
+			api.GET("/tokens", s.handleTokensList)
+			api.POST("/tokens", s.handleTokenCreate)
+			api.POST("/tokens/:id/revoke", s.handleTokenRevoke)
 
 			api.POST("/update-criticality", s.handleUpdateCriticality)
 			api.POST("/analyze-result", s.handleAnalyzeResult)

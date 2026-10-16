@@ -30,7 +30,7 @@ classifies findings automatically, extracts IOCs, monitors sites and alerts on n
 - **One console, the whole loop:** search → classify → extract IOCs → watch → alert → export as STIX.
 - **Tor-only, local-first:** all outbound traffic goes through Tor; data lives only in your SQLite file. No CDN, no telemetry.
 - **Single binary, zero runtime deps:** pure Go (no CGO), six platforms, ready-made Docker image.
-- **Built for teams:** admin / analyst / viewer roles, case status and analyst notes, scheduled scans, webhooks (Slack / Discord / Teams / SIEM).
+- **Built for teams:** admin / analyst / viewer roles, case status and analyst notes, scheduled scans, webhooks (Slack / Discord / Teams / SIEM), personal API tokens for SOAR/SIEM automation.
 - **Analyst experience:** command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>), keyboard shortcuts, light/dark/system theme, Turkish + English UI, mobile-friendly.
 
 ## ✨ Features
@@ -91,11 +91,40 @@ The tool visits hostile sites and displays their text, so the UI assumes **untru
 - RBAC (admin / analyst / viewer) enforced server-side; navigation filtered server-side.
 - Tamper-evident audit log: every state-changing action (sign-ins, denied access, user/settings changes, deletions, exports) is recorded as "who did what, when, from where" in an append-only, SHA-256 hash-chained table; the admin-only `/audit` page shows where the chain breaks if a row is altered, deleted or truncated. Secrets (passwords, cookies, tokens, webhook paths) are never stored; retention via `AUDIT_RETENTION_DAYS` (default 365, `0` = forever) keeps the chain verifiable through an anchor.
 - CSRF on every write endpoint (including the search form); Fetch-Metadata-protected `GET /logout`.
+- Personal API tokens: `kh_` + 256 random bits, stored only as a SHA-256 hash and shown once; read/write scope can never exceed the owner's current role; account and security management endpoints refuse tokens (see [API](#-api)).
 - SSRF guards: expand / analyze / watch / render are `.onion`-only; webhook and screenshot targets cannot resolve to internal addresses; redirects are not followed.
 - Secrets masked in logs, API and HTML; CSV export protected against formula injection.
 - All assets embedded (no CDN), `govulncheck` on every push, Dependabot, SHA256 sums on releases; Docker runs as non-root with `no-new-privileges`.
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
+## 🔌 API
+
+Every `/api/` endpoint accepts either a browser session (cookie + `X-CSRF-Token` header on writes) or a **personal API token** — e.g. `GET /api/results?q=&minCriticality=&tag=&limit=&page=`, `GET /api/export/results?format=csv|json`, `GET /api/export/stix`, `GET /api/artifacts?type=&value=`, `POST /api/results/:id/case`, `GET|POST /api/watchlist`, `GET|POST /api/scheduled`, `GET /api/engines`, `GET /api/whoami`. `GET /healthz` is public.
+
+### Personal API tokens (SOAR / SIEM / scripts)
+
+Create a token on **My Account → API tokens** (`/account`). The value (`kh_…`) is shown **exactly once**; the server only keeps its SHA-256 hash. Send it in the `Authorization` header of every request:
+
+```bash
+export KH_TOKEN='kh_…'   # read it from a vault / secret store
+# Read: latest critical findings
+curl -sS -H "Authorization: Bearer $KH_TOKEN" \
+  'https://keywordhunter.example/api/results?minCriticality=4&limit=20'
+# Write ("write" scope): no CSRF header needed when no session cookie is sent
+curl -sS -X POST -H "Authorization: Bearer $KH_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"status":"investigating","note":"SOAR: triage opened"}' 'https://keywordhunter.example/api/results/42/case'
+# Check the token's identity and effective role
+curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/whoami
+```
+
+- **Scope:** `read` is downgraded to viewer and can never write; `write` acts with the owner's **current** role (demoting the user demotes the token immediately). Viewers can only create `read` tokens.
+- **Lifetime:** 7 / 30 / 90 / 180 / 365 days or no expiry; revocable at any time. Revoked, expired or unknown tokens, and tokens of disabled/deleted users, get `401 {"error": …}` with `WWW-Authenticate: Bearer`.
+- **`/api/` only, header only:** HTML pages, `/events` (SSE) and screenshot files ignore tokens; query-string values such as `?token=` are never read.
+- **CSRF rule:** only requests authenticated by a Bearer token *without* a session cookie skip CSRF. If a session cookie is also present, the session path is used and CSRF is required.
+- **Endpoints tokens cannot call** (`403 "this endpoint requires an interactive session"`): `/api/tokens*` (token management), `/api/me/*` (password, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook integrations). A leaked token cannot mint tokens, change passwords or manage accounts and integrations.
+- **Password changes and incident response:** when an admin resets a user's password, that user's sessions are signed out **and all of their API tokens are revoked** (`tokensRevoked` in the `user.password.reset` event). A user's own password change does not revoke tokens by default (so integrations keep working); if you suspect a compromise, tick "Also revoke all my API tokens" under **My Account → Password** (`"revokeTokens": true` in the `POST /api/me/password` body). Disabling a user also invalidates their tokens immediately.
+- **Audit:** token creation/revocation (`token.create`, `token.revoke`), rejected token attempts (`auth.token.failure`) and **every audited action** performed with a token (writes, exports, access denials) are recorded with `auth_method=token` and the token prefix (`kh_XXXXXXX`). Read-only requests (e.g. `GET /api/results`) do not produce their own audit rows; they only update the token's last-used time and IP (at most once a minute), shown in the token list.
 
 ## 🧑‍💻 Development
 

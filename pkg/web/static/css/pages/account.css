@@ -1,0 +1,104 @@
+/* Hesabım — profil kimlik kartı, parola formu, API token tablosu, kapsam kartları, tek seferlik token gösterimi */
+.kh-grid.acc-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); align-items: start; }
+@media (max-width: 860px) { .kh-grid.acc-top { grid-template-columns: minmax(0, 1fr); } }
+
+/* Profil */
+.acc-id { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; min-width: 0; }
+.acc-av { --c: var(--primary); width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 50%; font: 800 1rem var(--font-sans); letter-spacing: .02em; color: #fff; background: var(--brand-grad); box-shadow: 0 0 0 3px var(--surface-solid), 0 0 0 4px color-mix(in srgb, var(--c) 70%, transparent); }
+.acc-av.r-admin { --c: var(--err); } .acc-av.r-analyst { --c: var(--sev-1); } .acc-av.r-viewer { --c: var(--violet); }
+.acc-name { font-size: 1.12rem; font-weight: 800; color: var(--text); letter-spacing: -.01em; margin-bottom: 5px; }
+.acc-role.r-admin { --c: var(--err); } .acc-role.r-analyst { --c: var(--sev-1); } .acc-role.r-viewer { --c: var(--violet); }
+.acc-dl { display: grid; gap: 0; margin: 0; }
+.acc-dl > div { display: grid; grid-template-columns: minmax(96px, 38%) 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: .84rem; }
+.acc-dl dt { color: var(--text-3); font-weight: 600; }
+.acc-dl dd { margin: 0; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+
+/* Parola */
+.acc-pw-lead { margin: -6px 0 14px; font-size: .82rem; color: var(--text-2); line-height: 1.55; }
+.acc-pw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+.acc-pw-grid .acc-pw-current { grid-column: 1 / -1; }
+@media (max-width: 560px) { .acc-pw-grid { grid-template-columns: minmax(0, 1fr); } }
+.acc-pw-revoke { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.acc-pw-revoke .kh-hint { padding-left: 25px; }
+.acc-load-err { align-items: center; }
+.acc-load-err > span { flex: 1; min-width: 0; }
+.acc-form-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+@media (max-width: 560px) { .acc-form-actions .kh-btn { width: 100%; justify-content: center; } }
+
+/* Token listesi */
+.acc-lead { padding: 14px 20px 0; margin: 0; font-size: .84rem; color: var(--text-2); line-height: 1.55; }
+.acc-all { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; font-weight: 600; color: var(--text-2); }
+.acc-tok-table { margin-top: 8px; }
+.acc-tok-table td { vertical-align: middle; }
+.acc-tok-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 280px; }
+.acc-tok-name b { color: var(--text); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-tok-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .72rem; color: var(--text-3); }
+.acc-tok-meta .kh-mono { color: var(--text-2); }
+.acc-owner { display: inline-flex; align-items: center; gap: 4px; }
+.acc-owner .ico { width: 12px; height: 12px; }
+.acc-sub { display: block; font-size: .7rem; color: var(--text-3); margin-top: 2px; }
+.acc-tok-table tr.is-inactive .acc-tok-name, .acc-tok-table tr.is-inactive td:nth-child(2), .acc-tok-table tr.is-inactive td:nth-child(3),
+.acc-tok-table tr.is-inactive td:nth-child(4), .acc-tok-table tr.is-inactive td:nth-child(5) { opacity: .55; }
+.acc-exp-soon { color: var(--warn); }
+.acc-tok-table td:last-child { width: 1%; }
+/* Orta ekran (≤960): Oluşturma + Bitiş sütunları gizlenir (bitiş ad hücresine taşınır), iptal düğmesi yalnız ikon.
+   Dar ekran (≤720): kapsam + durum da gizlenir, rozetler ad hücresine taşınır; sabit düzen tabloyu karta sığdırır.
+   Amaç: hiçbir genişlikte yatay kaydırma ya da ekran dışında kalan iptal düğmesi olmaması. */
+.acc-sm-only, .acc-md-only { display: none; }
+@media (max-width: 960px) {
+  .acc-hide-md { display: none !important; }
+  .acc-tok-meta.acc-md-only { display: flex; }
+  .acc-tok-name { max-width: 220px; }
+}
+@media (max-width: 720px) {
+  .acc-tok-meta.acc-sm-only { display: flex; margin-top: 3px; }
+  .acc-tok-table { table-layout: fixed; }
+  .acc-tok-table th:nth-child(4) { width: 36%; white-space: normal; }
+  .acc-tok-table th:last-child { width: 52px; }
+  .acc-tok-table th:last-child, .acc-tok-table td:last-child { padding-left: 4px; padding-right: 10px; }
+  .acc-tok-table td:nth-child(4) { white-space: normal; overflow-wrap: anywhere; }
+  .acc-tok-name { max-width: none; }
+}
+
+/* Kullanım / curl */
+.acc-how .kh-hint { font-size: .82rem; color: var(--text-2); }
+.acc-code { position: relative; margin-top: 12px; border-radius: var(--radius-md); background: var(--surface-hover); border: 1px solid var(--border); }
+/* Kod satırları sarılmaz (kopyalanacak komut bozulmadan okunur); dar ekranda yatay kaydırılır */
+.acc-code pre { margin: 0; padding: 12px 48px 12px 14px; font-size: .78rem; line-height: 1.6; color: var(--text); white-space: pre; overflow-x: auto; border-radius: inherit; }
+.acc-code pre:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* Telefon: kaydırmadan okunabilsin diye sarılır (kopyala düğmesi birebir metni verir) */
+@media (max-width: 560px) { .acc-code pre { white-space: pre-wrap; overflow-wrap: anywhere; } }
+.acc-code > .kh-btn { position: absolute; top: 7px; right: 7px; }
+.acc-notes { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.acc-notes li { display: flex; gap: 10px; align-items: flex-start; font-size: .82rem; color: var(--text-2); line-height: 1.55; }
+.acc-notes li > .ico { flex: none; margin-top: 2px; color: var(--primary); }
+
+/* 2FA ayrılmış alanı: boşken yer kaplamaz */
+.acc-2fa:empty { display: none; }
+
+/* Kapsam seçimi (radyo kartları) */
+.acc-scopes { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.acc-scopes legend { margin-bottom: 8px; }
+.acc-scope-opt { --c: var(--primary); position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--surface-hover); cursor: pointer; transition: border-color var(--dur-2), background var(--dur-2), box-shadow var(--dur-2); }
+.acc-scope-opt.s-read { --c: var(--info); } .acc-scope-opt.s-write { --c: var(--warn); }
+.acc-scope-opt:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--border-strong)); }
+.acc-scope-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.acc-scope-opt:has(input:checked) { border-color: var(--c); background: color-mix(in srgb, var(--c) 9%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 14%, transparent); }
+.acc-scope-opt:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.acc-scope-opt.is-disabled { cursor: not-allowed; opacity: .6; }
+.acc-scope-ic { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); }
+.acc-scope-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.acc-scope-txt b { font-size: .88rem; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.acc-scope-txt b code { font-size: .7rem; font-weight: 600; color: var(--c); padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--c) 12%, transparent); }
+.acc-scope-txt small { font-size: .76rem; color: var(--text-2); line-height: 1.45; }
+.acc-scope-opt::after { content: ''; margin-left: auto; width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid var(--border-strong); transition: border var(--dur-2), background var(--dur-2); }
+.acc-scope-opt:has(input:checked)::after { border: 5px solid var(--c); background: var(--surface-solid); }
+
+/* Tek seferlik token gösterimi (geniş: curl satırı tam token ile sığsın) */
+.kh-modal.acc-reveal { width: 720px; }
+#token-reveal .kh-alert { margin-top: 12px; }
+.acc-secret { display: flex; gap: 8px; align-items: stretch; }
+/* Token tamamı görünsün: tek satırlık input kaydırıp başını gizlerdi; textarea sarar */
+.acc-secret .kh-textarea { flex: 1; min-width: 0; min-height: 0; resize: none; field-sizing: content; font-size: .84rem; line-height: 1.5; letter-spacing: .01em; word-break: break-all; color: var(--text); background: color-mix(in srgb, var(--ok) 6%, var(--surface-hover)); border-color: color-mix(in srgb, var(--ok) 40%, var(--border-strong)); }
+.acc-secret .kh-btn { flex: none; }
+@media (max-width: 560px) { .acc-secret { flex-direction: column; } .acc-secret .kh-btn { justify-content: center; } }

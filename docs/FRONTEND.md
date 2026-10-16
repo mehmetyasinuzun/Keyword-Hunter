@@ -84,7 +84,8 @@ içindeki `navLayout`'tadır.
 
 Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 (`data-copy`, `data-copy-label`), `toggle-switch`, `theme-cycle`, `theme-set`,
-`lang-toggle`, `palette`, `shortcuts`, `reload`.
+`lang-toggle`, `palette`, `shortcuts`, `reload`, `menu-toggle` (`data-target`),
+`pw-eye` (`data-target` = parola input id; göster/gizle).
 
 ## Çekirdek API (`static/js/app.js`)
 
@@ -94,7 +95,7 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 | `KH.toast(msg, 'ok'\|'err'\|'warn'\|'info')` | Bildirim |
 | `KH.confirm({title, message, danger})` | `Promise<boolean>` |
 | `KH.prompt({title, label, value, type, multiline})` | `window.prompt` yerine; `Promise<string\|null>` |
-| `KH.openModal(id)` / `KH.closeModal(id)` | Odak tuzaklı modal |
+| `KH.openModal(id, {returnFocus})` / `KH.closeModal(id)` | Odak tuzaklı modal; `returnFocus` kapanınca odağın döneceği öğe (varsayılan: açılıştaki odak). Overlay'de `data-static` varsa arka plan tıklaması ve Esc kapatmaz (yalnız açık bir `modal-close` düğmesi; ör. bir kez gösterilen gizli değerler) |
 | `KH.esc`, `KH.html\`…\``, `KH.raw`, `KH.render(el, html)` | Güvenli HTML |
 | `KH.icon(name, cls)` | Sprite ikonu |
 | `KH.sev(n)`, `KH.tags(str)`, `KH.fmtTime`, `KH.ago`, `KH.num`, `KH.short`, `KH.pctText(n)` | Biçimleme (dil duyarlı) |
@@ -103,6 +104,7 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 | `KH.t(key)`, `KH.tr(tr, en)`, `KH.lang` | i18n |
 | `KH.palette()` + `kh:theme` olayı | Grafikler için tema renkleri |
 | `KH.countUp(el)`, `KH.enhance(scope)` | `data-countup`, `data-ring`, `data-bar`, `.kh-reveal` |
+| `KH.pwStrength(v)`, `KH.pwMeter(meter, label, v)` | Parola gücü (0–4) + `.pw-meter` / `.kh-pw` alanını boyar |
 
 ## Bileşenler (kh.css)
 

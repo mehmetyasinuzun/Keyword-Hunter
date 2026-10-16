@@ -129,7 +129,13 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 		} else {
 			revoked, _ = res.RowsAffected()
 		}
-		s.audit(c, "user.password.reset", "user:"+target.Username, map[string]any{"userId": target.ID, "sessionsRevoked": revoked}, true)
+		// Admin sıfırlaması bir olay müdahalesi adımıdır: ele geçirilmiş bir
+		// oturumla basılmış API token'ları da sıfırlamadan sağ çıkmamalı.
+		tokensRevoked, err := s.db.RevokeUserAPITokens(target.ID)
+		if err != nil {
+			logger.Error("API TOKEN REVOKE FAILED (parola sıfırlama, kullanıcı=%s): %v", target.Username, err)
+		}
+		s.audit(c, "user.password.reset", "user:"+target.Username, map[string]any{"userId": target.ID, "sessionsRevoked": revoked, "tokensRevoked": tokensRevoked}, true)
 	}
 	changes := map[string]any{"userId": target.ID}
 	if req.Role != nil {
@@ -208,12 +214,19 @@ func auditErrKind(err, known error, kind string) string {
 	return "internal"
 }
 
-// handleWhoami mevcut oturumun kullanıcı adı ve rolünü döndürür (UI yetki gizleme).
+// handleWhoami mevcut kimliğin kullanıcı adı, etkin rolü ve kimlik yöntemini
+// döndürür (UI yetki gizleme; betikler token'ı bununla sınar).
 func (s *Server) handleWhoami(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"username": c.GetString("username"),
-		"role":     c.GetString("role"),
-	})
+	out := gin.H{
+		"username":   c.GetString("username"),
+		"role":       c.GetString("role"),
+		"authMethod": c.GetString("authMethod"),
+	}
+	if scope := c.GetString("tokenScope"); scope != "" {
+		out["tokenScope"] = scope
+		out["tokenPrefix"] = c.GetString("tokenPrefix")
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // handleMyPassword kullanıcının kendi parolasını değiştirmesi (her rol).
@@ -221,6 +234,10 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 	var req struct {
 		Current string `json:"current"`
 		New     string `json:"new"`
+		// RevokeTokens true ise kullanıcının tüm API token'ları da iptal edilir.
+		// Varsayılan kapalıdır: rutin parola değişikliği entegrasyonları
+		// bozmasın; ele geçirme şüphesinde kullanıcı bunu açıkça seçer.
+		RevokeTokens bool `json:"revokeTokens"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
@@ -285,7 +302,23 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 			}
 		}
 	}
+	tokensRevoked := int64(0)
+	if req.RevokeTokens && u != nil {
+		n, err := s.db.RevokeUserAPITokens(u.ID)
+		if err != nil {
+			// Parola değişti; token iptali başarısızsa kullanıcı bunu bilmeli.
+			logger.Error("API TOKEN REVOKE FAILED (öz parola, kullanıcı=%s): %v", username, err)
+			s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "token_revoke"}, false)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Parola değişti ancak API token'ları iptal edilemedi; Hesabım sayfasından tek tek iptal edin"})
+			return
+		}
+		tokensRevoked = n
+	}
 	logger.Info("SELF PASSWORD CHANGE: %s", username)
-	s.audit(c, "me.password.change", "user:"+username, nil, true)
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	var details map[string]any
+	if req.RevokeTokens {
+		details = map[string]any{"tokensRevoked": tokensRevoked}
+	}
+	s.audit(c, "me.password.change", "user:"+username, details, true)
+	c.JSON(http.StatusOK, gin.H{"success": true, "tokensRevoked": tokensRevoked})
 }

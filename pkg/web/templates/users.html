@@ -75,8 +75,8 @@
         </div>
         <div class="kh-field">
           <label class="kh-label" for="u-pass">{{t .Lang "usr.m.password"}} <span class="req">*</span></label>
-          <div class="kh-input-icon u-pw">{{icon "lock"}}<input class="kh-input" id="u-pass" type="password" minlength="8" maxlength="256" required autocomplete="new-password" data-input="u-strength">
-            <button type="button" class="kh-iconbtn u-eye" data-action="u-eye" data-target="u-pass" aria-label="{{t .Lang "usr.m.show"}}" aria-pressed="false">{{icon "eye"}}</button>
+          <div class="kh-input-icon kh-pw">{{icon "lock"}}<input class="kh-input" id="u-pass" type="password" minlength="8" maxlength="256" required autocomplete="new-password" data-input="u-strength">
+            <button type="button" class="kh-iconbtn kh-pw-eye" data-action="pw-eye" data-target="u-pass" aria-label="{{t .Lang "usr.m.show"}}" aria-pressed="false">{{icon "eye"}}</button>
           </div>
           <div class="pw-meter" id="u-meter" data-level="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <span class="kh-hint" id="u-meter-l">{{t .Lang "usr.m.passwordHint"}}</span>

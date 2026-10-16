@@ -51,7 +51,7 @@ var auditCategories = []struct {
 	Prefixes []string
 }{
 	{"auth", []string{"auth.", "access."}},
-	{"user", []string{"user.", "me."}},
+	{"user", []string{"user.", "me.", "token."}},
 	{"export", []string{"export."}},
 	{"system", []string{"settings.", "alert.", "engine.", "tor.", "site_profile.", "audit."}},
 	{"data", []string{"results.", "result.", "search.", "tagging.", "watchlist.", "scheduled.", "crawl.", "screenshot.", "graph."}},
@@ -103,6 +103,7 @@ func (s *Server) recordAudit(c *gin.Context, e storage.AuditEvent, details map[s
 			logger.Error("AUDIT PANIC (%s): %v", e.Action, r)
 		}
 	}()
+	tokenPrefix, tokenID := "", int64(0)
 	if c != nil {
 		if e.Actor == "" {
 			e.Actor = c.GetString("username")
@@ -116,6 +117,9 @@ func (s *Server) recordAudit(c *gin.Context, e storage.AuditEvent, details map[s
 		if e.IP == "" {
 			e.IP = c.ClientIP()
 		}
+		if e.AuthMethod == storage.AuthMethodToken {
+			tokenPrefix, tokenID = c.GetString("tokenPrefix"), c.GetInt64("tokenID")
+		}
 	}
 	if e.AuthMethod == "" {
 		e.AuthMethod = storage.AuthMethodAnonymous
@@ -123,8 +127,23 @@ func (s *Server) recordAudit(c *gin.Context, e storage.AuditEvent, details map[s
 			e.AuthMethod = storage.AuthMethodSession
 		}
 	}
+	var clean map[string]any
 	if len(details) > 0 {
-		b, err := json.Marshal(sanitizeAuditDetails(details, 0))
+		clean = sanitizeAuditDetails(details, 0)
+	}
+	// API token ile yapılan isteklerde hangi token'ın kullanıldığı (yalnız
+	// gösterim öneki + kimlik; asla token'ın kendisi) her olaya eklenir.
+	// Temizlikten SONRA eklenir: anahtar adı "token" içerdiği için aksi halde
+	// gizlenirdi; önek tek başına kimlik doğrulamaz.
+	if tokenPrefix != "" {
+		if clean == nil {
+			clean = make(map[string]any, 2)
+		}
+		clean["tokenPrefix"] = tokenPrefix
+		clean["tokenId"] = tokenID
+	}
+	if len(clean) > 0 {
+		b, err := json.Marshal(clean)
 		if err != nil {
 			logger.Error("AUDIT DETAILS (%s) serileştirilemedi: %v", e.Action, err)
 		} else {

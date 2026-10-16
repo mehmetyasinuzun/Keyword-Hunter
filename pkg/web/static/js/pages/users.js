@@ -16,28 +16,6 @@
         return (s ? s.slice(0, 2) : '?').toLocaleUpperCase(KH.lang === 'en' ? 'en' : 'tr');
     }
 
-    // ── Parola gücü (0–4) ───────────────────────────────────────────────
-    function strength(v) {
-        if (!v) return 0;
-        let s = 0;
-        if (v.length >= 8) s++;
-        if (v.length >= 12) s++;
-        if (/[a-zçğıöşü]/.test(v) && /[A-ZÇĞİÖŞÜ]/.test(v)) s++;
-        if (/\d/.test(v)) s++;
-        if (/[^\p{L}\p{N}]/u.test(v)) s++;
-        if (v.length < 8) return 1;
-        return Math.max(1, Math.min(4, s - 1));
-    }
-    function paintMeter(meter, label, v) {
-        const lv = strength(v);
-        meter.dataset.level = String(lv);
-        const names = [T('En az 8 karakter; harf, rakam ve sembol karıştırın.', 'At least 8 characters; mix letters, digits and symbols.'),
-            v.length < 8 ? T('Çok kısa — en az 8 karakter', 'Too short — at least 8 characters') : T('Zayıf', 'Weak'),
-            T('Orta', 'Fair'), T('Güçlü', 'Strong'), T('Çok güçlü', 'Very strong')];
-        label.textContent = names[lv];
-        label.className = 'kh-hint pw-label lv-' + lv;
-    }
-
     // ── Liste ───────────────────────────────────────────────────────────
     function row(u) {
         const self = isSelf(u);
@@ -95,18 +73,11 @@
     KH.act({
         'u-new': () => {
             $('user-form').reset();
-            paintMeter($('u-meter'), $('u-meter-l'), '');
+            KH.pwMeter($('u-meter'), $('u-meter-l'), '');
             KH.openModal('user-modal');
         },
         'u-filter': KH.debounce(render, 120),
-        'u-strength': (el) => paintMeter($('u-meter'), $('u-meter-l'), el.value),
-        'u-eye': (btn) => {
-            const input = $(btn.dataset.target);
-            const show = input.type === 'password';
-            input.type = show ? 'text' : 'password';
-            btn.setAttribute('aria-pressed', String(show));
-            input.focus();
-        },
+        'u-strength': (el) => KH.pwMeter($('u-meter'), $('u-meter-l'), el.value),
 
         'u-create': async () => {
             const btn = $('u-submit');
@@ -163,12 +134,12 @@
             const p = await KH.prompt({
                 title: T('Parolayı sıfırla', 'Reset password'), icon: 'key', type: 'password', maxLength: 256,
                 label: T('“' + name + '” için yeni parola', 'New password for “' + name + '”'),
-                hint: T('En az 8 karakter. Kullanıcının açık oturumları kapatılır.', 'At least 8 characters. The user’s open sessions are signed out.'),
+                hint: T('En az 8 karakter. Kullanıcının açık oturumları kapatılır ve tüm API token’ları iptal edilir.', 'At least 8 characters. The user’s open sessions are signed out and all of their API tokens are revoked.'),
                 okText: T('Parolayı güncelle', 'Update password')
             });
             if (p == null || p === '') return;
             if (p.length < 8) { KH.toast(T('Parola en az 8 karakter olmalı', 'Password must be at least 8 characters'), 'warn'); return; }
-            try { await update(btn.dataset.id, { password: p }); KH.toast(T('Parola güncellendi; kullanıcının oturumları kapatıldı', 'Password updated; the user’s sessions were signed out'), 'ok'); }
+            try { await update(btn.dataset.id, { password: p }); KH.toast(T('Parola güncellendi; kullanıcının oturumları kapatıldı ve API token’ları iptal edildi', 'Password updated; the user’s sessions were signed out and API tokens revoked'), 'ok'); }
             catch (e) { KH.toast(e.message, 'err'); }
         },
 

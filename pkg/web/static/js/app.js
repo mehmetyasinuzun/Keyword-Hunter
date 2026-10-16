@@ -126,7 +126,8 @@
     function trapKeys(e) {
         const top = modalStack[modalStack.length - 1];
         if (!top) return;
-        if (e.key === 'Escape') { e.preventDefault(); top.close(); return; }
+        // data-static: Esc kapatmaz (yalnız açık bir düğme kapatır; ör. tek seferlik gizli değer)
+        if (e.key === 'Escape') { e.preventDefault(); if (!top.el.hasAttribute('data-static')) top.close(); return; }
         if (e.key === 'Tab') {
             const f = Array.from(top.el.querySelectorAll(focusables)).filter(x => x.offsetParent !== null);
             if (!f.length) return;
@@ -136,8 +137,8 @@
         }
     }
     doc.addEventListener('keydown', trapKeys, true);
-    function openOverlay(overlay, onClose) {
-        const prev = doc.activeElement;
+    function openOverlay(overlay, onClose, returnFocus) {
+        const prev = returnFocus || doc.activeElement;
         const entry = {
             el: overlay,
             close: function () {
@@ -155,10 +156,11 @@
         if (auto) setTimeout(() => auto.focus(), 60);
         return entry;
     }
-    KH.openModal = function (id) {
+    /** opts.returnFocus: kapanınca odağın döneceği öğe (varsayılan: açılıştaki odak). */
+    KH.openModal = function (id, opts) {
         const m = typeof id === 'string' ? doc.getElementById(id) : id;
         if (!m || m.classList.contains('open')) return;
-        openOverlay(m);
+        openOverlay(m, null, opts && opts.returnFocus);
     };
     KH.closeModal = function (id) {
         const m = typeof id === 'string' ? doc.getElementById(id) : id;
@@ -167,7 +169,7 @@
         if (entry) entry.close(); else m.classList.remove('open');
     };
     doc.addEventListener('mousedown', (e) => {
-        if (e.target.classList && e.target.classList.contains('kh-modal-overlay')) KH.closeModal(e.target);
+        if (e.target.classList && e.target.classList.contains('kh-modal-overlay') && !e.target.hasAttribute('data-static')) KH.closeModal(e.target);
     });
 
     function dialog(opts, bodyHTML, resolveValue) {
@@ -311,6 +313,34 @@
         }
     };
 
+    // ── Parola alanı: güç ölçer (0–4) ───────────────────────────────────
+    /** Kaba parola gücü (0 = boş, 1 = zayıf/kısa … 4 = çok güçlü). Sunucu yalnız uzunluğu zorlar. */
+    KH.pwStrength = function (v) {
+        v = String(v || '');
+        if (!v) return 0;
+        if (v.length < 8) return 1;
+        let s = 0;
+        if (v.length >= 8) s++;
+        if (v.length >= 12) s++;
+        if (/[a-zçğıöşü]/.test(v) && /[A-ZÇĞİÖŞÜ]/.test(v)) s++;
+        if (/\d/.test(v)) s++;
+        if (/[^\p{L}\p{N}]/u.test(v)) s++;
+        return Math.max(1, Math.min(4, s - 1));
+    };
+    /** .pw-meter + etiket öğesini parolaya göre boyar. */
+    KH.pwMeter = function (meter, label, v) {
+        v = String(v || '');
+        const lv = KH.pwStrength(v);
+        if (meter) meter.dataset.level = String(lv);
+        if (!label) return lv;
+        const names = [KH.tr('En az 8 karakter; harf, rakam ve sembol karıştırın.', 'At least 8 characters; mix letters, digits and symbols.'),
+            v.length < 8 ? KH.tr('Çok kısa — en az 8 karakter', 'Too short — at least 8 characters') : KH.tr('Zayıf', 'Weak'),
+            KH.tr('Orta', 'Fair'), KH.tr('Güçlü', 'Strong'), KH.tr('Çok güçlü', 'Very strong')];
+        label.textContent = names[lv];
+        label.className = 'kh-hint pw-label lv-' + lv;
+        return lv;
+    };
+
     // ── Tema ────────────────────────────────────────────────────────────
     KH.theme = function () { return root.dataset.theme || 'auto'; };
     /** Etkin (çözümlenmiş) tema: 'light' | 'dark' */
@@ -394,7 +424,10 @@
             if (on) writeCookie('sb', '1', 365); else doc.cookie = 'sb=;path=/;max-age=0';
         },
         'menu-toggle': (el, e) => {
-            e.stopPropagation();
+            // Dinleyicilerin hepsi document üzerinde: stopPropagation aşağıdaki
+            // "dışarı tıklayınca kapat" dinleyicisini durdurmaz, menü aynı
+            // tıklamada açılıp kapanırdı. khKeepMenu bu tıklamayı muaf tutar.
+            e.khKeepMenu = true;
             const m = doc.getElementById(el.dataset.target); if (!m) return;
             const open = !m.classList.contains('open');
             closeMenus(); m.classList.toggle('open', open); el.setAttribute('aria-expanded', String(open));
@@ -402,7 +435,13 @@
         },
         'palette': () => Palette.open(),
         'shortcuts': () => showShortcuts(),
-        'my-password': () => changeMyPassword(),
+        'pw-eye': (btn) => {
+            const input = doc.getElementById(btn.dataset.target); if (!input) return;
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.setAttribute('aria-pressed', String(show));
+            input.focus();
+        },
         'reload': () => location.reload(),
         'back-top': () => window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' })
     });
@@ -413,17 +452,6 @@
     // e.khKeepMenu: aynı tıklamada bir menü açan sayfalar (ör. dokunmatik bağlam menüsü) kapanmayı atlatır
     doc.addEventListener('click', (e) => { if (!e.target.closest('.kh-menu') && !e.khKeepMenu) closeMenus(); });
     doc.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenus(); root.classList.remove('nav-open'); } });
-
-    async function changeMyPassword() {
-        closeMenus();
-        const current = await KH.prompt({ title: KH.t('shell.myPassword'), label: KH.tr('Mevcut parola', 'Current password'), type: 'password', icon: 'lock', okText: KH.tr('Devam', 'Next') });
-        if (!current) return;
-        const next = await KH.prompt({ title: KH.t('shell.myPassword'), label: KH.tr('Yeni parola (en az 8 karakter)', 'New password (min 8 chars)'), type: 'password', icon: 'lock', hint: KH.tr('Diğer oturumlarınız kapanır.', 'Your other sessions will be signed out.') });
-        if (!next) return;
-        if (next.length < 8) { KH.toast(KH.tr('Parola en az 8 karakter olmalı', 'Password must be at least 8 characters'), 'warn'); return; }
-        try { await KH.api('/api/me/password', { method: 'POST', body: { current, new: next } }); KH.toast(KH.tr('Parola güncellendi', 'Password updated'), 'ok'); }
-        catch (e) { KH.toast(e.message, 'err'); }
-    }
 
     // ── Komut paleti (Ctrl/⌘+K) ─────────────────────────────────────────
     const Palette = {
@@ -460,7 +488,10 @@
                 { sec: KH.t('pal.action'), icon: 'contrast', label: KH.tr('Tema: Açık / Koyu / Sistem', 'Theme: Light / Dark / System'), run: () => KH.actions['theme-cycle']() },
                 { sec: KH.t('pal.action'), icon: 'language', label: KH.t('pal.toggleLang'), run: () => KH.actions['lang-toggle']() },
                 { sec: KH.t('pal.action'), icon: 'keyboard', label: KH.t('shell.shortcuts'), hint: '?', run: () => showShortcuts() },
-                { sec: KH.t('pal.action'), icon: 'lock', label: KH.t('shell.myPassword'), run: () => changeMyPassword() },
+                // Hesabım yan menüde değil (kullanıcı menüsünde): palete eylem olarak eklenir
+                { sec: KH.t('pal.goto'), icon: 'user', label: KH.t('nav.account'), run: () => { location.href = '/account'; } },
+                { sec: KH.t('pal.action'), icon: 'key', label: KH.t('pal.newToken'), run: () => accountGo('new-token', 'tok-new') },
+                { sec: KH.t('pal.action'), icon: 'lock', label: KH.t('pal.changePassword'), run: () => accountGo('password', 'acc-focus-password') },
                 { sec: KH.t('pal.action'), icon: 'logout', label: KH.t('pal.logout'), run: () => { const f = doc.querySelector('form[action="/logout"]'); if (f) f.submit(); } }
             ];
             return nav.concat(acts);
@@ -503,6 +534,11 @@
         close() { if (this.entry) this.entry.close(); this.entry = null; }
     };
     KH.openPalette = (q) => Palette.open(q);
+    /** Hesabım sayfasındaki bir bölüme git: sayfa zaten açıksa eylemi doğrudan çalıştır. */
+    function accountGo(hash, action) {
+        if (location.pathname === '/account' && typeof KH.actions[action] === 'function') KH.actions[action]();
+        else location.href = '/account#' + hash;
+    }
 
     function showShortcuts() {
         closeMenus();

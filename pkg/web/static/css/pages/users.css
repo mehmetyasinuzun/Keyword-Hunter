@@ -1,4 +1,4 @@
-/* Kullanıcılar — avatar hücresi, rol renkleri, rol kartları, parola gücü */
+/* Kullanıcılar — avatar hücresi, rol renkleri, rol kartları (parola alanı + güç ölçer: kh.css) */
 .u-filter { width: 200px; }
 .u-filter .kh-input { padding-left: 34px; }
 .u-filter > .ico { left: 11px; width: 14px; height: 14px; }
@@ -21,19 +21,6 @@
 .u-actions .kh-btn:last-child[data-tip]::after { left: auto; right: 0; transform: translateY(4px); }
 .u-actions .kh-btn:last-child[data-tip]:hover::after, .u-actions .kh-btn:last-child[data-tip]:focus-visible::after { transform: none; }
 .u-actions .kh-btn:disabled[data-tip] { pointer-events: auto; }
-
-/* Parola alanı */
-.u-pw .kh-input { padding-right: 46px; }
-.u-eye { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; }
-.u-eye[aria-pressed="true"] { color: var(--primary); }
-.pw-meter { --c: var(--border-strong); display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 2px; }
-.pw-meter i { height: 5px; border-radius: 999px; background: var(--surface-3); position: relative; overflow: hidden; }
-.pw-meter i::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--c); transform: scaleX(0); transform-origin: left; transition: transform var(--dur-3) var(--ease-out), background var(--dur-3); }
-.pw-meter[data-level="1"] { --c: var(--err); } .pw-meter[data-level="2"] { --c: var(--warn); } .pw-meter[data-level="3"] { --c: var(--ok); } .pw-meter[data-level="4"] { --c: var(--sev-2); }
-.pw-meter[data-level="1"] i:nth-child(-n+1)::after, .pw-meter[data-level="2"] i:nth-child(-n+2)::after,
-.pw-meter[data-level="3"] i:nth-child(-n+3)::after, .pw-meter[data-level="4"] i::after { transform: scaleX(1); }
-.pw-meter i:nth-child(2)::after { transition-delay: 40ms; } .pw-meter i:nth-child(3)::after { transition-delay: 80ms; } .pw-meter i:nth-child(4)::after { transition-delay: 120ms; }
-.pw-label.lv-1 { color: var(--err); } .pw-label.lv-2 { color: var(--warn); } .pw-label.lv-3 { color: var(--ok); } .pw-label.lv-4 { color: var(--sev-2); }
 
 /* Rol seçimi */
 .u-roles { border: 0; display: grid; gap: 8px; }

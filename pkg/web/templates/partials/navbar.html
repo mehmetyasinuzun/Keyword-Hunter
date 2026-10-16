@@ -59,7 +59,7 @@
           </div>
           <button class="kh-menu-item" type="button" data-action="palette" role="menuitem">{{icon "command"}} {{t .Lang "shell.palette"}}<span class="ml-auto"><kbd>Ctrl</kbd> <kbd>K</kbd></span></button>
           <button class="kh-menu-item" type="button" data-action="shortcuts" role="menuitem">{{icon "keyboard"}} {{t .Lang "shell.shortcuts"}}<span class="ml-auto"><kbd>?</kbd></span></button>
-          <button class="kh-menu-item" type="button" data-action="my-password" role="menuitem">{{icon "lock"}} {{t .Lang "shell.myPassword"}}</button>
+          <a class="kh-menu-item{{if eq .ActivePage "account"}} active{{end}}" href="/account" role="menuitem"{{if eq .ActivePage "account"}} aria-current="page"{{end}}>{{icon "user"}} {{t .Lang "nav.account"}}</a>
           <div class="kh-menu-sep"></div>
           <form method="POST" action="/logout"><input type="hidden" name="_csrf" value="{{.CSRF}}">
             <button class="kh-menu-item danger" type="submit" role="menuitem">{{icon "logout"}} {{t .Lang "nav.logout"}}</button>

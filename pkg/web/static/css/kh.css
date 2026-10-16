@@ -533,6 +533,18 @@ input[type="range"] { accent-color: var(--primary); width: 100%; }
 .kh-switch:disabled { opacity: .5; cursor: not-allowed; }
 .kh-switch.on, .kh-switch[aria-checked="true"] { background: var(--ok); }
 .kh-switch.on::after, .kh-switch[aria-checked="true"]::after { transform: translateX(18px); }
+/* Parola alanı (göster/gizle düğmesi: data-action="pw-eye" data-target="<input id>") + güç ölçer (KH.pwMeter) */
+.kh-pw .kh-input { padding-right: 46px; }
+.kh-pw-eye { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; }
+.kh-pw-eye[aria-pressed="true"] { color: var(--primary); }
+.pw-meter { --c: var(--border-strong); display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 2px; }
+.pw-meter i { height: 5px; border-radius: 999px; background: var(--surface-3); position: relative; overflow: hidden; }
+.pw-meter i::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--c); transform: scaleX(0); transform-origin: left; transition: transform var(--dur-3) var(--ease-out), background var(--dur-3); }
+.pw-meter[data-level="1"] { --c: var(--err); } .pw-meter[data-level="2"] { --c: var(--warn); } .pw-meter[data-level="3"] { --c: var(--ok); } .pw-meter[data-level="4"] { --c: var(--sev-2); }
+.pw-meter[data-level="1"] i:nth-child(-n+1)::after, .pw-meter[data-level="2"] i:nth-child(-n+2)::after,
+.pw-meter[data-level="3"] i:nth-child(-n+3)::after, .pw-meter[data-level="4"] i::after { transform: scaleX(1); }
+.pw-meter i:nth-child(2)::after { transition-delay: 40ms; } .pw-meter i:nth-child(3)::after { transition-delay: 80ms; } .pw-meter i:nth-child(4)::after { transition-delay: 120ms; }
+.pw-label.lv-1 { color: var(--err); } .pw-label.lv-2 { color: var(--warn); } .pw-label.lv-3 { color: var(--ok); } .pw-label.lv-4 { color: var(--sev-2); }
 .kh-inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .kh-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .kh-toolbar .spacer, .kh-inline .spacer { flex: 1; }

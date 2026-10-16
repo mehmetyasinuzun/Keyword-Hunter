@@ -136,13 +136,18 @@ func (db *DB) SetUserEnabled(id int64, enabled bool) error {
 	return err
 }
 
-// DeleteUser kullanıcıyı ve oturumlarını siler.
+// DeleteUser kullanıcıyı, oturumlarını ve API token'larını siler.
 func (db *DB) DeleteUser(id int64) error {
 	u, err := db.GetUserByID(id)
 	if err != nil {
 		return err
 	}
 	if _, err := db.conn.Exec(`DELETE FROM sessions WHERE username = ?`, u.Username); err != nil {
+		return err
+	}
+	// API token'ları da silinir: aynı adla yeniden açılan bir hesap eski
+	// token'ları devralmamalı (kimlik doğrulama ayrıca user_id eşleşmesi ister).
+	if _, err := db.conn.Exec(`DELETE FROM api_tokens WHERE user_id = ? OR username = ? COLLATE NOCASE`, u.ID, u.Username); err != nil {
 		return err
 	}
 	_, err = db.conn.Exec(`DELETE FROM users WHERE id = ?`, id)
