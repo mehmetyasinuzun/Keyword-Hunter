@@ -14,7 +14,7 @@
 **A single-binary CTI platform that searches onion search engines concurrently over Tor,
 classifies findings automatically, extracts IOCs, monitors sites and alerts on new threats.**
 
-[Features](#-features) · [Quick start](#-quick-start) · [Screenshots](#-screenshots) · [Security](#-security-model) · [**Türkçe**](README.md)
+[Features](#-features) · [Quick start](#-quick-start) · [Engines](#️-search-engines) · [Screenshots](#️-screenshots) · [Security](#️-security-model) · [**Türkçe**](README.md)
 
 </div>
 
@@ -62,6 +62,15 @@ Open **http://localhost:8080** · health: `/healthz` · prebuilt image: `ghcr.io
 Local run (Go 1.26+): `./run.sh` (macOS/Linux) · `.\run.ps1` (Windows) · `./run.sh release` builds six platform binaries into `dist/`.
 Tor must be listening (Tor Browser 9150 / tor service 9050) — set `TOR_PROXY` in `.env`.
 See the [Turkish README](README.md) for the full configuration table (`.env` variables).
+
+## 🛰️ Search engines
+
+Verified on 2026-09-18 over a real Tor circuit, in three rounds with two queries
+([`pkg/search/engines.go`](pkg/search/engines.go)). Enabled by default: **Tordex, Amnesia, Tor66,
+Onionway, OnionLand, Torland, Excavator, TorNet, Submarine, Danex**. Engines that require a captcha
+(OSS, Torgle), JavaScript (Torgol), have an empty index (DeepSearches) or are unreachable (Torch,
+Ahmia onion, FindTor) ship disabled and can be enabled from the **Search Engines** screen. User
+customisations survive engine list updates.
 
 ## 🖼️ Screenshots
 

@@ -17,7 +17,7 @@
 IOC çıkaran, siteleri izleyen ve yeni tehditleri anında bildiren — tek ikili dosyadan oluşan
 CTI platformu.**
 
-[Özellikler](#-özellikler) · [Hızlı Başlangıç](#-hızlı-başlangıç) · [Ekran Görüntüleri](#-ekran-görüntüleri) · [Mimari](#-mimari) · [Güvenlik](#-güvenlik-modeli) · [**English**](README.en.md)
+[Özellikler](#-özellikler) · [Hızlı Başlangıç](#-hızlı-başlangıç) · [Motorlar](#️-arama-motorları) · [Ekran Görüntüleri](#️-ekran-görüntüleri) · [Mimari](#-mimari) · [Güvenlik](#️-güvenlik-modeli) · [**English**](README.en.md)
 
 </div>
 
@@ -95,6 +95,15 @@ docker pull ghcr.io/mehmetyasinuzun/keyword-hunter:latest
 
 Tor: **Tor Browser** 9150, **tor servisi** 9050 portunu dinler (`brew install tor`, `apt install tor`, Windows'ta Tor Expert Bundle). `.env` içindeki `TOR_PROXY` bunu göstermeli.
 Ekran görüntüsü için Chrome/Chromium/Brave/Edge otomatik bulunur; bulunamazsa `CHROME_BIN=/yol/chrome`. Docker imajında Chromium hazır gelir.
+
+## 🛰️ Arama Motorları
+
+Liste 2026-09-18'de gerçek Tor devresi üzerinden, üç turda ve iki sorguyla doğrulandı
+([`pkg/search/engines.go`](pkg/search/engines.go)). Varsayılan aktif: **Tordex, Amnesia, Tor66,
+Onionway, OnionLand, Torland, Excavator, TorNet, Submarine, Danex**. Captcha isteyen (OSS, Torgle),
+JavaScript gerektiren (Torgol), boş dizinli (DeepSearches) veya erişilemeyen (Torch, Ahmia onion,
+FindTor) motorlar pasif gelir ve **Arama Motorları** ekranından açılabilir. Motor listesi
+değiştiğinde kullanıcı özelleştirmeleri korunur.
 
 ## 🖼️ Ekran Görüntüleri
 
