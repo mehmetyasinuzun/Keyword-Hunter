@@ -113,6 +113,11 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 
 ## Çekirdek API (`static/js/app.js`)
 
+`app.js` `defer` ile yüklenir. Sayfa gösterilmeden önce çalışması gereken tek
+şey `static/js/boot.js`'tedir (`<head>`'de senkron): kesilen sayfalar arası
+görünüm geçişinin Chromium'da ürettiği yakalanmamış `InvalidStateError`'ı
+sessize alır. Küçük ve bağımlılıksız kalmalıdır; ilk boyama onu bekler.
+
 | Yardımcı | Açıklama |
 |---|---|
 | `KH.api(url, {method, body})` | JSON + CSRF + `Accept-Language` (sayfa dili); 401 → giriş, hata → `Error(message)` — `message` sunucunun çevrilmiş iletisi, `err.code` kararlı hata kodu (`apierr.*`; davranışı metne değil koda bağlayın), `err.status`, `err.data` |

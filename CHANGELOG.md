@@ -14,12 +14,15 @@ incelemeden (güvenlik, doğruluk, UX/i18n) ve tam kalite kapısından geçti.
   normal yoldan (hash zinciri) yazılmış denetim olayları ve bilinen parolalı `analyst` / `viewer`
   hesapları. `-reset` ile idempotent; `-db` zorunlu ve `.env`'deki `DB_PATH` ile aynı dosyaysa reddedilir
   (uygulama veritabanı asla silinmez); `make demo` / `make seed` (demo yalnız `127.0.0.1`'e bağlanır).
-- `e2e/`: Playwright 1.56 + @axe-core/playwright. Giriş (hatalı/başarılı), tüm menü sayfaları +
+- `e2e/`: Playwright 1.64 + @axe-core/playwright. Giriş (hatalı/başarılı), tüm menü sayfaları +
   Hesabım + Denetim koyu/açık/İngilizce'de sıfır konsol hatası ve sıfır CSP ihlali
   (`securitypolicyviolation`), 390 px'te yatay taşma yok, Ctrl+K paleti, kalıcı tema, viewer → markalı
   403, API token oluştur → Bearer → iptal → 401, 2FA kaydı + testte hesaplanan RFC 6238 TOTP ile giriş,
   denetim kaydında giriş olayları ve axe taraması (`serious`/`critical` = 0).
 - CI: yeni `e2e` işi (tohumla → Tor'suz sunucu → `/healthz` → Chromium → rapor + sunucu logu artefakt).
+- Sayfalar arası görünüm geçişi, gelen sayfa gösterilmeden önce kullanıcı girdisiyle kesildiğinde (ör. gezinmenin
+  hemen ardından Ctrl+K) Chromium 156+ yakalanmamış `InvalidStateError` raporluyordu; `<head>`'deki küçük senkron
+  `static/js/boot.js` yalnız bu durumu sessize alır. Playwright 1.64'e geçişte E2E ile yakalandı.
 - Erişilebilirlik düzeltmeleri (axe bulguları, bastırma yok): `--text-3` her iki temada ≥4.5:1
   kontrast; açık temada `--primary`/`--ok`/`--warn` koyulaştırıldı (beyaz yazılı birincil düğme
   4.1 → 5.9:1); kapalı komut paleti erişilebilirlik ağacından çıkarıldı (`visibility`); üst bar
