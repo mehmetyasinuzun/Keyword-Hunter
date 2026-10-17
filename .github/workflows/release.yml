@@ -1,26 +1,58 @@
 name: Release
 
+# İki yol:
+#  - v* tag'i pushlanınca (olağan yol).
+#  - Elle (Actions → Release → Run workflow): tag henüz yoksa verilen commit
+#    üzerinde oluşturulur. Tag push'u kısıtlı ortamlardan ya da geçmiş bir commit
+#    için sürüm çıkarmak içindir.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Sürüm tag''i (ör. v0.16.0)'
+        required: true
+      ref:
+        description: 'Tag''in işaret edeceği commit SHA''sı (boşsa varsayılan dalın ucu)'
+        required: false
+        default: ''
+      latest:
+        description: 'En güncel sürüm olarak işaretle (GitHub Release + :latest imajı)'
+        type: choice
+        options: ['true', 'false']
+        default: 'true'
 
 permissions:
   contents: write
   packages: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  REF: ${{ inputs.ref || github.sha }}
+  LATEST: ${{ inputs.latest || 'true' }}
 
 jobs:
   binaries:
     name: Build release binaries
     runs-on: ubuntu-latest
     steps:
+      - name: Validate tag
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "geçersiz tag: $TAG"; exit 1; fi
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REF }}
+      - name: Resolve commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
       - name: Cross-compile all targets
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           mkdir -p dist
           for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os="${pair%/*}"; arch="${pair#*/}"; ext=""; [ "$os" = windows ] && ext=".exe"
@@ -30,17 +62,35 @@ jobs:
             echo "built $out"
           done
           ( cd dist && sha256sum * > SHA256SUMS.txt )
+      - name: Release notes from CHANGELOG
+        id: notes
+        run: |
+          # "## vX.Y.Z — tarih · ad" başlığından bir sonraki "## v" başlığına kadar.
+          awk -v tag="$TAG" '
+            index($0, "## " tag " ") == 1 { on = 1; sub(/^## /, ""); print "# KeywordHunter " $0; next }
+            on && /^## v/ { exit }
+            on { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then echo "CHANGELOG'da $TAG bölümü yok"; exit 1; fi
+          title="$(head -n1 "$RUNNER_TEMP/notes.md" | sed 's/^# KeywordHunter //')"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ steps.commit.outputs.sha }}
+          name: ${{ steps.notes.outputs.title }}
+          body_path: ${{ runner.temp }}/notes.md
+          make_latest: ${{ env.LATEST }}
           files: dist/*
-          generate_release_notes: true
 
   docker:
     name: Build & push Docker image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REF }}
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
@@ -52,8 +102,14 @@ jobs:
       - name: Metadata
         id: meta
         run: |
-          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          repo="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "ghcr.io/${repo}:${TAG#v}"
+            if [ "$LATEST" = true ]; then echo "ghcr.io/${repo}:latest"; fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Build & push (amd64+arm64)
         uses: docker/build-push-action@v7
         with:
@@ -61,6 +117,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: VERSION=${{ steps.meta.outputs.version }}
-          tags: |
-            ghcr.io/${{ steps.meta.outputs.repo }}:latest
-            ghcr.io/${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
