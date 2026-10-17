@@ -51,6 +51,8 @@ CTI platformu.**
 | 🕷️ **Örümcek** | Tohum .onion'dan derinlik/sayfa sınırlı, nazik BFS site taraması; keşfedilen sayfalar bulgu olur |
 | 🍪 **Site Profilleri** | Host bazlı Cookie + User-Agent + JS render (giriş duvarı / captcha arkası) |
 | 👥 **Ekip** | Çok kullanıcılı, rol tabanlı erişim (admin / analist / izleyici), parola sıfırlama, oturum iptali, SOAR/SIEM için kişisel **API token'ları** (okuma/yazma kapsamı, süre sonu, iptal) |
+| 🧾 **Denetim Kaydı** | Kim, ne zaman, nereden, ne yaptı: giriş, rol, vaka, ayar, token ve dışa aktarma olayları; **SHA-256 hash zinciri** ile kurcalanma tespiti, tek tıkla zincir doğrulama, filtre, CSV/JSON dışa aktarma, saklama süresi (`AUDIT_RETENTION_DAYS`) |
+| 🔐 **İki Adımlı Doğrulama** | RFC 6238 TOTP (QR + manuel anahtar), tek kullanımlık kurtarma kodları, `REQUIRE_2FA=admins\|all` ile zorunlu kılma, sırlar `APP_SECRET`'tan türetilen anahtarla AES-256-GCM şifreli, admin tarafından sıfırlama |
 | 🔗 **Entegrasyonlar** | OpenCTI / Microsoft Sentinel için salt okunur **TAXII 2.1 sunucusu** (sabit koleksiyonlar, kararlı STIX nesneleri, token ile Basic/Bearer); seçili bulguları tek **MISP olayı** olarak gönderme (şifreli anahtar, SSRF korumalı, isteğe bağlı otomatik gönderim) — [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
 
 ### Arayüz
@@ -114,6 +116,8 @@ değiştiğinde kullanıcı özelleştirmeleri korunur.
 | <img src="docs/screenshots/results.jpg" alt="Bulgular"> **Bulgular** — filtre, vaka yönetimi, toplu işlem | <img src="docs/screenshots/graph.jpg" alt="Harita"> **Harita** — ilişki grafiği ve derinleştirme |
 | <img src="docs/screenshots/analytics.jpg" alt="Analiz"> **Analiz** — tema duyarlı grafikler | <img src="docs/screenshots/watchlist.jpg" alt="İzleme"> **İzleme Listesi** — uptime, değişiklik, captcha |
 | <img src="docs/screenshots/monitor.jpg" alt="Motorlar"> **Motorlar** — canlı sağlık ve aç/kapat | <img src="docs/screenshots/scheduled.jpg" alt="Planlı taramalar"> **Planlı Taramalar** — webhook bildirim merkezi |
+| <img src="docs/screenshots/audit.jpg" alt="Denetim kaydı"> **Denetim Kaydı** — hash zinciri doğrulama | <img src="docs/screenshots/account.jpg" alt="Hesabım"> **Hesabım** — 2FA ve API token'ları |
+| <img src="docs/screenshots/integrations.jpg" alt="Entegrasyonlar"> **Entegrasyonlar** — MISP ve TAXII 2.1 | <img src="docs/screenshots/dashboard-dark.jpg" alt="Koyu tema"> **Koyu tema** — Nightwatch tasarım sistemi |
 | <img src="docs/screenshots/palette.jpg" alt="Komut paleti"> **Komut paleti** — <kbd>Ctrl</kbd>+<kbd>K</kbd> | <img src="docs/screenshots/dashboard-light.jpg" alt="Açık tema"> **Açık tema** — tek tıkla ya da sistemle uyumlu |
 
 <p align="center"><img src="docs/screenshots/mobile.jpg" alt="Mobil görünüm" width="300"></p>

@@ -47,6 +47,8 @@ classifies findings automatically, extracts IOCs, monitors sites and alerts on n
 | 🛰️ **Engines** | Live health, latency, success rate, enable/disable (actually affects search), automatic Tor circuit renewal (NEWNYM) |
 | 🕷️ **Crawler** | Polite, depth/page-bounded BFS from a seed .onion; discovered pages become findings |
 | 🍪 **Site profiles** | Per-host Cookie + User-Agent + JS rendering (behind login walls / captchas) |
+| 🧾 **Audit log** | Who did what, when, from where: sign-ins, roles, cases, settings, tokens and exports; **SHA-256 hash chain** for tamper evidence, one-click chain verification, filters, CSV/JSON export, retention (`AUDIT_RETENTION_DAYS`) |
+| 🔐 **Two-factor auth** | RFC 6238 TOTP (QR + manual key), single-use recovery codes, enforce with `REQUIRE_2FA=admins\|all`, secrets AES-256-GCM encrypted with a key derived from `APP_SECRET`, admin reset |
 | 🔗 **Integrations** | Read-only **TAXII 2.1 server** for OpenCTI / Microsoft Sentinel (fixed collections, stable STIX objects, token via Basic/Bearer); push selected findings to **MISP** as a single event (encrypted key, SSRF-guarded, optional auto-push) — [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
 
 ## 🚀 Quick start
@@ -81,6 +83,8 @@ customisations survive engine list updates.
 | <img src="docs/screenshots/results.jpg" alt="Findings"> **Findings** | <img src="docs/screenshots/graph.jpg" alt="Map"> **Map** |
 | <img src="docs/screenshots/analytics.jpg" alt="Analytics"> **Analytics** | <img src="docs/screenshots/watchlist.jpg" alt="Watchlist"> **Watchlist** |
 | <img src="docs/screenshots/monitor.jpg" alt="Engines"> **Engines** | <img src="docs/screenshots/scheduled.jpg" alt="Scheduled scans"> **Scheduled scans** |
+| <img src="docs/screenshots/audit.jpg" alt="Audit log"> **Audit log** | <img src="docs/screenshots/account.jpg" alt="My account"> **My account** — 2FA & API tokens |
+| <img src="docs/screenshots/integrations.jpg" alt="Integrations"> **Integrations** — MISP & TAXII 2.1 | <img src="docs/screenshots/dashboard-dark.jpg" alt="Dark theme"> **Dark theme** |
 | <img src="docs/screenshots/palette.jpg" alt="Command palette"> **Command palette** | <img src="docs/screenshots/dashboard-light.jpg" alt="Light theme"> **Light theme** |
 
 ## 🛡️ Security model

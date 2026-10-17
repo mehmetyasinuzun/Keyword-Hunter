@@ -31,7 +31,7 @@ import (
 )
 
 // Version uygulama sürümü (derlemede -ldflags ile geçersiz kılınabilir).
-var Version = "0.15.0"
+var Version = "0.16.0"
 
 //go:embed templates/*
 var templateFS embed.FS

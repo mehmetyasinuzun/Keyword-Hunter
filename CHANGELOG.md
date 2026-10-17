@@ -1,6 +1,11 @@
 # Değişiklik Günlüğü
 
-## Yayımlanmamış
+## v0.16.0 — 2026-10-17 · "Sentinel"
+
+Ekip ve entegrasyon sürümü: denetim kaydı, kişisel API token'ları, iki adımlı
+doğrulama, TAXII 2.1 / MISP entegrasyonu, tamamen sıkı CSP, çok dilli
+sınıflandırıcı ve CI'da uçtan uca test paketi. Her özellik üç bağımsız
+incelemeden (güvenlik, doğruluk, UX/i18n) ve tam kalite kapısından geçti.
 
 ### Uçtan uca test paketi (Playwright + axe) CI'da
 - `cmd/khseed`: boş bir veritabanını deterministik (sabit çekirdek), gerçekçi demo verisiyle kurar —
@@ -214,6 +219,11 @@ güvenlik/işlev hatalarının düzeltilmesi.
   kaldırıldı.
 
 ### Güvenlik
+- **Go 1.27.2 + `golang.org/x/net` 0.60 + `golang.org/x/crypto` 0.58:** govulncheck'in
+  koddan erişilebilir bulduğu 12 zafiyet kapatıldı (html/template GO-2026-6599/6600,
+  net/http, net/textproto, crypto/tls ve x/net HTTP/2). Docker imajları
+  golang:1.27-alpine / alpine:3.24, GitHub Actions Node 24 sürümlerine taşındı;
+  Dependabot güncellemeleri ekosistem başına gruplandı.
 - **CSP sıkılaştırıldı: `script-src 'self'`** (`'unsafe-inline'` kaldırıldı). Şablonlarda
   satır içi betik / `on*=` işleyici / `javascript:` URL'si yoktur; `templates_csp_test.go`
   bunu her şablon ve JS dosyası için zorlar. Davranış `data-action` delegasyonu ile
