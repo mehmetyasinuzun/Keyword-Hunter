@@ -1,7 +1,8 @@
 # Ön Yüz Mimarisi (Frontend Architecture)
 
 KeywordHunter'ın arayüzü **derleme adımı olmayan**, tamamen yerel (CDN'siz) ve
-**sıkı CSP** (`script-src 'self'`) altında çalışan sunucu-taraflı bir uygulamadır.
+**sıkı CSP** (`script-src 'self'; style-src 'self'` — hiçbir yerde `'unsafe-inline'` yok)
+altında çalışan sunucu-taraflı bir uygulamadır.
 Bu belge yeni bir ekran eklerken ya da mevcut bir ekranı değiştirirken uyulması
 gereken sözleşmeyi tanımlar.
 
@@ -10,19 +11,34 @@ gereken sözleşmeyi tanımlar.
 1. **Satır içi betik yok.** Şablonlarda `<script>…</script>` gövdesi, `onclick=`
    vb. olay öznitelikleri ve `javascript:` URL'leri yasaktır.
    `pkg/web/templates_csp_test.go` bunu her şablon ve her JS dosyası için zorlar.
-2. **Sunucu ilk baytta doğruyu basar.** Dil (`{{t .Lang "anahtar"}}`), tema
+2. **Satır içi stil yok.** CSP `style-src 'self'`tir; tarayıcı şunları **engeller**:
+   şablonlarda `<style>` bloğu ve `style="…"` özniteliği, JS'nin `innerHTML` /
+   `KH.html` / `KH.render` ile eklediği HTML'deki `style="…"`, `el.setAttribute('style', …)`,
+   D3 `.attr('style', …)` ve `document.createElement('style')`. Bunlar yerine:
+   - Sabit görünüm → `kh.css` bileşen/yardımcı sınıfı ya da `static/css/pages/<sayfa>.css`
+     (ör. başlangıçta boş çubuk için `.w-0`; ikon sprite'ı için `.kh-sprite`).
+   - Çalışma anında hesaplanan değer → öğeyi ekledikten **sonra** CSSOM ile atayın:
+     `el.style.width = pct + '%'`, `el.style.setProperty('--p', v)`,
+     `el.style.animationDelay = i * 35 + 'ms'`, D3'te `.style('opacity', 0)`.
+     CSP CSSOM'u engellemez. Değeri HTML'de taşımak gerekiyorsa `data-*` kullanın
+     (`<div data-bar="42">` → `KH.enhance` genişliği verir; `data-from`/`data-to`).
+   `templates_csp_test.go` şablonları, JS dosyalarını (vendor hariç) ve tüm sayfaların
+   sunucu çıktısını tarar; politikada `'unsafe-*'` geçerse test kırılır. Vendor
+   kütüphaneleri (Chart.js, datalabels, D3) yalnız CSSOM kullanır — yeni bir kütüphane
+   eklerken tarayıcıda `securitypolicyviolation` olayı olmadığını doğrulayın.
+3. **Sunucu ilk baytta doğruyu basar.** Dil (`{{t .Lang "anahtar"}}`), tema
    (`<html data-theme>`), rol (menü süzme, `data-write`) sunucuda çözülür;
    sayfa açılışında yanıp sönme ya da yetki sızıntısı olmaz.
-3. **Dark web'den gelen her metin güvenilmezdir.** Şablonda `{{.Değer}}`
+4. **Dark web'den gelen her metin güvenilmezdir.** Şablonda `{{.Değer}}`
    (html/template otomatik kaçışlar), JS'de `KH.esc()`/`textContent`/`KH.html`
    kullanılır. Değerleri JS'ye ileti olarak taşımak için `data-*` öznitelikleri
    kullanılır — asla bir JS ifadesinin içine dize olarak gömülmez.
-4. **Tek tasarım sistemi.** Tüm bileşenler `static/css/kh.css` içindedir
+5. **Tek tasarım sistemi.** Tüm bileşenler `static/css/kh.css` içindedir
    (token → base → shell → components → motion → utilities). Sayfaya özgü
    küçük eklemeler `static/css/pages/<sayfa>.css` içinde durur. Renkler daima
    token'dır (`var(--primary)`, `var(--sev-3)`…); sabit hex kullanılmaz ki açık
    ve koyu tema birlikte çalışsın.
-5. **Erişilebilirlik.** Her etkileşimli öğe gerçek bir `<button>`/`<a>`'dır;
+6. **Erişilebilirlik.** Her etkileşimli öğe gerçek bir `<button>`/`<a>`'dır;
    ikon-tek butonlarda `aria-label`, modallarda odak tuzağı (çekirdek sağlar),
    `prefers-reduced-motion` desteği (çekirdek sağlar).
 
@@ -119,11 +135,12 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 `kh-chip` · `kh-tag` · `kh-dot` (`.up .down .warn .unknown .pulse`) ·
 `kh-field/kh-label/kh-input/kh-select/kh-textarea/kh-hint/kh-check/kh-switch` ·
 `kh-form-grid` · `kh-table` (+`.num .center .right .muted .title .meta .link`) ·
-`kh-rowactions` · `kh-empty` · `kh-skel` · `kh-progress` (`.thin .active`) ·
+`kh-rowactions` · `kh-empty` · `kh-skel` · `kh-progress` (`.thin .active`; dolgu `<div data-bar="n">`
+ya da `.w-0` ile boş başlar, genişlik CSSOM ile) ·
 `kh-meter` · `kh-menu` (`.at-cursor`) · `kh-alert` (`.ok .warn .err .info`) · `kh-modal-overlay > kh-modal`
 (`.sm .lg`) · `kh-ring` · `kh-feed` · `kh-log` · `kh-engine-chip` · `kh-kbd` ·
 `[data-tip]` ipucu · yardımcılar (`mt-*`, `mb-*`, `gap-*`, `flex`, `items-center`,
-`justify-between`, `text-xs`, `c-ok`, `c-sev-3`, …).
+`justify-between`, `text-xs`, `w-0`, `c-ok`, `c-sev-3`, `kh-sprite`, …).
 
 ## Tema
 

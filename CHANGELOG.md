@@ -2,6 +2,21 @@
 
 ## Yayımlanmamış
 
+### Güvenlik: CSP `style-src 'self'` (`'unsafe-inline'` kaldırıldı)
+- Politika artık hiçbir yönergede `'unsafe-inline'` içermiyor: `script-src 'self'; style-src 'self'`.
+  HTML'e sızan güvenilmez bir metin satır içi CSS ile veri sızdıramaz (öznitelik seçicili arka plan
+  isteği) ya da sahte bir katman/oturum kutusu bindiremez.
+- Kalan satır içi stiller kaldırıldı: ikon sprite'ı (`.kh-sprite`), gösterge paneli / izleme / analiz
+  ilerleme çubukları (`.w-0`, `.kh-progress > [data-bar]` boş başlar), panel akışının kademeli
+  girişi ve örümcek ilerleme çubuğu (`data-from` → `data-to`) artık CSSOM ile (`el.style.x = …`)
+  ayarlanır. Chart.js, chartjs-plugin-datalabels ve D3 tarayıcıda doğrulandı: yalnız CSSOM
+  kullanıyorlar, ihlal yok.
+- `templates_csp_test.go` genişletildi: şablonlarda `<style>` / `style=` özniteliği; JS'de üretilen
+  HTML'de `style="…"`, `setAttribute('style', …)`, D3 `.attr('style', …)`, `createElement('style')`
+  yakalanır (dedektörün kendi doğru/yanlış pozitif tablosuyla); politikada `'unsafe-*'`, nonce/hash
+  ya da `style-src-attr`/`-elem` gevşetmesi olmamalı; ve tüm menü sayfaları + `/account`, `/login`,
+  `/login/2fa`, 404/403 sayfalarının sunucu çıktısı satır içi stil içermemeli.
+
 ### API hata iletileri TR/EN + kararlı hata kodları
 - Her `/api` hata yanıtı (ara katmanlar dahil: oturum 401, CSRF 403, rol/kapsam 403, hız sınırı 429,
   token, 2FA, denetim, entegrasyon) artık `{"error": <ileti>, "code": <kararlı kod>}` biçimindedir;

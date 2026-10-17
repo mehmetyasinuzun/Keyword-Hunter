@@ -44,7 +44,7 @@
             <td class="nowrap" data-label="${KH.t('crawl.colDepth')}"><span class="crawl-depth" title="${T('Derinlik ', 'Depth ') + j.depth}">${[1, 2, 3].map(n => KH.html`<i class="${n <= j.depth ? 'on' : ''}"></i>`)}</span><span class="crawl-scope kh-muted text-xs">${j.sameDomain ? T('aynı site', 'same site') : T('dış onion', 'external')}</span></td>
             <td class="crawl-c-prog" data-label="${KH.t('crawl.colProg')}">
                 <div class="crawl-prog">
-                    <div class="kh-progress${j.status === 'running' ? ' active' : ''}${j.status === 'failed' ? ' is-err' : j.status === 'cancelled' ? ' is-warn' : ''}"><div data-from="${from}" data-to="${pct}" style="width:${from}%"></div></div>
+                    <div class="kh-progress${j.status === 'running' ? ' active' : ''}${j.status === 'failed' ? ' is-err' : j.status === 'cancelled' ? ' is-warn' : ''}"><div data-from="${from}" data-to="${pct}"></div></div>
                     <span class="kh-mono text-xs"><b>${KH.num(j.pagesDone || 0)}</b>/${KH.num(j.maxPages || 0)} · ${pct}%</span>
                 </div>
             </td>
@@ -69,6 +69,9 @@
             return;
         }
         KH.render(body, KH.html`${jobs.map(row)}`);
+        // Çubuk önceki değerinden başlar ve yenisine kayar. Genişlik CSSOM ile
+        // verilir: satır içi style özniteliği CSP'de (style-src 'self') engellenir.
+        body.querySelectorAll('[data-from]').forEach(b => { b.style.width = b.dataset.from + '%'; });
         requestAnimationFrame(() => requestAnimationFrame(() => body.querySelectorAll('[data-to]').forEach(b => { b.style.width = b.dataset.to + '%'; })));
         jobs.forEach(j => state.prev.set(j.id, j.maxPages ? Math.min(100, Math.round((j.pagesDone || 0) / j.maxPages * 100)) : 0));
     }

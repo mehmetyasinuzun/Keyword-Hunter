@@ -9,7 +9,7 @@
 [![Release](https://img.shields.io/github/v/release/mehmetyasinuzun/Keyword-Hunter?display_name=tag&sort=semver&color=6366f1)](https://github.com/mehmetyasinuzun/Keyword-Hunter/releases)
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
-[![CSP](https://img.shields.io/badge/CSP-script--src%20'self'-34d399)](docs/FRONTEND.md)
+[![CSP](https://img.shields.io/badge/CSP-script%20%2B%20style%20'self'-34d399)](docs/FRONTEND.md)
 
 **A single-binary CTI platform that searches onion search engines concurrently over Tor,
 classifies findings automatically, extracts IOCs, monitors sites and alerts on new threats.**
@@ -87,7 +87,7 @@ customisations survive engine list updates.
 
 The tool visits hostile sites and displays their text, so the UI assumes **untrusted input** everywhere.
 
-- **Strict CSP** — `script-src 'self'`: no inline scripts or `on*=` handlers anywhere, enforced by an automated test over every template and JS file. Even if dark-web text slipped into the HTML, the browser would not execute it.
+- **Strict CSP** — `script-src 'self'; style-src 'self'`, with no `'unsafe-inline'` anywhere in the policy: no inline scripts, `on*=` handlers, `<style>` blocks or `style=""` attributes (including HTML built by JS — runtime values are set through the CSSOM), enforced by automated tests over every template and JS file and over the rendered output of every page. Even if dark-web text slipped into the HTML, the browser would neither execute it nor apply inline CSS that could exfiltrate data or overlay a fake UI.
 - bcrypt, per-IP and global login lockout, sliding + absolute session lifetime, session revocation on password change.
 - Two-factor authentication (TOTP, RFC 6238) with one-time recovery codes and optional enforcement — see [Two-factor authentication](#-two-factor-authentication-2fa).
 - RBAC (admin / analyst / viewer) enforced server-side; navigation filtered server-side.

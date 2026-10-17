@@ -10,7 +10,7 @@
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/GHCR-keyword--hunter-2496ED?logo=docker&logoColor=white)](https://github.com/mehmetyasinuzun/Keyword-Hunter/pkgs/container/keyword-hunter)
-[![CSP](https://img.shields.io/badge/CSP-script--src%20'self'-34d399)](docs/FRONTEND.md)
+[![CSP](https://img.shields.io/badge/CSP-script%20%2B%20style%20'self'-34d399)](docs/FRONTEND.md)
 ![Platforms](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-a855f7)
 
 **Tor ağındaki onion arama motorlarını eşzamanlı tarayan, bulguları otomatik sınıflandıran,
@@ -149,7 +149,7 @@ Docker'da `ENV_FILE=/data/.env` kullanılır; kökteki `.env` Docker için okunm
 
 Bu araç saldırgan içerik barındıran siteleri ziyaret eder ve oradan gelen metni gösterir; arayüz buna göre **güvenilmez girdi** varsayımıyla tasarlanmıştır.
 
-- **Sıkı CSP:** `script-src 'self'` — şablonlarda tek satır satır içi betik veya `on*=` işleyici yoktur; bu, her şablon ve JS dosyası için **otomatik testle** zorlanır ([`templates_csp_test.go`](pkg/web/templates_csp_test.go)). Dark web'den gelen bir metin bir şekilde HTML'e sızsa bile tarayıcı onu çalıştırmaz.
+- **Sıkı CSP:** `script-src 'self'; style-src 'self'` — politikada hiçbir yerde `'unsafe-inline'` yoktur. Şablonlarda tek satır satır içi betik, `on*=` işleyici, `<style>` bloğu ya da `style=""` özniteliği yoktur (JS'nin ürettiği HTML dahil; dinamik değerler CSSOM ile atanır); bu, her şablon ve JS dosyası ile tüm sayfaların sunucu çıktısı için **otomatik testle** zorlanır ([`templates_csp_test.go`](pkg/web/templates_csp_test.go)). Dark web'den gelen bir metin bir şekilde HTML'e sızsa bile tarayıcı onu çalıştırmaz, satır içi CSS ile veri sızdıramaz ya da sahte arayüz bindiremez.
 - Ayrıca: `object-src 'none'`, `frame-ancestors 'none'`, `base-uri`/`form-action 'self'`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, COOP/CORP, HSTS (HTTPS'te).
 - **Kimlik:** bcrypt, IP başına ve global login kilitleme (üstel), kayan + mutlak oturum ömrü, parola değişince diğer oturumlar düşer, rol değişikliği anında etkin.
 - **İki adımlı doğrulama (TOTP, RFC 6238):** Google/Microsoft Authenticator, Authy, 1Password, Aegis… ile uyumlu; sırlar `APP_SECRET`'tan türetilen anahtarla AES-256-GCM şifreli, kurtarma kodları yalnız SHA-256 özetiyle saklanır; aynı kod iki kez kabul edilmez; isteğe bağlı zorunluluk (`REQUIRE_2FA`). Ayrıntılar: [İki adımlı doğrulama](#2fa).
@@ -169,7 +169,7 @@ Zafiyet bildirimi için [SECURITY.md](SECURITY.md).
 
 ```mermaid
 flowchart LR
-    subgraph Browser["Tarayıcı (CSP: script-src 'self')"]
+    subgraph Browser["Tarayıcı (CSP: script/style-src 'self')"]
       UI["Nightwatch UI<br/>kh.css · app.js · pages/*.js"]
     end
     subgraph Binary["keywordhunter (tek Go ikilisi)"]

@@ -17,9 +17,13 @@ Tasarım gereği güvenlik önlemleri (v0.15):
 - bcrypt kimlik + IP/global login kilitleme, rol tabanlı erişim (admin/analyst/viewer)
 - Oturum: HttpOnly + SameSite=Lax, kayan + mutlak ömür, parola değişiminde toplu düşürme
 - CSRF (arama formu dahil tüm yazma uçları) + `GET /logout` için Fetch-Metadata koruması
-- **Sıkı CSP** `script-src 'self'` (satır içi betik/olay işleyicisi yok — her şablon ve JS
-  dosyası için `templates_csp_test.go` ile zorlanır), `object-src 'none'`,
-  `frame-ancestors 'none'`, X-Frame-Options DENY, nosniff, no-store, HSTS (HTTPS)
+- **Sıkı CSP** `script-src 'self'; style-src 'self'` — hiçbir yönergede `'unsafe-inline'`,
+  `'unsafe-eval'`, nonce ya da hash yok. Satır içi betik/olay işleyicisi, `<style>` bloğu ve
+  `style=""` özniteliği yok (şablonlarda ve JS'nin ürettiği HTML'de; her şablon ve JS
+  dosyası için `templates_csp_test.go` ile, ayrıca tüm sayfaların sunucu çıktısı üzerinde
+  zorlanır). Böylece HTML'e sızan bir metin ne betik çalıştırabilir ne de CSS ile veri
+  sızdırabilir/arayüzü taklit edebilir. `object-src 'none'`, `frame-ancestors 'none'`,
+  X-Frame-Options DENY, nosniff, no-store, HSTS (HTTPS)
 - SSRF: derinleştirme/analiz/izleme yalnız `.onion`; webhook/ekran görüntüsü dahili
   adreslere çözümlenemez (DNS sonrası kontrol), yönlendirme takip edilmez
 - Dark web metni arayüzde kaçışlanır (XSS); CSV formül-enjeksiyonu koruması

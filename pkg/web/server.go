@@ -366,10 +366,16 @@ func (s *Server) startScheduler() {
 // gelen bir metin bir şekilde HTML'e sızsa bile tarayıcı onu betik olarak
 // çalıştırmaz (XSS'e karşı ikinci savunma hattı).
 //
-// style-src 'unsafe-inline' bilinçli bir ödünleşimdir: D3/Chart.js ve dinamik
-// ilerleme çubukları style özniteliği kullanır; stil enjeksiyonu betik
-// çalıştıramaz.
-const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+// style-src de yalnızca 'self'tir ('unsafe-inline' YOK): şablonlarda <style>
+// bloğu ya da style="" özniteliği, JS'nin innerHTML ile eklediği HTML'de
+// style özniteliği ve setAttribute('style', …) kullanılmaz (templates_csp_test.go
+// zorlar). Görünüm kh.css / pages/*.css sınıflarından gelir; çalışma anında
+// hesaplanan değerler (ilerleme genişliği, menü konumu, D3 .style(…)) CSSOM
+// üzerinden (el.style.x = …, setProperty) atanır — CSP CSSOM'u engellemez.
+// Böylece HTML'e sızan güvenilmez bir metin CSS ile veri sızdıramaz (ör.
+// öznitelik seçicili arka plan isteği) ya da arayüzü taklit edemez
+// (görünmez katman / sahte oturum kutusu bindirme).
+const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; " +
 	"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; " +
 	"base-uri 'self'; form-action 'self'; object-src 'none'"
 

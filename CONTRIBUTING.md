@@ -51,6 +51,9 @@ CHROME_BIN=/path/to/chrome go test -race -count=1 -run '^TestBrowser_' ./pkg/cap
 - Şablonlarda **satır içi betik ve `on*=` işleyici yok** — CSP `script-src 'self'`
   ve `pkg/web/templates_csp_test.go` bunu zorlar. Davranış `data-action` ile
   `static/js/pages/<sayfa>.js` içinden bağlanır.
+- **Satır içi stil de yok** — CSP `style-src 'self'`: `<style>`, `style=""` (JS'nin
+  ürettiği HTML dahil) ve `setAttribute('style', …)` yasak; sınıf kullanın, dinamik
+  değeri eklemeden sonra CSSOM ile atayın (`el.style.width = …`).
 - Renkler daima CSS token'ıdır (`var(--primary)`), böylece açık/koyu tema çalışır.
 - Kullanıcıya görünen her metin TR + EN katalogda olmalıdır.
 - Dark web'den gelen her metin güvenilmezdir: şablonda otomatik kaçış, JS'de

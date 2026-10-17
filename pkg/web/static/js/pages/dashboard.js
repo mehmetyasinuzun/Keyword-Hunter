@@ -40,7 +40,7 @@
             box.innerHTML =
                 '<div class="kh-inline mb-3"><span class="kh-badge ok">' + up + ' ' + KH.esc(T('ayakta', 'up')) + '</span><span class="kh-badge err">' + down + ' ' + KH.esc(T('kapalı', 'down')) + '</span><span class="kh-badge warn">' + blocked + ' ' + KH.esc(T('engel', 'blocked')) + '</span>' +
                 (changed ? '<span class="kh-badge info">' + changed + ' ' + KH.esc(T('değişti', 'changed')) + '</span>' : '') + '</div>' +
-                '<div class="kh-progress"><div data-bar="' + pct + '" style="width:0"></div></div>' +
+                '<div class="kh-progress"><div data-bar="' + pct + '"></div></div>' +
                 '<div class="flex justify-between mt-2 text-xs kh-muted"><span>' + KH.esc(T('Erişilebilirlik', 'Availability')) + ' ' + KH.pctText(pct) + '</span><a href="/watchlist">' + KH.esc(T('Detay', 'Details')) + ' →</a></div>';
             KH.enhance(box);
         }).catch(() => { box.innerHTML = '<p class="kh-hint">' + KH.esc(T('Alınamadı.', 'Unavailable.')) + '</p>'; });
@@ -64,10 +64,12 @@
             badge.hidden = !r.length;
             badge.textContent = r.length + ' ' + T('yeni', 'new');
             if (!r.length) { feed.innerHTML = '<div class="kh-empty p-4"><div class="icon">' + KH.icon('check') + '</div><p>' + KH.esc(T('Bu aralıkta yeni bulgu yok.', 'No new findings in this window.')) + '</p></div>'; return; }
-            feed.innerHTML = r.map((x, i) =>
-                '<a class="kh-feed-item fresh" style="animation-delay:' + (i * 35) + 'ms" href="/results?text=' + encodeURIComponent(x.URL) + '">' + KH.sev(x.Criticality) +
+            feed.innerHTML = r.map(x =>
+                '<a class="kh-feed-item fresh" href="/results?text=' + encodeURIComponent(x.URL) + '">' + KH.sev(x.Criticality) +
                 '<div class="body"><div class="t">' + KH.esc(KH.short(x.Title, 90)) + '</div><div class="u">' + KH.esc(KH.short(x.URL, 80)) + '</div></div>' +
                 '<span class="kh-badge neutral mono src">' + KH.esc(x.Source) + '</span></a>').join('');
+            // Kademeli giriş: gecikme CSSOM ile verilir (satır içi style özniteliği CSP'de engellenir)
+            feed.querySelectorAll('.kh-feed-item').forEach((el, i) => { el.style.animationDelay = (i * 35) + 'ms'; });
         }).catch(() => { feed.innerHTML = '<p class="kh-hint">' + KH.esc(T('Akış yüklenemedi.', 'Feed failed to load.')) + '</p>'; });
     }
 
