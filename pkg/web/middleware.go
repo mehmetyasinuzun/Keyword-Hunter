@@ -123,7 +123,7 @@ func (s *Server) requireRole(min string) gin.HandlerFunc {
 				s.renderError(c, http.StatusForbidden)
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Bu işlem için yetkiniz yok (" + min + " rolü gerekir)"})
+			apiAbort(c, http.StatusForbidden, "role_required", min)
 			return
 		}
 		c.Next()
@@ -155,7 +155,7 @@ func (s *Server) csrfMiddleware() gin.HandlerFunc {
 		}
 		if !s.csrfValid(c) {
 			s.auditDenied(c, "csrf", "")
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CSRF dogrulamasi basarisiz"})
+			apiAbort(c, http.StatusForbidden, "csrf_failed")
 			return
 		}
 		c.Next()
@@ -235,7 +235,7 @@ func clearAuthCookies(c *gin.Context, secure bool) {
 
 func unauthorized(c *gin.Context) {
 	if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Oturum suresi doldu"})
+		apiError(c, http.StatusUnauthorized, "session_expired")
 		return
 	}
 	c.Redirect(http.StatusFound, "/login")

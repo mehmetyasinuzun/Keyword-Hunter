@@ -632,11 +632,11 @@ func (s *Server) setupRoutes() {
 			if !isSafeMethod(c.Request.Method) && roleRank(c.GetString("role")) < roleRank("analyst") {
 				if c.GetString("tokenScope") == storage.TokenScopeRead {
 					s.auditDenied(c, "token_scope", storage.TokenScopeWrite)
-					c.AbortWithStatusJSON(403, gin.H{"error": "Okuma (read) kapsamlı API token yazma işlemi yapamaz"})
+					apiAbort(c, http.StatusForbidden, "token_read_only")
 					return
 				}
 				s.auditDenied(c, "role", "analyst")
-				c.AbortWithStatusJSON(403, gin.H{"error": "Salt-okunur (viewer) rol bu işlemi yapamaz"})
+				apiAbort(c, http.StatusForbidden, "viewer_read_only")
 				return
 			}
 			c.Next()

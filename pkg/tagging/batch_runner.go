@@ -22,6 +22,17 @@ const (
 	StatusCancelled = "cancelled"
 )
 
+// İşin error_message alanına yazılan sabit iletiler. Veritabanında Türkçe
+// metin olarak durur (eski kayıtlarla uyumlu); API bunları kararlı koda
+// eşleyip istek dilinde döndürür (bkz. web.taggingJobErrCode).
+const (
+	JobMsgQueueFull      = "Kuyruk dolu"
+	JobMsgCancelled      = "Kullanıcı tarafından iptal edildi"
+	JobMsgPayloadInvalid = "İş yükü parse edilemedi"
+	JobMsgPayloadEmpty   = "İş yükünde kayıt yok"
+	JobMsgAllFailed      = "Hiçbir kayıt etiketlenemedi"
+)
+
 var ErrNoValidResultIDs = errors.New("geçerli result ID bulunamadı")
 
 // BatchRunner toplu etiketleme işlerini worker kuyruğunda çalıştırır.
@@ -158,7 +169,7 @@ func (r *BatchRunner) Submit(ctx context.Context, resultIDs []int64, query strin
 	default:
 		// Kuyruk dolu: işi askıda bırakmak yerine kullanıcıya söyle (recovery
 		// yalnızca açılışta çalışır, iş sessizce beklerdi).
-		_ = r.db.MarkTaggingJobFinished(job.ID, StatusFailed, "Kuyruk dolu")
+		_ = r.db.MarkTaggingJobFinished(job.ID, StatusFailed, JobMsgQueueFull)
 		logger.Warn("TAG JOB SUBMIT: kuyruk dolu, iş reddedildi: %s", job.ID)
 		return nil, ErrQueueFull
 	}
@@ -184,7 +195,7 @@ func (r *BatchRunner) Cancel(jobID string) error {
 	case StatusCompleted, StatusFailed, StatusCancelled:
 		return nil
 	case StatusPending:
-		return r.db.MarkTaggingJobFinished(jobID, StatusCancelled, "Kullanıcı tarafından iptal edildi")
+		return r.db.MarkTaggingJobFinished(jobID, StatusCancelled, JobMsgCancelled)
 	}
 
 	r.mu.RLock()
@@ -217,13 +228,13 @@ func (r *BatchRunner) processJob(jobID string, workerID int) {
 
 	resultIDs, err := storage.DecodeTaggingJobIDs(job)
 	if err != nil {
-		_ = r.db.MarkTaggingJobFinished(jobID, StatusFailed, "İş yükü parse edilemedi")
+		_ = r.db.MarkTaggingJobFinished(jobID, StatusFailed, JobMsgPayloadInvalid)
 		logger.Warn("TAG JOB PAYLOAD ERROR: %s - %v", jobID, err)
 		return
 	}
 
 	if len(resultIDs) == 0 {
-		_ = r.db.MarkTaggingJobFinished(jobID, StatusFailed, "İş yükünde kayıt yok")
+		_ = r.db.MarkTaggingJobFinished(jobID, StatusFailed, JobMsgPayloadEmpty)
 		return
 	}
 
@@ -261,7 +272,7 @@ func (r *BatchRunner) processJob(jobID string, workerID int) {
 				logger.Info("TAG JOB PAUSED (shutdown): %s", jobID)
 				return
 			}
-			_ = r.db.MarkTaggingJobFinished(jobID, StatusCancelled, "Kullanıcı tarafından iptal edildi")
+			_ = r.db.MarkTaggingJobFinished(jobID, StatusCancelled, JobMsgCancelled)
 			shared.Streamer.BroadcastLog("auto_tag_error", "Etiketleme işi iptal edildi", "")
 			logger.Warn("TAG JOB CANCELLED: %s", jobID)
 			return
@@ -285,7 +296,7 @@ func (r *BatchRunner) processJob(jobID string, workerID int) {
 	errorMessage := ""
 	if successCount == 0 && failureCount > 0 {
 		status = StatusFailed
-		errorMessage = "Hiçbir kayıt etiketlenemedi"
+		errorMessage = JobMsgAllFailed
 	}
 
 	if err := r.db.MarkTaggingJobFinished(jobID, status, errorMessage); err != nil {

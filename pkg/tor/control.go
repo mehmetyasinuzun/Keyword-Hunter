@@ -26,6 +26,17 @@ type Controller struct {
 	lastErr string
 }
 
+// CooldownError devre yakın zamanda yenilendiği için (force olmadan) NEWNYM
+// isteğinin reddedildiğini bildirir; Wait bir sonraki denemeye kalan süredir.
+// Çağıran katman (web) kalan süreyi kendi dilinde biçimleyebilsin diye tiplidir.
+type CooldownError struct {
+	Wait time.Duration
+}
+
+func (e *CooldownError) Error() string {
+	return fmt.Sprintf("devre yakın zamanda yenilendi, %s sonra tekrar deneyin", e.Wait.Round(time.Second))
+}
+
 // New addr "host:port" (Tor Browser 9151, tor servisi 9051, Docker tor:9051).
 // Boş addr → nil (özellik kapalı).
 func New(addr, password string, cooldown time.Duration) *Controller {
@@ -67,7 +78,7 @@ func (c *Controller) NewNym(force bool) error {
 	}
 	if !force {
 		if ok, wait := c.CanRenew(); !ok {
-			return fmt.Errorf("devre yakın zamanda yenilendi, %s sonra tekrar deneyin", wait.Round(time.Second))
+			return &CooldownError{Wait: wait}
 		}
 	}
 	err := c.signal("NEWNYM")

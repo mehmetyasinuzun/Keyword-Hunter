@@ -48,15 +48,12 @@ const (
 var errMISPNotConfigured = misp.Errorf(nil, "MISP entegrasyonu yapılandırılmamış (Ayarlar → Entegrasyonlar)",
 	"The MISP integration is not configured (Settings → Integrations)")
 
-// mispFail MISP uçlarının hata yanıtı: iki dilli hatalar (misp.Error) arayüz
-// diline göre yazılır, ileti sınırlı uzunluktadır.
-func mispFail(c *gin.Context, status int, err error) {
-	c.JSON(status, gin.H{"success": false, "error": truncateErr(misp.Message(err, requestLang(c)))})
-}
-
-// mispFailText iki dilli sabit bir ileti için mispFail.
-func mispFailText(c *gin.Context, status int, tr, en string) {
-	mispFail(c, status, misp.Errorf(nil, tr, en))
+// mispFail MISP istemcisinden/doğrulamasından gelen iki dilli bir hatayı
+// (misp.Error) API hata sözleşmesiyle yazar: ileti istek dilinde (apiLang) ve
+// sınırlı uzunlukta, code ise kararlı sınıftır (misp_config_invalid,
+// misp_request_failed…). Sabit iletiler katalogdan apiFail ile yazılır.
+func mispFail(c *gin.Context, status int, code string, err error) {
+	c.JSON(status, gin.H{"success": false, "error": truncateErr(misp.Message(err, apiLang(c))), "code": code})
 }
 
 // mispConfigured adres ve şifreli anahtar kayıtlı mı.
@@ -171,7 +168,7 @@ func (s *Server) handleMISPConfigGet(c *gin.Context) {
 		respondInternalError(c, "GetMISPConfig", err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"misp": s.mispView(cfg, requestLang(c))})
+	c.JSON(http.StatusOK, gin.H{"misp": s.mispView(cfg, apiLang(c))})
 }
 
 // mispConfigRequest kaydetme/test gövdesi; verilmeyen alan mevcut değeri korur.
@@ -259,7 +256,7 @@ func applyMISPRequest(cur storage.MISPConfig, req mispConfigRequest) (cfg storag
 func (s *Server) handleMISPConfigSave(c *gin.Context) {
 	var req mispConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		mispFailText(c, http.StatusBadRequest, "Geçersiz istek", "Invalid request")
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	cur, err := s.db.GetMISPConfig()
@@ -270,16 +267,16 @@ func (s *Server) handleMISPConfigSave(c *gin.Context) {
 	cfg, newKey, err := applyMISPRequest(cur, req)
 	if err != nil {
 		s.audit(c, "misp.config.update", "misp", map[string]any{"error": "validation"}, false)
-		mispFail(c, http.StatusBadRequest, err)
+		mispFail(c, http.StatusBadRequest, "misp_config_invalid", err)
 		return
 	}
 	if newKey != "" {
 		if ok, reason := s.mispSecretStorage(); !ok {
-			mispFail(c, http.StatusConflict, reason)
+			mispFail(c, http.StatusConflict, "misp_secret_unavailable", reason)
 			return
 		}
 		if cfg.BaseURL == "" {
-			mispFailText(c, http.StatusBadRequest, "API anahtarından önce MISP adresini girin", "Enter the MISP URL before the API key")
+			apiFail(c, http.StatusBadRequest, "misp_url_before_key")
 			return
 		}
 		sealed, err := s.secretSealer.Seal(newKey, mispKeyContext)
@@ -309,7 +306,7 @@ func (s *Server) handleMISPConfigSave(c *gin.Context) {
 		"distribution": cfg.Distribution, "tags": cfg.Tags,
 		"autoPush": cfg.AutoPush, "autoMinCriticality": cfg.AutoMinCriticality,
 	}, true)
-	c.JSON(http.StatusOK, gin.H{"success": true, "misp": s.mispView(cfg, requestLang(c))})
+	c.JSON(http.StatusOK, gin.H{"success": true, "misp": s.mispView(cfg, apiLang(c))})
 }
 
 // handleMISPTest POST /api/integrations/misp/test (admin) — GET
@@ -319,7 +316,7 @@ func (s *Server) handleMISPTest(c *gin.Context) {
 	var req mispConfigRequest
 	if c.Request.ContentLength != 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			mispFailText(c, http.StatusBadRequest, "Geçersiz istek", "Invalid request")
+			apiFail(c, http.StatusBadRequest, "invalid_request")
 			return
 		}
 	}
@@ -332,23 +329,23 @@ func (s *Server) handleMISPTest(c *gin.Context) {
 	cfg, newKey, err := applyMISPRequest(cur, req)
 	if err != nil {
 		s.audit(c, "misp.test", mispHost(cur.BaseURL), map[string]any{"error": "validation"}, false)
-		mispFail(c, http.StatusBadRequest, err)
+		mispFail(c, http.StatusBadRequest, "misp_config_invalid", err)
 		return
 	}
 	if cfg.BaseURL == "" || (cfg.APIKeyEnc == "" && newKey == "") {
-		mispFailText(c, http.StatusBadRequest, "Test için MISP adresi ve API anahtarı gerekli", "A MISP URL and API key are required to test")
+		apiFail(c, http.StatusBadRequest, "misp_test_incomplete")
 		return
 	}
 	target := mispHost(cfg.BaseURL)
 	client, err := s.mispClient(cfg, newKey)
 	if err != nil {
 		s.audit(c, "misp.test", target, map[string]any{"error": "config"}, false)
-		mispFail(c, http.StatusBadRequest, err)
+		mispFail(c, http.StatusBadRequest, "misp_config_invalid", err)
 		return
 	}
 	release, ok := s.mispAcquire()
 	if !ok {
-		mispFailText(c, http.StatusTooManyRequests, "Başka bir MISP isteği sürüyor; birazdan tekrar deneyin", "Another MISP request is in progress; try again shortly")
+		apiFail(c, http.StatusTooManyRequests, "misp_busy")
 		return
 	}
 	defer release()
@@ -358,7 +355,7 @@ func (s *Server) handleMISPTest(c *gin.Context) {
 	if err != nil {
 		logger.Warn("MISP testi başarısız (%s): %v", target, err)
 		s.audit(c, "misp.test", target, map[string]any{"error": "request_failed", "verifyTls": cfg.VerifyTLS}, false)
-		mispFail(c, http.StatusBadGateway, err)
+		mispFail(c, http.StatusBadGateway, "misp_request_failed", err)
 		return
 	}
 	s.audit(c, "misp.test", target, map[string]any{"version": version, "verifyTls": cfg.VerifyTLS}, true)
@@ -411,7 +408,7 @@ func (s *Server) handleMISPPush(c *gin.Context) {
 		ResultIDs []int64 `json:"resultIds"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.ResultIDs) == 0 || len(req.ResultIDs) > mispMaxPush {
-		mispFail(c, http.StatusBadRequest, misp.Errorf(nil, "Tek gönderimde 1–%d bulgu seçilmeli", "Select 1–%d findings per push", mispMaxPush))
+		apiFail(c, http.StatusBadRequest, "misp_push_range", mispMaxPush)
 		return
 	}
 	seen := make(map[int64]bool, len(req.ResultIDs))
@@ -428,7 +425,7 @@ func (s *Server) handleMISPPush(c *gin.Context) {
 		return
 	}
 	if !mispConfigured(cfg) {
-		mispFail(c, http.StatusConflict, errMISPNotConfigured)
+		mispFail(c, http.StatusConflict, "misp_not_configured", errMISPNotConfigured)
 		return
 	}
 	target := mispHost(cfg.BaseURL)
@@ -438,12 +435,12 @@ func (s *Server) handleMISPPush(c *gin.Context) {
 		return
 	}
 	if len(results) == 0 {
-		mispFailText(c, http.StatusNotFound, "Seçilen bulgular bulunamadı", "The selected findings were not found")
+		apiFail(c, http.StatusNotFound, "misp_results_not_found")
 		return
 	}
 	release, ok := s.mispAcquire()
 	if !ok {
-		mispFailText(c, http.StatusTooManyRequests, "Başka bir MISP isteği sürüyor; birazdan tekrar deneyin", "Another MISP request is in progress; try again shortly")
+		apiFail(c, http.StatusTooManyRequests, "misp_busy")
 		return
 	}
 	defer release()
@@ -453,7 +450,7 @@ func (s *Server) handleMISPPush(c *gin.Context) {
 	if err != nil {
 		logger.Warn("MISP gönderimi başarısız (%s): %v", target, err)
 		s.audit(c, "misp.push", target, map[string]any{"requested": len(ids), "error": "request_failed"}, false)
-		mispFail(c, http.StatusBadGateway, err)
+		mispFail(c, http.StatusBadGateway, "misp_request_failed", err)
 		return
 	}
 	logger.Info("MISP GÖNDERİMİ: %d bulgu → olay #%s (%s)", len(res.IDs), res.Ref.ID, target)

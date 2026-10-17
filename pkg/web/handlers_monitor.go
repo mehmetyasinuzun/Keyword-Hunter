@@ -21,7 +21,7 @@ import (
 func (s *Server) handleEnginesAPI(c *gin.Context) {
 	stats, err := s.db.GetAllEngineStats()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "motor istatistikleri alınamadı"})
+		apiError(c, http.StatusInternalServerError, "engine_stats_failed")
 		return
 	}
 
@@ -65,30 +65,30 @@ func (s *Server) handleEngineCheckNow(c *gin.Context) {
 		s.engineMonitor.CheckNow()
 		logger.Info("ENGINE CHECK: Manuel kontrol başlatıldı")
 		s.audit(c, "engine.check_now", "engines", nil, true)
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Kontrol başlatıldı, ~30 saniye içinde sonuçlar güncellenir"})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": apiText(c, "engine_check_started")})
 		return
 	}
 	s.audit(c, "engine.check_now", "engines", map[string]any{"error": "monitor_inactive"}, false)
-	c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Motor izleyici aktif değil"})
+	apiError(c, http.StatusServiceUnavailable, "engine_monitor_inactive")
 }
 
 // handleEngineToggle motoru aktif/pasif yapar
 func (s *Server) handleEngineToggle(c *gin.Context) {
 	name := strings.TrimSpace(c.Param("name"))
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Motor adı gerekli"})
+		apiError(c, http.StatusBadRequest, "engine_name_required")
 		return
 	}
 	var req struct {
 		Active bool `json:"active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz istek"})
+		apiError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if err := s.db.SetEngineActive(name, req.Active); err != nil {
 		s.audit(c, "engine.toggle", name, map[string]any{"active": req.Active, "error": "internal"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "güncelleme başarısız"})
+		apiError(c, http.StatusInternalServerError, "update_failed")
 		return
 	}
 	s.invalidateEngineCache()
@@ -101,7 +101,7 @@ func (s *Server) handleEngineToggle(c *gin.Context) {
 func (s *Server) handleMonitorSummary(c *gin.Context) {
 	stats, err := s.db.GetAllEngineStats()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "özet alınamadı"})
+		apiError(c, http.StatusInternalServerError, "summary_failed")
 		return
 	}
 	upCount, activeCount, activeUp := 0, 0, 0
@@ -148,7 +148,7 @@ const (
 func (s *Server) handleGetScheduledSearches(c *gin.Context) {
 	searches, err := s.db.GetAllScheduledSearches()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "liste alınamadı"})
+		apiError(c, http.StatusInternalServerError, "list_failed")
 		return
 	}
 	// Tarama-özel webhook adresleri sırdır; admin dışı roller gizlenmiş görür.
@@ -169,13 +169,13 @@ func (s *Server) handleCreateScheduled(c *gin.Context) {
 		AlertThreshold  int    `json:"alertThreshold"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz istek"})
+		apiError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
 	req.Query = strings.TrimSpace(req.Query)
 	if req.Query == "" || len(req.Query) > scheduledMaxQueryLen {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Sorgu boş olamaz ve 200 karakteri aşamaz"})
+		apiError(c, http.StatusBadRequest, "scheduled_query_invalid")
 		return
 	}
 	if req.IntervalMinutes <= 0 {
@@ -192,14 +192,14 @@ func (s *Server) handleCreateScheduled(c *gin.Context) {
 	}
 	req.WebhookURL = strings.TrimSpace(req.WebhookURL)
 	if req.WebhookURL != "" && !notify.ValidTarget(req.WebhookURL) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook yalnızca http(s) ve genel bir adres olabilir"})
+		apiError(c, http.StatusBadRequest, "webhook_invalid")
 		return
 	}
 
 	ss, err := s.db.CreateScheduledSearch(req.Query, req.IntervalMinutes, req.WebhookURL, req.AlertThreshold)
 	if err != nil {
 		logger.Error("Zamanlanmış tarama oluşturulamadı: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Oluşturma hatası"})
+		apiError(c, http.StatusInternalServerError, "create_failed")
 		return
 	}
 	logger.Info("SCHEDULED SEARCH CREATED: ID=%d, Query=%s, Interval=%dm", ss.ID, ss.Query, ss.IntervalMinutes)
@@ -216,13 +216,13 @@ func (s *Server) handleCreateScheduled(c *gin.Context) {
 func (s *Server) handleToggleScheduled(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz ID"})
+		apiError(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	enabled, err := s.db.ToggleScheduledSearch(id)
 	if err != nil {
 		s.audit(c, "scheduled.toggle", "scheduled:"+strconv.FormatInt(id, 10), map[string]any{"error": "internal"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "güncelleme başarısız"})
+		apiError(c, http.StatusInternalServerError, "update_failed")
 		return
 	}
 	s.audit(c, "scheduled.toggle", "scheduled:"+strconv.FormatInt(id, 10), map[string]any{"enabled": enabled}, true)
@@ -233,7 +233,7 @@ func (s *Server) handleToggleScheduled(c *gin.Context) {
 func (s *Server) handleDeleteScheduled(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz ID"})
+		apiError(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	query := ""
@@ -242,7 +242,7 @@ func (s *Server) handleDeleteScheduled(c *gin.Context) {
 	}
 	if err := s.db.DeleteScheduledSearch(id); err != nil {
 		s.audit(c, "scheduled.delete", "scheduled:"+strconv.FormatInt(id, 10), map[string]any{"error": "internal"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "silme başarısız"})
+		apiError(c, http.StatusInternalServerError, "delete_failed")
 		return
 	}
 	s.audit(c, "scheduled.delete", "scheduled:"+strconv.FormatInt(id, 10), map[string]any{"query": query}, true)
@@ -254,23 +254,23 @@ func (s *Server) handleDeleteScheduled(c *gin.Context) {
 func (s *Server) handleRunScheduledNow(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz ID"})
+		apiError(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	if s.scheduler == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Scheduler aktif değil"})
+		apiError(c, http.StatusServiceUnavailable, "scheduler_inactive")
 		return
 	}
 	if _, err := s.db.GetScheduledSearch(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Planlı tarama bulunamadı"})
+		apiError(c, http.StatusNotFound, "scheduled_not_found")
 		return
 	}
 	if !s.scheduler.RunNow(id) {
 		s.audit(c, "scheduled.run_now", "scheduled:"+strconv.FormatInt(id, 10), map[string]any{"error": "busy"}, false)
-		c.JSON(http.StatusConflict, gin.H{"error": "Başka bir planlı tarama şu an çalışıyor; bitince tekrar deneyin"})
+		apiError(c, http.StatusConflict, "scheduled_busy")
 		return
 	}
 	logger.Info("SCHEDULED SEARCH RUN NOW: ID=%d", id)
 	s.audit(c, "scheduled.run_now", "scheduled:"+strconv.FormatInt(id, 10), nil, true)
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Tarama başlatıldı"})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": apiText(c, "scan_started")})
 }

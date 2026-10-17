@@ -23,7 +23,7 @@ const captureMaxWait = 90 * time.Second
 func (s *Server) handleCaptureNow(c *gin.Context) {
 	if s.capturer == nil || !s.capturer.Available() {
 		s.audit(c, "screenshot.capture", "", map[string]any{"error": "unavailable"}, false)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ekran görüntüsü bu ortamda kullanılamıyor (chromium yok)"})
+		apiError(c, http.StatusServiceUnavailable, "screenshot_unavailable")
 		return
 	}
 
@@ -33,13 +33,13 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 		RefID     int64  `json:"refId"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz istek"})
+		apiError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	req.TargetURL = strings.TrimSpace(req.TargetURL)
 	if !isCaptureURL(req.TargetURL) {
 		s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"error": "invalid_target"}, false)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Hedef yalnızca genel bir http(s) veya .onion adresi olabilir"})
+		apiError(c, http.StatusBadRequest, "screenshot_target_invalid")
 		return
 	}
 	if req.Source == "" {
@@ -57,7 +57,7 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 			TargetURL: req.TargetURL, Source: req.Source, RefID: req.RefID,
 			Status: "error", ErrorMsg: truncateErr(err.Error()),
 		})
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Ekran görüntüsü alınamadı: " + truncateErr(err.Error())})
+		apiError(c, http.StatusBadGateway, "screenshot_failed", truncateErr(err.Error()))
 		return
 	}
 
@@ -71,7 +71,7 @@ func (s *Server) handleCaptureNow(c *gin.Context) {
 	})
 	if dbErr != nil {
 		s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"source": req.Source, "error": "internal"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Kayıt başarısız"})
+		apiError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
 	s.audit(c, "screenshot.capture", auditURL(req.TargetURL), map[string]any{"screenshotId": id, "source": req.Source, "sha256": shot.SHA256, "challenge": shot.Challenge}, true)
@@ -104,7 +104,7 @@ func (s *Server) handleScreenshotsList(c *gin.Context) {
 		shots, err = s.db.GetRecentScreenshots(limit)
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "liste alınamadı"})
+		apiError(c, http.StatusInternalServerError, "list_failed")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"screenshots": shots, "count": len(shots), "available": s.capturer != nil && s.capturer.Available()})
@@ -114,16 +114,16 @@ func (s *Server) handleScreenshotsList(c *gin.Context) {
 func (s *Server) handleServeScreenshot(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz ID"})
+		apiError(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	shot, err := s.db.GetScreenshotByID(id)
 	if err != nil || shot.Status != "ok" || shot.FilePath == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Görüntü bulunamadı"})
+		apiError(c, http.StatusNotFound, "screenshot_not_found")
 		return
 	}
 	if s.capturer == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Görüntü bulunamadı"})
+		apiError(c, http.StatusNotFound, "screenshot_not_found")
 		return
 	}
 	// Yalnız dizin içindeki dosya adına izin ver (traversal engeli)

@@ -30,7 +30,7 @@ const autoTagMaxWait = 100 * time.Second
 // respondInternalError istemciye generic mesaj döndürür, gerçek hatayı loglar (bilgi sızıntısı önlenir)
 func respondInternalError(c *gin.Context, op string, err error) {
 	logger.Error("%s hatası: %v", op, err)
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "Sunucu hatası, lütfen tekrar deneyin"})
+	apiError(c, http.StatusInternalServerError, "internal")
 }
 
 // ExpandRequest expand isteği
@@ -92,7 +92,7 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 		Category    string `json:"category"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz istek"})
+		apiError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
@@ -100,17 +100,17 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 		req.Type = "result"
 	}
 	if req.Type != "result" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz type değeri"})
+		apiError(c, http.StatusBadRequest, "invalid_type")
 		return
 	}
 
 	if req.Criticality < 1 || req.Criticality > 5 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Kritiklik 1-5 arasında olmalıdır"})
+		apiError(c, http.StatusBadRequest, "criticality_range")
 		return
 	}
 	req.Category = strings.TrimSpace(req.Category)
 	if len(req.Category) > 64 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori en fazla 64 karakter olabilir"})
+		apiError(c, http.StatusBadRequest, "category_too_long")
 		return
 	}
 
@@ -124,7 +124,7 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 		return
 	}
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Kayıt bulunamadı"})
+		apiError(c, http.StatusNotFound, "record_not_found")
 		return
 	}
 
@@ -137,7 +137,7 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 func (s *Server) handleAutoTag(c *gin.Context) {
 	var req AutoTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
@@ -151,16 +151,18 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 		s.audit(c, "tagging.run", "result:"+strconv.FormatInt(req.ID, 10), map[string]any{"error": tagErrKind(ctx, err)}, false)
 		switch {
 		case errors.Is(err, tagging.ErrResultNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Sonuç bulunamadı"})
+			apiFail(c, http.StatusNotFound, "result_not_found")
 		case errors.Is(err, tagging.ErrNoTaggableSignal):
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"success": false, "error": "Etiket çıkarılamadı"})
+			apiFail(c, http.StatusUnprocessableEntity, "no_taggable_signal")
 		case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-			c.JSON(http.StatusGatewayTimeout, gin.H{"success": false, "error": "Site yanıt vermedi (zaman aşımı); daha sonra tekrar deneyin"})
+			apiFail(c, http.StatusGatewayTimeout, "site_timeout")
 		case errors.Is(err, tagging.ErrFetchFailed):
-			c.JSON(http.StatusBadGateway, gin.H{"success": false, "error": truncateErr(err.Error())})
+			body := fetchErrBody(c, "tag_fetch_failed", err, tagging.ErrFetchFailed)
+			body["success"] = false
+			c.JSON(http.StatusBadGateway, body)
 		default:
 			logger.Error("AutoTag hatası: ID=%d, err=%v", req.ID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Etiketleme başarısız oldu"})
+			apiFail(c, http.StatusInternalServerError, "tagging_failed")
 		}
 		return
 	}
@@ -184,12 +186,12 @@ func (s *Server) handleAutoTag(c *gin.Context) {
 func (s *Server) handleBatchAutoTag(c *gin.Context) {
 	var req BatchAutoTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
 	if len(req.ResultIDs) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Etiketlenecek kayıt bulunamadı"})
+		apiFail(c, http.StatusBadRequest, "no_results_to_tag")
 		return
 	}
 
@@ -204,12 +206,12 @@ func (s *Server) handleBatchAutoTag(c *gin.Context) {
 		}
 		s.audit(c, "tagging.batch.submit", req.Query, map[string]any{"requested": len(req.ResultIDs), "error": kind}, false)
 		if errors.Is(err, tagging.ErrNoValidResultIDs) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli result ID bulunamadı"})
+			apiFail(c, http.StatusBadRequest, "no_valid_result_ids")
 		} else if errors.Is(err, tagging.ErrQueueFull) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": err.Error()})
+			apiFail(c, http.StatusServiceUnavailable, "tagging_queue_full")
 		} else {
 			logger.Error("BatchAutoTag submit hatası: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Toplu etiketleme başlatılamadı"})
+			apiFail(c, http.StatusInternalServerError, "batch_tag_failed")
 		}
 		return
 	}
@@ -227,20 +229,27 @@ func (s *Server) handleBatchAutoTag(c *gin.Context) {
 func (s *Server) handleBatchAutoTagStatus(c *gin.Context) {
 	jobID := c.Param("id")
 	if jobID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Job ID gerekli"})
+		apiFail(c, http.StatusBadRequest, "job_id_required")
 		return
 	}
 
 	job, err := s.db.GetTaggingJob(jobID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Job bulunamadı"})
+			apiFail(c, http.StatusNotFound, "job_not_found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Job durumu alınamadı"})
+		apiFail(c, http.StatusInternalServerError, "job_status_failed")
 		return
 	}
 
+	// error_message veritabanında sabit Türkçe metin olarak durur; istemciye
+	// kararlı kod (errorCode) ve istek dilindeki iletisi gider.
+	jobErr, jobErrCode := "", ""
+	if job.ErrorMessage != "" {
+		jobErrCode = taggingJobErrCode(job.ErrorMessage)
+		jobErr = apiMsg(apiLang(c), jobErrCode)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
 		"jobId":      job.ID,
@@ -249,29 +258,53 @@ func (s *Server) handleBatchAutoTagStatus(c *gin.Context) {
 		"processed":  job.ProcessedCount,
 		"successes":  job.SuccessCount,
 		"failures":   job.FailureCount,
-		"error":      job.ErrorMessage,
+		"error":      jobErr,
+		"errorCode":  jobErrCode,
 		"createdAt":  job.CreatedAt,
 		"startedAt":  job.StartedAt,
 		"finishedAt": job.FinishedAt,
 	})
 }
 
+// taggingJobErrCode etiketleme işinin kayıtlı hata iletisini kararlı koda
+// eşler. Bilinmeyen (eski sürümden kalma vb.) bir ileti ham haliyle
+// istemciye gitmez; genel "tagging_job_failed" koduna düşer.
+func taggingJobErrCode(msg string) (code string) {
+	switch msg {
+	case tagging.JobMsgCancelled:
+		code = "job_cancelled_by_user"
+	case tagging.JobMsgQueueFull:
+		code = "tagging_queue_full"
+	case tagging.JobMsgPayloadInvalid:
+		code = "job_payload_invalid"
+	case tagging.JobMsgPayloadEmpty:
+		code = "job_payload_empty"
+	case tagging.JobMsgAllFailed:
+		code = "job_all_failed"
+	case storage.TaggingJobRestartedMsg:
+		code = "job_app_restarted"
+	default:
+		code = "tagging_job_failed"
+	}
+	return code
+}
+
 // handleBatchAutoTagCancel çalışan/queued işi iptal eder
 func (s *Server) handleBatchAutoTagCancel(c *gin.Context) {
 	jobID := c.Param("id")
 	if jobID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Job ID gerekli"})
+		apiFail(c, http.StatusBadRequest, "job_id_required")
 		return
 	}
 
 	if err := s.batchRunner.Cancel(jobID); err != nil {
 		s.audit(c, "tagging.batch.cancel", "job:"+jobID, map[string]any{"error": auditErrKind(err, sql.ErrNoRows, "not_found")}, false)
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Job bulunamadı"})
+			apiFail(c, http.StatusNotFound, "job_not_found")
 			return
 		}
 		logger.Error("BatchAutoTag cancel hatası: jobID=%s, err=%v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "İş iptal edilemedi"})
+		apiFail(c, http.StatusInternalServerError, "cancel_failed")
 		return
 	}
 
@@ -304,7 +337,7 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 		ID int64 `json:"id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz ID"})
+		apiError(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 
@@ -312,11 +345,11 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 	result, err := s.db.GetResultByID(req.ID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Bulgu bulunamadı"})
+			apiError(c, http.StatusNotFound, "result_not_found")
 			return
 		}
 		logger.Error("Bulgu getirilemedi: ID=%d, err=%v", req.ID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Bulgu getirilemedi"})
+		apiError(c, http.StatusInternalServerError, "result_load_failed")
 		return
 	}
 
@@ -328,7 +361,7 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 	if err != nil {
 		logger.Warn("ANALYZE FAILED: ID=%d, Error=%v", req.ID, err)
 		s.audit(c, "result.analyze", "result:"+strconv.FormatInt(req.ID, 10), map[string]any{"error": "fetch_failed"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Tarama hatası: %v", err)})
+		c.JSON(http.StatusInternalServerError, fetchErrBody(c, "analyze_failed", err, nil))
 		return
 	}
 
@@ -336,7 +369,7 @@ func (s *Server) handleAnalyzeResult(c *gin.Context) {
 	// Güncelle
 	if err := s.db.UpdateKeywordCount(req.ID, count); err != nil {
 		logger.DatabaseError("UpdateKeywordCount", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Veritabanı güncelleme hatası"})
+		apiError(c, http.StatusInternalServerError, "db_update_failed")
 		return
 	}
 
@@ -352,7 +385,7 @@ func (s *Server) handleGraphAPI(c *gin.Context) {
 	if raw := c.Query("maxQueries"); raw != "" {
 		value, err := parseGraphLimit(raw, 500)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apiErrorFrom(c, http.StatusBadRequest, err)
 			return
 		}
 		options.MaxQueries = value
@@ -361,7 +394,7 @@ func (s *Server) handleGraphAPI(c *gin.Context) {
 	if raw := c.Query("maxResultsPerEngine"); raw != "" {
 		value, err := parseGraphLimit(raw, 1000)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apiErrorFrom(c, http.StatusBadRequest, err)
 			return
 		}
 		options.MaxResultsPerEngine = value
@@ -382,7 +415,7 @@ func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
 	if raw := c.Query("limit"); raw != "" {
 		value, err := parseGraphLimit(raw, 500)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apiErrorFrom(c, http.StatusBadRequest, err)
 			return
 		}
 		if value > 0 {
@@ -408,7 +441,7 @@ func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
 
 	rows, err := s.db.GetDBConn().Query(querySQL, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Sorgu ozeti alinamadi"})
+		apiError(c, http.StatusInternalServerError, "graph_queries_failed")
 		return
 	}
 	defer rows.Close()
@@ -431,7 +464,7 @@ func (s *Server) handleGraphQueriesAPI(c *gin.Context) {
 func (s *Server) handleGraphEnginesAPI(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "q parametresi zorunludur"})
+		apiError(c, http.StatusBadRequest, "q_required")
 		return
 	}
 
@@ -439,7 +472,7 @@ func (s *Server) handleGraphEnginesAPI(c *gin.Context) {
 	if raw := c.Query("limit"); raw != "" {
 		value, err := parseGraphLimit(raw, 500)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apiErrorFrom(c, http.StatusBadRequest, err)
 			return
 		}
 		if value > 0 {
@@ -456,7 +489,7 @@ func (s *Server) handleGraphEnginesAPI(c *gin.Context) {
 		LIMIT ?
 	`, query, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Engine ozeti alinamadi"})
+		apiError(c, http.StatusInternalServerError, "graph_engines_failed")
 		return
 	}
 	defer rows.Close()
@@ -480,7 +513,7 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	engine := strings.TrimSpace(c.Query("engine"))
 	if query == "" || engine == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "q ve engine parametreleri zorunludur"})
+		apiError(c, http.StatusBadRequest, "q_engine_required")
 		return
 	}
 
@@ -488,7 +521,7 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 	if raw := c.Query("limit"); raw != "" {
 		value, err := parseGraphLimit(raw, 1000)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apiErrorFrom(c, http.StatusBadRequest, err)
 			return
 		}
 		if value > 0 {
@@ -500,7 +533,7 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 	if raw := c.Query("offset"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "gecersiz offset"})
+			apiError(c, http.StatusBadRequest, "invalid_offset")
 			return
 		}
 		offset = value
@@ -544,7 +577,7 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 		LIMIT ? OFFSET ?
 	`, query, engine, queryLimit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Result ozeti alinamadi"})
+		apiError(c, http.StatusInternalServerError, "graph_results_failed")
 		return
 	}
 	defer rows.Close()
@@ -586,10 +619,10 @@ func (s *Server) handleGraphResultsAPI(c *gin.Context) {
 func parseGraphLimit(raw string, maxAllowed int) (int, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("geçersiz limit değeri: %s", raw)
+		return 0, errCode("invalid_limit")
 	}
 	if value < 0 {
-		return 0, fmt.Errorf("limit negatif olamaz")
+		return 0, errCode("invalid_limit")
 	}
 	if value > maxAllowed {
 		value = maxAllowed
@@ -599,13 +632,13 @@ func parseGraphLimit(raw string, maxAllowed int) (int, error) {
 
 func (s *Server) handleEnvSettingsGet(c *gin.Context) {
 	if s.envStore == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env store tanimli degil"})
+		apiFail(c, http.StatusInternalServerError, "env_store_unavailable")
 		return
 	}
 
 	values, err := s.envStore.Read()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env dosyasi okunamadi"})
+		apiFail(c, http.StatusInternalServerError, "env_read_failed")
 		return
 	}
 
@@ -654,13 +687,13 @@ func (s *Server) handleEnvSettingsGet(c *gin.Context) {
 
 func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 	if s.envStore == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env store tanimli degil"})
+		apiFail(c, http.StatusInternalServerError, "env_store_unavailable")
 		return
 	}
 
 	var req envSettingsPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Gecersiz ayar payload"})
+		apiFail(c, http.StatusBadRequest, "settings_payload_invalid")
 		return
 	}
 
@@ -679,37 +712,37 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 	}
 
 	if req.AdminUser == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin kullanici adi bos olamaz"})
+		apiFail(c, http.StatusBadRequest, "admin_username_required")
 		return
 	}
 	if req.TorProxy == "" || req.DBPath == "" || req.WebAddr == "" || req.LogDir == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "TOR/DB/WEB/LOG alanlari bos olamaz"})
+		apiFail(c, http.StatusBadRequest, "env_paths_required")
 		return
 	}
 	if req.SessionTTL < 1 || req.SessionTTL > 720 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Session TTL 1-720 saat araliginda olmalidir"})
+		apiFail(c, http.StatusBadRequest, "session_ttl_range")
 		return
 	}
 	if req.RateLimitRPS < 1 || req.RateLimitRPS > 200 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Rate limit RPS 1-200 araliginda olmalidir"})
+		apiFail(c, http.StatusBadRequest, "rate_rps_range")
 		return
 	}
 	if req.RateLimitBurst < 1 || req.RateLimitBurst > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Rate limit burst 1-500 araliginda olmalidir"})
+		apiFail(c, http.StatusBadRequest, "rate_burst_range")
 		return
 	}
 
 	newPass := req.AdminPass
 	if newPass != "" && (len([]rune(newPass)) < 8 || len(newPass) > 256) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Admin parolasi 8-256 karakter olmalidir"})
+		apiFail(c, http.StatusBadRequest, "admin_password_length")
 		return
 	}
 	if strings.ContainsAny(req.AdminUser, " \t\r\n") || len(req.AdminUser) > 64 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kullanici adi bosluk iceremez ve 64 karakteri asamaz"})
+		apiFail(c, http.StatusBadRequest, "admin_username_invalid")
 		return
 	}
 	if _, _, err := netSplitHostPort(req.TorProxy); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "TOR_PROXY host:port biciminde olmalidir (orn. 127.0.0.1:9150)"})
+		apiFail(c, http.StatusBadRequest, "tor_proxy_invalid")
 		return
 	}
 
@@ -749,7 +782,7 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 
 	if err := s.envStore.Update(updates); err != nil {
 		s.audit(c, "settings.env.update", "env", map[string]any{"changed": changedKeys, "error": "env_persist"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Env dosyasi guncellenemedi"})
+		apiFail(c, http.StatusInternalServerError, "env_write_failed")
 		return
 	}
 	// Yalnız değişen anahtar ADLARI kaydedilir; değerler (parola hash'i dahil) asla.
@@ -773,7 +806,7 @@ func (s *Server) handleEnvSettingsUpdate(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":         true,
-		"message":         "Ayarlar kaydedildi",
+		"message":         apiText(c, "settings_saved"),
 		"appliedRuntime":  applied,
 		"requiresRestart": []string{"TOR_PROXY", "DB_PATH", "WEB_ADDR", "LOG_DIR", "WEB_SECURE_COOKIES"},
 	})
@@ -857,7 +890,7 @@ func (s *Server) handleTagStats(c *gin.Context) {
 func (s *Server) handleResultsByTag(c *gin.Context) {
 	tag := c.Query("tag")
 	if tag == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Tag parametresi gerekli"})
+		apiError(c, http.StatusBadRequest, "tag_required")
 		return
 	}
 
@@ -948,13 +981,13 @@ func (s *Server) handleAnalyticsAPI(c *gin.Context) {
 func (s *Server) handleExpandNode(c *gin.Context) {
 	var req ExpandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
 	// Doğrulama hatası istemci hatasıdır (400): Tor'a gitmeden reddedilir.
 	if !shared.IsOnionURL(req.URL) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Derinleştirme yalnızca geçerli .onion adresleri için çalışır"})
+		apiFail(c, http.StatusBadRequest, "expand_onion_only")
 		return
 	}
 
@@ -965,10 +998,9 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 	if err != nil {
 		logger.ExpandNode(req.URL, 0, err)
 		s.audit(c, "graph.expand", auditURL(req.URL), map[string]any{"error": "fetch_failed"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   fmt.Sprintf("Sayfa taranamadı: %v", err),
-		})
+		body := fetchErrBody(c, "expand_failed", err, nil)
+		body["success"] = false
+		c.JSON(http.StatusInternalServerError, body)
 		return
 	}
 
@@ -1055,14 +1087,14 @@ func (s *Server) handleGetChildren(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 
 	children, err := s.db.GetGraphChildren(id)
 	if err != nil {
 		logger.Error("GetGraphChildren hatası: id=%d, err=%v", id, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Çocuk düğümler alınamadı"})
+		apiFail(c, http.StatusInternalServerError, "graph_children_failed")
 		return
 	}
 
@@ -1108,7 +1140,7 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 		Enabled        bool   `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if req.MinCriticality < 1 || req.MinCriticality > 5 {
@@ -1130,18 +1162,18 @@ func (s *Server) handleAlertConfigSave(c *gin.Context) {
 		}
 	}
 	if cfg.WebhookURL != "" && !notify.ValidTarget(cfg.WebhookURL) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Webhook yalnızca http(s) ve genel (dahili olmayan) bir adres olabilir"})
+		apiFail(c, http.StatusBadRequest, "webhook_invalid")
 		return
 	}
 	if cfg.Enabled && cfg.WebhookURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Bildirimleri etkinleştirmek için webhook adresi gerekli"})
+		apiFail(c, http.StatusBadRequest, "webhook_required_enable")
 		return
 	}
 	prev, _ := s.db.GetAlertConfig()
 	if err := s.db.SaveAlertConfig(cfg); err != nil {
 		logger.Error("SaveAlertConfig hatası: %v", err)
 		s.audit(c, "alert.config.update", "alert_config", map[string]any{"error": "internal"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Ayar kaydedilemedi"})
+		apiFail(c, http.StatusInternalServerError, "settings_save_failed")
 		return
 	}
 	// Webhook adresi bir sırdır: yalnız ana makine (RedactURL) ve değişip değişmediği kaydedilir.
@@ -1166,16 +1198,16 @@ func (s *Server) handleAlertConfigTest(c *gin.Context) {
 	}
 	if !notify.ValidTarget(target) {
 		s.audit(c, "alert.test", shared.RedactURL(target), map[string]any{"error": "invalid_target"}, false)
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli bir webhook adresi gerekli"})
+		apiFail(c, http.StatusBadRequest, "webhook_required")
 		return
 	}
 	if err := notify.SendTest(target); err != nil {
 		s.audit(c, "alert.test", shared.RedactURL(target), map[string]any{"error": "delivery_failed"}, false)
-		c.JSON(http.StatusBadGateway, gin.H{"success": false, "error": "Webhook yanıt vermedi: " + truncateErr(err.Error())})
+		apiFail(c, http.StatusBadGateway, "webhook_test_failed", truncateErr(err.Error()))
 		return
 	}
 	s.audit(c, "alert.test", shared.RedactURL(target), nil, true)
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Test bildirimi gönderildi"})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": apiText(c, "webhook_test_sent")})
 }
 
 // handleExportResults bulguları CSV veya JSON olarak dışa aktarır
@@ -1309,7 +1341,7 @@ func (s *Server) handleDeleteResults(c *gin.Context) {
 		IDs []int64 `json:"ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 || len(req.IDs) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "1-500 arası ID listesi gerekli"})
+		apiFail(c, http.StatusBadRequest, "ids_range")
 		return
 	}
 	n, err := s.db.DeleteResults(req.IDs)
@@ -1327,7 +1359,7 @@ func (s *Server) handleDeleteResults(c *gin.Context) {
 func (s *Server) handleUpdateCase(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	var req struct {
@@ -1335,11 +1367,11 @@ func (s *Server) handleUpdateCase(c *gin.Context) {
 		Note   string `json:"note"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if !storage.ValidCaseStatus(req.Status) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz vaka durumu"})
+		apiFail(c, http.StatusBadRequest, "invalid_case_status")
 		return
 	}
 	n, err := s.db.UpdateResultCase(id, req.Status, strings.TrimSpace(req.Note))
@@ -1348,7 +1380,7 @@ func (s *Server) handleUpdateCase(c *gin.Context) {
 		return
 	}
 	if n == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Kayıt bulunamadı"})
+		apiFail(c, http.StatusNotFound, "record_not_found")
 		return
 	}
 	// Notun kendisi değil uzunluğu kaydedilir (analist notu hassas olabilir).

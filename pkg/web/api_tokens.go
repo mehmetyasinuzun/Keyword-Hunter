@@ -88,9 +88,9 @@ func bearerToken(c *gin.Context) (string, bool) {
 }
 
 // tokenAuthFailure geçersiz token denemesinin nedeni (denetim) ve istemciye
-// dönen ileti.
+// dönen hata kodu (apierr.<Code>; ileti istek dilinde üretilir).
 type tokenAuthFailure struct {
-	Reason, Message string
+	Reason, Code string
 }
 
 // verifyAPIToken düz metin token'ı doğrular ve sahibini (güncel, etkin hesap)
@@ -98,13 +98,13 @@ type tokenAuthFailure struct {
 // Yanıt yazmaz: /api/ (Bearer, JSON) ve /taxii2/ (Basic|Bearer, TAXII hata
 // nesnesi) kendi biçimleriyle yanıtlar.
 func (s *Server) verifyAPIToken(c *gin.Context, raw string) (*storage.APIToken, *storage.User, *tokenAuthFailure) {
-	fail := func(reason, msg string, t *storage.APIToken) (*storage.APIToken, *storage.User, *tokenAuthFailure) {
+	fail := func(reason, code string, t *storage.APIToken) (*storage.APIToken, *storage.User, *tokenAuthFailure) {
 		s.auditTokenFailure(c, reason, t)
-		return nil, nil, &tokenAuthFailure{Reason: reason, Message: msg}
+		return nil, nil, &tokenAuthFailure{Reason: reason, Code: code}
 	}
 
 	if !storage.LooksLikeAPIToken(raw) {
-		return fail("malformed", "Geçersiz API token", nil)
+		return fail("malformed", "token_invalid", nil)
 	}
 	hash := storage.HashAPIToken(raw)
 	t, err := s.db.GetAPITokenByHash(hash)
@@ -112,23 +112,23 @@ func (s *Server) verifyAPIToken(c *gin.Context, raw string) (*storage.APIToken, 
 		if !errors.Is(err, storage.ErrTokenNotFound) {
 			logger.Warn("API token okunamadı: %v", err)
 		}
-		return fail("unknown", "Geçersiz API token", nil)
+		return fail("unknown", "token_invalid", nil)
 	}
 	// Arama özetle yapıldı; sabit-zamanlı karşılaştırma ikinci savunma hattıdır.
 	if subtle.ConstantTimeCompare([]byte(t.TokenHash), []byte(hash)) != 1 {
-		return fail("unknown", "Geçersiz API token", nil)
+		return fail("unknown", "token_invalid", nil)
 	}
 	switch t.Status(time.Now()) {
 	case storage.TokenStatusRevoked:
-		return fail("revoked", "API token iptal edilmiş", t)
+		return fail("revoked", "token_revoked", t)
 	case storage.TokenStatusExpired:
-		return fail("expired", "API token süresi dolmuş", t)
+		return fail("expired", "token_expired", t)
 	}
 	// Sahip hâlâ var, etkin ve AYNI hesap olmalı (silinip aynı adla yeniden
 	// açılan hesap eski token'ı devralmaz). Rol her istekte tazelenir.
 	u, err := s.db.GetUserByUsername(t.Username)
 	if err != nil || u == nil || u.ID != t.UserID || !u.Enabled {
-		return fail("user_unavailable", "Geçersiz API token", t)
+		return fail("user_unavailable", "token_invalid", t)
 	}
 	return t, u, nil
 }
@@ -180,14 +180,14 @@ func (s *Server) authenticateToken(c *gin.Context, raw string) {
 	t, u, failure := s.verifyAPIToken(c, raw)
 	if failure != nil {
 		c.Header("WWW-Authenticate", `Bearer realm="KeywordHunter", error="invalid_token"`)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": failure.Message})
+		apiAbort(c, http.StatusUnauthorized, failure.Code)
 		return
 	}
 	setTokenContext(c, t, u)
 
 	if tokenForbiddenRoute(c.FullPath()) {
 		s.auditDenied(c, "token_session_required", "")
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Bu uç nokta etkileşimli oturum gerektirir; API token ile çağrılamaz (this endpoint requires an interactive session)"})
+		apiAbort(c, http.StatusForbidden, "session_required")
 		return
 	}
 	s.touchAPIToken(c, t)
@@ -226,7 +226,7 @@ func (s *Server) handleTokensList(c *gin.Context) {
 	all := c.Query("all") == "1"
 	if all && role != storage.RoleAdmin {
 		s.auditDenied(c, "role", storage.RoleAdmin)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Tüm kullanıcıların token'larını yalnız admin görebilir"})
+		apiError(c, http.StatusForbidden, "tokens_all_admin_only")
 		return
 	}
 	owner := me
@@ -275,31 +275,31 @@ func (s *Server) handleTokenCreate(c *gin.Context) {
 		ExpiresInDays int    `json:"expiresInDays"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	name := strings.TrimSpace(req.Name)
 	if !validTokenName(name) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Token adı 1-64 karakter olmalı"})
+		apiFail(c, http.StatusBadRequest, "token_name_length", maxTokenNameRunes)
 		return
 	}
 	if !storage.ValidTokenScope(req.Scope) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kapsam read ya da write olmalı"})
+		apiFail(c, http.StatusBadRequest, "token_scope_invalid")
 		return
 	}
 	if req.ExpiresInDays < 0 || req.ExpiresInDays > maxTokenExpiryDays {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerlilik süresi 0 (süresiz) ile 365 gün arasında olmalı"})
+		apiFail(c, http.StatusBadRequest, "token_expiry_range", maxTokenExpiryDays)
 		return
 	}
 	me := c.GetString("username")
 	u, err := s.db.GetUserByUsername(me)
 	if err != nil || u == nil {
 		// Bootstrap kimlik deposu (users tablosu dışı) hesabına token bağlanamaz.
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "API token yalnız kullanıcı hesapları için oluşturulabilir"})
+		apiFail(c, http.StatusBadRequest, "token_managed_only")
 		return
 	}
 	if req.Scope == storage.TokenScopeWrite && roleRank(u.Role) < roleRank(storage.RoleAnalyst) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "İzleyici rolü yalnız okuma (read) kapsamlı token oluşturabilir"})
+		apiFail(c, http.StatusBadRequest, "token_viewer_read_only")
 		return
 	}
 	now := time.Now()
@@ -312,7 +312,7 @@ func (s *Server) handleTokenCreate(c *gin.Context) {
 	plain, t, err := s.db.CreateAPITokenLimited(u.ID, u.Username, name, req.Scope, expiresAt, maxActiveTokensPerUser)
 	if errors.Is(err, storage.ErrTokenLimit) {
 		s.audit(c, "token.create", "user:"+u.Username, map[string]any{"error": "limit", "max": maxActiveTokensPerUser}, false)
-		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "En fazla " + strconv.Itoa(maxActiveTokensPerUser) + " etkin token olabilir; kullanılmayanları iptal edin"})
+		apiFail(c, http.StatusConflict, "token_limit", maxActiveTokensPerUser)
 		return
 	}
 	if err != nil {
@@ -335,14 +335,14 @@ func (s *Server) handleTokenCreate(c *gin.Context) {
 func (s *Server) handleTokenRevoke(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	target := "token:" + strconv.FormatInt(id, 10)
 	t, err := s.db.GetAPIToken(id)
 	if err != nil {
 		if errors.Is(err, storage.ErrTokenNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Token bulunamadı"})
+			apiFail(c, http.StatusNotFound, "token_not_found")
 			return
 		}
 		respondInternalError(c, "GetAPIToken", err)
@@ -355,7 +355,7 @@ func (s *Server) handleTokenRevoke(c *gin.Context) {
 	if !owner && c.GetString("role") != storage.RoleAdmin {
 		// Başkasının token'ının varlığı sızdırılmaz: bulunamadı ile aynı yanıt.
 		s.audit(c, "token.revoke", target, map[string]any{"error": "not_owner"}, false)
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Token bulunamadı"})
+		apiFail(c, http.StatusNotFound, "token_not_found")
 		return
 	}
 	changed, err := s.db.RevokeAPIToken(id)
@@ -395,7 +395,7 @@ func (s *Server) handleAccountPage(c *gin.Context) {
 		"ActivePage": "account",
 		"profile":    profile,
 		"tokenMax":   maxActiveTokensPerUser,
-		"twofa":      s.twoFAView(c, u),
+		"twofa":      s.twoFAView(u, requestLang(c)),
 		"need2fa":    c.GetBool("need2FA"),
 		// Kurtarma koduyla girişten sonra 2FA kartında bilgi notu (yalnız sabit kod).
 		"recoveryUsed": c.Query("notice") == "recovery_used" && u != nil,

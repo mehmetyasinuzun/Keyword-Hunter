@@ -52,10 +52,6 @@ const (
 	maxSecondFactorInput = 64
 )
 
-// errTwoFARequired REQUIRE_2FA kapsamındaki kayıtsız kullanıcıya dönen sabit
-// hata metni (istemciler bununla eşleşebilir).
-const errTwoFARequired = "2FA required"
-
 // ─────────────────────────── Bekleyen girişler ───────────────────────────
 
 type pendingLogin struct {
@@ -263,15 +259,26 @@ func (s *Server) pendingFromCookie(c *gin.Context) (string, pendingLogin, bool) 
 func sealContext(userID int64) string { return "user:" + strconv.FormatInt(userID, 10) }
 
 // twoFactorAvailable 2FA kaydı bu sunucuda yapılabilir mi (APP_SECRET kalıcı
-// ve geçerli). Kapalıysa kullanıcıya gösterilecek nedeni döndürür.
+// ve geçerli). Kapalıysa nedenin ileti kodunu (apierr.<kod>) döndürür.
+// İstemci sözleşmesindeki hata kodu her iki neden için de "unavailable"dır
+// (bkz. twoFAUnavailable); ayrıntı yalnız iletidedir.
 func (s *Server) twoFactorAvailable() (bool, string) {
 	if s.totpSealer == nil {
-		return false, "2FA bu sunucuda kullanılamıyor: APP_SECRET yapılandırılmamış (2FA is unavailable: APP_SECRET is not configured)"
+		return false, "2fa_no_app_secret"
 	}
 	if s.appSecretEphemeral {
-		return false, "2FA bu sunucuda geçici olarak kullanılamıyor: APP_SECRET .env dosyasına kalıcı yazılamadı (2FA is unavailable: APP_SECRET could not be persisted)"
+		return false, "2fa_app_secret_ephemeral"
 	}
 	return true, ""
+}
+
+// twoFAUnavailable 2FA hizmeti kullanılamadığında 503 yazar. Kod kararlı
+// "unavailable"dır (account.js buna göre davranır); ileti nedeni açıklar.
+func twoFAUnavailable(c *gin.Context, reason string) {
+	body := apiErrBody(c, reason)
+	body["code"] = "unavailable"
+	body["success"] = false
+	c.JSON(http.StatusServiceUnavailable, body)
 }
 
 // twoFactorPolicyActive REQUIRE_2FA admins ya da all mı.
@@ -382,8 +389,9 @@ func newRecoveryCodes(userID int64) ([]string, []string, error) {
 	return codes, hashes, nil
 }
 
-// twoFAView Hesabım sayfası / durum ucu için 2FA özeti (sır içermez).
-func (s *Server) twoFAView(c *gin.Context, u *storage.User) gin.H {
+// twoFAView Hesabım sayfası / durum ucu için 2FA özeti (sır içermez). lang
+// kullanılamama nedeninin dilidir: sayfada arayüz dili, API ucunda apiLang.
+func (s *Server) twoFAView(u *storage.User, lang string) gin.H {
 	available, reason := s.twoFactorAvailable()
 	view := gin.H{
 		"managed":           u != nil,
@@ -395,7 +403,7 @@ func (s *Server) twoFAView(c *gin.Context, u *storage.User) gin.H {
 		"policy":            s.require2FA,
 	}
 	if !available {
-		view["unavailableReason"] = reason
+		view["unavailableReason"] = apiMsg(lang, reason)
 	}
 	if u == nil {
 		return view
@@ -453,7 +461,7 @@ func (s *Server) twoFactorGate() gin.HandlerFunc {
 				clearAuthCookies(c, s.cookieSecure)
 			}
 			if isAPIRoute(c) || !isSafeMethod(c.Request.Method) {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": errTwoFARequired, "code": "2fa_required"})
+				apiAbort(c, http.StatusForbidden, "2fa_required")
 				return
 			}
 			c.Redirect(http.StatusFound, "/login?message=2fa_policy")
@@ -486,7 +494,7 @@ func (s *Server) twoFactorGate() gin.HandlerFunc {
 			if s.auditNoise.allow("2fa-required:"+strings.ToLower(u.Username)+":"+c.GetString("authMethod"), time.Minute) {
 				s.auditDenied(c, "2fa_required", "")
 			}
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": errTwoFARequired, "code": "2fa_required"})
+			apiAbort(c, http.StatusForbidden, "2fa_required")
 		}
 		if c.GetString("authMethod") == storage.AuthMethodToken {
 			deny()
@@ -691,7 +699,7 @@ func (s *Server) handleLogin2FACancel(c *gin.Context) {
 
 // handleTwoFAStatus kendi 2FA durumunu döndürür.
 func (s *Server) handleTwoFAStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, s.twoFAView(c, s.sessionManagedUser(c)))
+	c.JSON(http.StatusOK, s.twoFAView(s.sessionManagedUser(c), apiLang(c)))
 }
 
 // requireManaged2FAUser 2FA uçları için users kaydını ve hizmetin kullanılabilir
@@ -699,7 +707,7 @@ func (s *Server) handleTwoFAStatus(c *gin.Context) {
 func (s *Server) requireManaged2FAUser(c *gin.Context) *storage.User {
 	u := s.sessionManagedUser(c)
 	if u == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "2FA yalnız kullanıcı hesapları için kullanılabilir (2FA is only available for user accounts)"})
+		apiFail(c, http.StatusBadRequest, "2fa_managed_only")
 		return nil
 	}
 	return u
@@ -712,7 +720,7 @@ func (s *Server) handleTwoFASetup(c *gin.Context) {
 		return
 	}
 	if ok, reason := s.twoFactorAvailable(); !ok {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": reason, "code": "unavailable"})
+		twoFAUnavailable(c, reason)
 		return
 	}
 	secret, err := totp.GenerateSecret()
@@ -727,7 +735,7 @@ func (s *Server) handleTwoFASetup(c *gin.Context) {
 	}
 	if err := s.db.SetTwoFactorPending(u.ID, enc, time.Now()); err != nil {
 		if errors.Is(err, storage.ErrTwoFactorState) {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "2FA zaten etkin (2FA is already enabled)"})
+			apiFail(c, http.StatusConflict, "2fa_already_enabled")
 			return
 		}
 		respondInternalError(c, "SetTwoFactorPending", err)
@@ -760,7 +768,7 @@ func (s *Server) handleTwoFAEnable(c *gin.Context) {
 		Code     string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	u := s.requireManaged2FAUser(c)
@@ -768,7 +776,7 @@ func (s *Server) handleTwoFAEnable(c *gin.Context) {
 		return
 	}
 	if ok, reason := s.twoFactorAvailable(); !ok {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": reason, "code": "unavailable"})
+		twoFAUnavailable(c, reason)
 		return
 	}
 	target := "user:" + u.Username
@@ -783,22 +791,22 @@ func (s *Server) handleTwoFAEnable(c *gin.Context) {
 		return
 	}
 	if tf.Enabled {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "2FA zaten etkin (2FA is already enabled)"})
+		apiFail(c, http.StatusConflict, "2fa_already_enabled")
 		return
 	}
 	if len(req.Password) > 512 || !verifyBcrypt(u.PasswordHash, req.Password) {
 		s.loginGuard.Fail(ip)
 		s.audit(c, "2fa.enable", target, map[string]any{"error": "wrong_password"}, false)
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Mevcut parola hatalı (current password is incorrect)", "code": "wrong_password"})
+		apiFail(c, http.StatusForbidden, "wrong_password")
 		return
 	}
 	if tf.PendingEnc == "" || tf.PendingAt == nil || time.Since(*tf.PendingAt) > twoFASetupTTL {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kurulum süresi doldu ya da başlatılmadı; yeniden başlatın (setup expired or not started)", "code": "setup_expired"})
+		apiFail(c, http.StatusBadRequest, "setup_expired")
 		return
 	}
 	secret, err := s.totpSealer.Open(tf.PendingEnc, sealContext(u.ID))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kurulum geçersiz; yeniden başlatın (setup is invalid; start again)"})
+		apiFail(c, http.StatusBadRequest, "2fa_setup_invalid")
 		return
 	}
 	key, err := totp.DecodeSecret(secret)
@@ -815,7 +823,7 @@ func (s *Server) handleTwoFAEnable(c *gin.Context) {
 		if s.auditNoise.allow("2fa-enable-fail:"+strings.ToLower(u.Username), 10*time.Second) {
 			s.audit(c, "2fa.enable", target, map[string]any{"error": "bad_code"}, false)
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kod doğrulanamadı; uygulamadaki güncel kodu girin ve cihaz saatini kontrol edin (invalid code)", "code": "bad_code"})
+		apiFail(c, http.StatusBadRequest, "bad_code")
 		return
 	}
 	codes, hashes, err := newRecoveryCodes(u.ID)
@@ -826,7 +834,7 @@ func (s *Server) handleTwoFAEnable(c *gin.Context) {
 	now := time.Now()
 	if err := s.db.EnableTwoFactor(u.ID, tf.PendingEnc, step, hashes, now); err != nil {
 		if errors.Is(err, storage.ErrTwoFactorState) {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Kurulum başka bir pencerede değişti; yeniden başlatın (setup changed; start again)"})
+			apiFail(c, http.StatusConflict, "2fa_setup_changed")
 			return
 		}
 		s.audit(c, "2fa.enable", target, map[string]any{"error": "internal"}, false)
@@ -867,7 +875,10 @@ func (s *Server) acquireReauth(c *gin.Context, ip string) bool {
 	}
 	secs := int(wait.Seconds()) + 1
 	c.Header("Retry-After", strconv.Itoa(secs))
-	c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "error": "Çok fazla hatalı deneme; " + strconv.Itoa(secs) + " sn sonra tekrar deneyin (too many failed attempts)", "retryAfter": secs, "code": "rate_limited"})
+	body := apiErrBody(c, "rate_limited", secs)
+	body["success"] = false
+	body["retryAfter"] = secs
+	c.JSON(http.StatusTooManyRequests, body)
 	return false
 }
 
@@ -880,7 +891,7 @@ func (s *Server) reauthTwoFA(c *gin.Context, action string) (*storage.User, *sto
 		Code     string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return nil, nil, false
 	}
 	u := s.requireManaged2FAUser(c)
@@ -899,7 +910,7 @@ func (s *Server) reauthTwoFA(c *gin.Context, action string) (*storage.User, *sto
 		return nil, nil, false
 	}
 	if !tf.Enabled {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "2FA etkin değil (2FA is not enabled)"})
+		apiFail(c, http.StatusConflict, "2fa_not_enabled")
 		return nil, nil, false
 	}
 	// Parola her durumda (yanlış olsa da) bcrypt ile denetlenir; ikinci faktör
@@ -921,11 +932,11 @@ func (s *Server) reauthTwoFA(c *gin.Context, action string) (*storage.User, *sto
 		}
 		s.audit(c, action, target, map[string]any{"error": reason}, false)
 		if reason == "internal" {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Sunucu hatası"})
+			apiFail(c, http.StatusInternalServerError, "internal")
 			return nil, nil, false
 		}
 		// Hangisinin yanlış olduğu söylenmez.
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Parola ya da doğrulama kodu hatalı (wrong password or code)", "code": "wrong_credentials"})
+		apiFail(c, http.StatusForbidden, "wrong_credentials")
 		return nil, nil, false
 	}
 	s.loginGuard.Success(ip)
@@ -967,7 +978,7 @@ func (s *Server) handleTwoFARecoveryCodes(c *gin.Context) {
 	if err := s.db.ReplaceRecoveryCodes(u.ID, hashes, time.Now()); err != nil {
 		s.audit(c, "2fa.recovery.regenerate", target, map[string]any{"error": "internal"}, false)
 		if errors.Is(err, storage.ErrTwoFactorState) {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "2FA etkin değil (2FA is not enabled)"})
+			apiFail(c, http.StatusConflict, "2fa_not_enabled")
 			return
 		}
 		respondInternalError(c, "ReplaceRecoveryCodes", err)
@@ -987,18 +998,18 @@ func (s *Server) handleTwoFARecoveryCodes(c *gin.Context) {
 func (s *Server) handleUserTwoFAReset(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	u, err := s.db.GetUserByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Kullanıcı bulunamadı"})
+		apiFail(c, http.StatusNotFound, "user_not_found")
 		return
 	}
 	target := "user:" + u.Username
 	if me := s.sessionManagedUser(c); me != nil && me.ID == u.ID {
 		s.audit(c, "2fa.reset_by_admin", target, map[string]any{"error": "self"}, false)
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kendi 2FA kaydınızı Hesabım sayfasından parola ve kodla kapatın (use My Account to disable your own 2FA)"})
+		apiFail(c, http.StatusBadRequest, "2fa_reset_self")
 		return
 	}
 	changed, err := s.db.DisableTwoFactor(u.ID)

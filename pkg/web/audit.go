@@ -444,17 +444,17 @@ func parseAuditFilter(c *gin.Context) (storage.AuditFilter, error) {
 	var f storage.AuditFilter
 	f.Actor = strings.TrimSpace(c.Query("actor"))
 	if len(f.Actor) > 128 {
-		return f, fmt.Errorf("aktör çok uzun")
+		return f, errCode("audit_actor_too_long")
 	}
 	if cat := strings.TrimSpace(c.Query("category")); cat != "" {
 		f.ActionPrefixes = auditCategoryPrefixes(cat)
 		if f.ActionPrefixes == nil {
-			return f, fmt.Errorf("geçersiz kategori")
+			return f, errCode("audit_category_invalid")
 		}
 	}
 	if a := strings.ToLower(strings.TrimSpace(c.Query("action"))); a != "" {
 		if len(a) > 64 {
-			return f, fmt.Errorf("eylem çok uzun")
+			return f, errCode("audit_action_too_long")
 		}
 		// Kategori + eylem birlikte verilirse eylem daha dar olandır.
 		f.ActionPrefixes = []string{a}
@@ -468,7 +468,7 @@ func parseAuditFilter(c *gin.Context) (storage.AuditFilter, error) {
 		v := false
 		f.Success = &v
 	default:
-		return f, fmt.Errorf("geçersiz sonuç filtresi")
+		return f, errCode("audit_result_invalid")
 	}
 	var err error
 	if f.From, err = parseAuditTime(c.Query("from"), false); err != nil {
@@ -479,7 +479,7 @@ func parseAuditFilter(c *gin.Context) (storage.AuditFilter, error) {
 	}
 	f.Text = strings.TrimSpace(c.Query("q"))
 	if len([]rune(f.Text)) > 200 {
-		return f, fmt.Errorf("arama metni çok uzun")
+		return f, errCode("audit_text_too_long")
 	}
 	return f, nil
 }
@@ -496,7 +496,7 @@ func parseAuditTime(raw string, end bool) (time.Time, error) {
 	}
 	t, err := time.Parse("2006-01-02", raw)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("geçersiz tarih: %s", shared.TruncateRunes(raw, 32))
+		return time.Time{}, errCode("audit_date_invalid", shared.TruncateRunes(raw, 32))
 	}
 	if end {
 		t = t.Add(24 * time.Hour)
@@ -514,7 +514,7 @@ type auditEventView struct {
 func (s *Server) handleAuditList(c *gin.Context) {
 	f, err := parseAuditFilter(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		apiErrorFrom(c, http.StatusBadRequest, err)
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
@@ -589,12 +589,12 @@ func (s *Server) handleAuditExport(c *gin.Context) {
 	}
 	format := strings.ToLower(strings.TrimSpace(c.DefaultQuery("format", "csv")))
 	if format != "csv" && format != "json" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "format csv ya da json olmalı"})
+		apiError(c, http.StatusBadRequest, "invalid_export_format")
 		return
 	}
 	f, err := parseAuditFilter(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		apiErrorFrom(c, http.StatusBadRequest, err)
 		return
 	}
 	total, err := s.db.CountAuditEvents(f)

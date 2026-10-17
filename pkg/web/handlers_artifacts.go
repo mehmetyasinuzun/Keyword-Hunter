@@ -12,7 +12,7 @@ import (
 func (s *Server) handleArtifactsForResult(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Geçersiz ID"})
+		apiError(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	items, err := s.db.GetArtifacts(id)
@@ -29,7 +29,7 @@ func (s *Server) handleArtifactSearch(c *gin.Context) {
 	value := strings.TrimSpace(c.Query("value"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 	if typ == "" && len(value) < 3 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "type veya en az 3 karakterlik value gerekli"})
+		apiError(c, http.StatusBadRequest, "artifact_query_invalid")
 		return
 	}
 	items, err := s.db.SearchArtifacts(typ, value, limit)

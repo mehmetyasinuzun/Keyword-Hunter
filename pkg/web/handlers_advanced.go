@@ -16,6 +16,7 @@ import (
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
+	"keywordhunter-mvp/pkg/tor"
 )
 
 // ─────────────────────────── STIX 2.1 export ───────────────────────────
@@ -121,16 +122,16 @@ func (s *Server) handleSiteProfileSave(c *gin.Context) {
 		Notes     string `json:"notes"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	host := storage.NormalizeHost(req.Host)
 	if host == "" || !strings.Contains(host, ".") {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçerli bir host girin (örn. abcd…xyz.onion)"})
+		apiFail(c, http.StatusBadRequest, "host_invalid")
 		return
 	}
 	if len(req.Cookies) > 8192 || len(req.UserAgent) > 512 || len(req.Notes) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Alanlar çok uzun"})
+		apiFail(c, http.StatusBadRequest, "fields_too_long")
 		return
 	}
 	if err := s.db.UpsertSiteProfile(storage.SiteProfile{
@@ -152,7 +153,7 @@ func (s *Server) handleSiteProfileDelete(c *gin.Context) {
 		Host string `json:"host"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Host) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Host gerekli"})
+		apiFail(c, http.StatusBadRequest, "host_required")
 		return
 	}
 	if err := s.db.DeleteSiteProfile(req.Host); err != nil {
@@ -168,7 +169,7 @@ func (s *Server) handleSiteProfileDelete(c *gin.Context) {
 
 func (s *Server) handleTorStatus(c *gin.Context) {
 	if s.torCtl == nil {
-		c.JSON(http.StatusOK, gin.H{"configured": false, "hint": "TOR_CONTROL ve TOR_CONTROL_PASSWORD ayarlayın (Tor Browser: 9151, servis: 9051)"})
+		c.JSON(http.StatusOK, gin.H{"configured": false, "hint": apiText(c, "tor_hint")})
 		return
 	}
 	last, lastErr := s.torCtl.Status()
@@ -183,7 +184,7 @@ func (s *Server) handleTorStatus(c *gin.Context) {
 func (s *Server) handleTorNewNym(c *gin.Context) {
 	if s.torCtl == nil {
 		s.audit(c, "tor.newnym", "tor", map[string]any{"error": "not_configured"}, false)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Tor kontrol portu yapılandırılmamış (TOR_CONTROL)"})
+		apiFail(c, http.StatusServiceUnavailable, "tor_control_unconfigured")
 		return
 	}
 	var req struct {
@@ -192,12 +193,17 @@ func (s *Server) handleTorNewNym(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	if err := s.torCtl.NewNym(req.Force); err != nil {
 		s.audit(c, "tor.newnym", s.torCtl.Addr(), map[string]any{"force": req.Force, "error": "rejected"}, false)
-		c.JSON(http.StatusConflict, gin.H{"success": false, "error": err.Error()})
+		var cd *tor.CooldownError
+		if errors.As(err, &cd) {
+			apiFail(c, http.StatusConflict, "tor_cooldown", ceilSeconds(cd.Wait))
+			return
+		}
+		apiFail(c, http.StatusConflict, "tor_newnym_failed", truncateErr(err.Error()))
 		return
 	}
 	s.invalidateEngineCache()
 	s.audit(c, "tor.newnym", s.torCtl.Addr(), map[string]any{"force": req.Force}, true)
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Yeni Tor devresi istendi (çıkış düğümleri değişecek)"})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": apiText(c, "tor_newnym")})
 }
 
 // ─────────────────────────── Örümcek (crawl) ───────────────────────────
@@ -208,7 +214,7 @@ func (s *Server) handleCrawlPage(c *gin.Context) {
 
 func (s *Server) handleCrawlSubmit(c *gin.Context) {
 	if s.crawler == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Örümcek devre dışı"})
+		apiFail(c, http.StatusServiceUnavailable, "crawler_disabled")
 		return
 	}
 	var req struct {
@@ -219,11 +225,11 @@ func (s *Server) handleCrawlSubmit(c *gin.Context) {
 		Query      string `json:"query"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if !shared.IsOnionURL(strings.TrimSpace(req.SeedURL)) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Tohum URL geçerli bir v3 .onion adresi olmalı"})
+		apiFail(c, http.StatusBadRequest, "crawl_seed_invalid")
 		return
 	}
 	job, err := s.crawler.Submit(crawler.Request{
@@ -236,10 +242,11 @@ func (s *Server) handleCrawlSubmit(c *gin.Context) {
 		}
 		s.audit(c, "crawl.submit", auditURL(req.SeedURL), map[string]any{"depth": req.Depth, "maxPages": req.MaxPages, "error": kind}, false)
 		if errors.Is(err, crawler.ErrBusy) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Örümcek meşgul; mevcut tarama bitince tekrar deneyin"})
+			apiFail(c, http.StatusServiceUnavailable, "crawler_busy")
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		logger.Warn("CRAWL SUBMIT reddedildi: %v", err)
+		apiFail(c, http.StatusBadRequest, "crawl_rejected")
 		return
 	}
 	logger.Info("CRAWL SUBMIT: %s (derinlik %d, %d sayfa)", job.SeedURL, job.Depth, job.MaxPages)
@@ -259,7 +266,7 @@ func (s *Server) handleCrawlList(c *gin.Context) {
 func (s *Server) handleCrawlStatus(c *gin.Context) {
 	job, err := s.db.GetCrawlJob(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "İş bulunamadı"})
+		apiError(c, http.StatusNotFound, "job_not_found")
 		return
 	}
 	c.JSON(http.StatusOK, job)
@@ -267,12 +274,12 @@ func (s *Server) handleCrawlStatus(c *gin.Context) {
 
 func (s *Server) handleCrawlCancel(c *gin.Context) {
 	if s.crawler == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Örümcek devre dışı"})
+		apiFail(c, http.StatusServiceUnavailable, "crawler_disabled")
 		return
 	}
 	if err := s.crawler.Cancel(c.Param("id")); err != nil {
 		s.audit(c, "crawl.cancel", "job:"+c.Param("id"), map[string]any{"error": "internal"}, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "İptal edilemedi"})
+		apiFail(c, http.StatusInternalServerError, "cancel_failed")
 		return
 	}
 	s.audit(c, "crawl.cancel", "job:"+c.Param("id"), nil, true)

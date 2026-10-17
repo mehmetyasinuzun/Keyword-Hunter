@@ -131,22 +131,22 @@ func (s *Server) handleWatchlistAdd(c *gin.Context) {
 		Notes    string `json:"notes"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.URL = strings.TrimSpace(req.URL)
 	if req.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Site adı boş olamaz"})
+		apiFail(c, http.StatusBadRequest, "watchlist_name_required")
 		return
 	}
 	if !shared.IsOnionURL(req.URL) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "URL geçerli bir http(s) v3 .onion adresi olmalı (56 karakter)"})
+		apiFail(c, http.StatusBadRequest, "watchlist_url_invalid")
 		return
 	}
 	if len(req.Name) > 128 || len(req.Category) > 64 || len(req.Notes) > 500 || len(req.URL) > 2048 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Ad, kategori, not veya URL çok uzun"})
+		apiFail(c, http.StatusBadRequest, "watchlist_fields_too_long")
 		return
 	}
 
@@ -165,13 +165,13 @@ func (s *Server) handleWatchlistAdd(c *gin.Context) {
 func (s *Server) handleWatchlistToggle(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 
 	item, err := s.db.GetWatchlistItem(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Öğe bulunamadı"})
+		apiFail(c, http.StatusNotFound, "watchlist_not_found")
 		return
 	}
 
@@ -189,7 +189,7 @@ func (s *Server) handleWatchlistToggle(c *gin.Context) {
 func (s *Server) handleWatchlistDelete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 
@@ -212,13 +212,13 @@ func (s *Server) handleWatchlistDelete(c *gin.Context) {
 func (s *Server) handleWatchlistCheck(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 
 	item, err := s.db.GetWatchlistItem(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Öğe bulunamadı"})
+		apiFail(c, http.StatusNotFound, "watchlist_not_found")
 		return
 	}
 

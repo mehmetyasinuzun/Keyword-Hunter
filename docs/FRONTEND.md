@@ -95,7 +95,7 @@ Yerleşik eylemler: `modal-open` (`data-target`), `modal-close`, `copy`
 
 | Yardımcı | Açıklama |
 |---|---|
-| `KH.api(url, {method, body})` | JSON + CSRF; 401 → giriş, hata → `Error(message)` |
+| `KH.api(url, {method, body})` | JSON + CSRF + `Accept-Language` (sayfa dili); 401 → giriş, hata → `Error(message)` — `message` sunucunun çevrilmiş iletisi, `err.code` kararlı hata kodu (`apierr.*`; davranışı metne değil koda bağlayın), `err.status`, `err.data` |
 | `KH.toast(msg, 'ok'\|'err'\|'warn'\|'info')` | Bildirim |
 | `KH.confirm({title, message, danger})` | `Promise<boolean>` |
 | `KH.prompt({title, label, value, type, multiline})` | `window.prompt` yerine; `Promise<string\|null>` |

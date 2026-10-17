@@ -224,7 +224,7 @@ func TestAPIToken_ExpiredRejected(t *testing.T) {
 	}
 	w := bearer(s, http.MethodGet, "/api/results", "", plain, nil, "")
 	assert401(t, w, "süresi dolmuş token")
-	if !strings.Contains(w.Body.String(), "süresi") {
+	if apiCode(w) != "token_expired" {
 		t.Fatalf("süre dolumu mesajı bekleniyordu: %s", w.Body.String())
 	}
 }
@@ -381,7 +381,7 @@ func TestAPIToken_CannotManageAccount(t *testing.T) {
 	}
 	for _, tc := range cases {
 		w := bearer(s, tc.method, tc.path, tc.body, tok.Token, nil, "")
-		if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "interactive session") {
+		if w.Code != http.StatusForbidden || apiCode(w) != "session_required" {
 			t.Errorf("%s %s token ile: %d %s (403 bekleniyordu)", tc.method, tc.path, w.Code, w.Body.String())
 		}
 	}

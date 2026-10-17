@@ -206,6 +206,19 @@ Tarayıcı oturumuyla (çerez + `X-CSRF-Token`) ya da **kişisel API token'ı** 
 `GET /api/screenshots` · `GET /api/analytics` · `GET /api/graph/*` · `GET /events` (SSE) ·
 `POST /api/integrations/misp/push` · `GET /healthz` (açık).
 
+**Hata sözleşmesi:** her `/api` hatası `{"error": "<insan okunur ileti>", "code": "<kararlı kod>"}` döner
+(eski istemciler için bazı uçlarda ek olarak `"success": false`; 2FA kilidinde `retryAfter`). Otomasyonda
+**`code`** ile eşleşin (`session_expired`, `csrf_failed`, `role_required`, `token_invalid`, `token_revoked`,
+`token_expired`, `token_read_only`, `session_required`, `2fa_required`, `too_many_requests`, `invalid_request`, `not_found`,
+`tor_unreachable`, `site_unreachable`, `site_timeout`…);
+`error` metni çeviridir ve değişebilir. İletinin dili: `lang` çerezi, yoksa `Accept-Language`
+(`tr` | `en`, q değerleri dikkate alınır), yoksa Türkçe. HTTP durum kodları dilden bağımsızdır.
+
+```bash
+curl -sS -H "Authorization: Bearer kh_yanlis" -H 'Accept-Language: en' https://keywordhunter.example/api/results
+# 401 {"code":"token_invalid","error":"Invalid API token"}
+```
+
 **TAXII 2.1** (salt okunur, yalnız API token — Bearer ya da Basic parolası): `GET /taxii2/` (keşif) ·
 `GET /taxii2/kh/collections/` · `GET /taxii2/kh/collections/{id}/objects/?added_after=&limit=&next=&match[type]=&match[id]=` ·
 `GET …/objects/{object-id}/` · `GET …/manifest/`. Koleksiyonlar: `findings-all`, `findings-high` (SEV 4–5),
@@ -233,10 +246,10 @@ curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/
 ```
 
 - **Kapsam:** `read` izleyici (viewer) yetkisine indirgenir, hiçbir yazma işlemi yapamaz; `write` sahibinin **güncel** rolü kadar yetkilidir (rol düşürülürse token da anında düşer). İzleyiciler yalnız `read` token oluşturabilir.
-- **Geçerlilik:** 7 / 30 / 90 / 180 / 365 gün ya da süresiz; dilediğiniz an iptal edilir. İptal edilmiş, süresi dolmuş, bilinmeyen token ya da pasif/silinmiş kullanıcı → `401 {"error": …}` + `WWW-Authenticate: Bearer`.
+- **Geçerlilik:** 7 / 30 / 90 / 180 / 365 gün ya da süresiz; dilediğiniz an iptal edilir. İptal edilmiş, süresi dolmuş, bilinmeyen token ya da pasif/silinmiş kullanıcı → `401 {"error": …, "code": "token_invalid|token_revoked|token_expired"}` + `WWW-Authenticate: Bearer`.
 - **Yalnız `/api/` ve yalnız başlık:** HTML sayfaları, `/events` (SSE) ve ekran görüntüsü dosyaları token kabul etmez; `?token=` gibi sorgu dizgisi değerleri asla okunmaz.
 - **CSRF kuralı:** yalnız Bearer ile gelen (oturum çerezi taşımayan) istekler CSRF'ten muaftır. Aynı istekte oturum çerezi de varsa oturum yolu kullanılır ve CSRF zorunludur.
-- **Token ile çağrılamayan uçlar** (`403 "this endpoint requires an interactive session"`): `/api/tokens*` (token yönetimi), `/api/me/*` (parola, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook entegrasyonları), `/api/integrations/misp/config` ve `/api/integrations/misp/test` (MISP ayarları). Sızmış bir token yeni token basamaz, parola değiştiremez, hesap ya da entegrasyon yönetemez.
+- **Token ile çağrılamayan uçlar** (`403 {"code": "session_required", "error": …}`): `/api/tokens*` (token yönetimi), `/api/me/*` (parola, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook entegrasyonları), `/api/integrations/misp/config` ve `/api/integrations/misp/test` (MISP ayarları). Sızmış bir token yeni token basamaz, parola değiştiremez, hesap ya da entegrasyon yönetemez.
 - **Parola değişikliği ve olay müdahalesi:** admin bir kullanıcının parolasını sıfırladığında o kullanıcının oturumları kapanır **ve tüm API token'ları iptal edilir** (`user.password.reset` olayında `tokensRevoked`). Kullanıcının kendi parola değişikliği token'ları varsayılan olarak iptal etmez (entegrasyonlar bozulmasın); ele geçirme şüphesinde **Hesabım → Parola** altındaki "Tüm API token'larımı da iptal et" seçeneğini işaretleyin (`POST /api/me/password` gövdesinde `"revokeTokens": true`). Kullanıcıyı pasifleştirmek de token'larını anında geçersiz kılar.
 - **Denetim:** token oluşturma/iptal (`token.create`, `token.revoke`), reddedilen token denemeleri (`auth.token.failure`) ve token ile yapılan **denetlenen her işlem** (yazmalar, dışa aktarmalar, yetki retleri) `auth_method=token` ve token öneki (`kh_XXXXXXX`) ile denetim kaydına yazılır. Salt okuma istekleri (ör. `GET /api/results`) ayrı denetim satırı üretmez; yalnız token'ın son kullanım zamanı ve IP'si (en fazla dakikada bir) güncellenir ve listede görünür.
 
@@ -250,7 +263,7 @@ curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/
 - **TOTP:** HMAC-SHA1, 6 hane, 30 sn, ±1 adım saat kayması toleransı, sabit-zamanlı karşılaştırma. Kabul edilen son adım kalıcı tutulur: aynı kod (ya da daha eski bir adımın kodu) ikinci kez kabul edilmez.
 - **Kapatma / kod yenileme:** parola + güncel kod (ya da bir kurtarma kodu) ister; hatalı denemeler IP kilidine sayılır. Kod yenileme eski kodların tümünü geçersiz kılar. **Etkinleştirme de mevcut parolayı ister** (çalınmış bir oturum kendi doğrulayıcısını kaydedip hesabın sahibini dışarıda bırakamaz); 2FA'yı açmak diğer oturumlarınızı kapatır.
 - **Admin sıfırlaması** (`/users` → kalkan simgesi, `POST /api/users/:id/2fa/reset`): cihazını kaybeden bir kullanıcının 2FA kaydını ve kurtarma kodlarını siler, oturumlarını kapatır. Admin **kendi** 2FA'sını bu uçla sıfırlayamaz (Hesabım'dan parola + kodla kapatır): ele geçirilmiş bir admin oturumu kendi ikinci faktörünü yeniden doğrulamadan kaldıramasın.
-- **Zorunluluk (`REQUIRE_2FA=admins|all`):** kapsamdaki kayıtsız kullanıcının her HTML sayfası `/account#security-2fa`'ya yönlenir (uyarıyla); oturumlu API çağrıları kayıt uçları dışında `403 {"error": "2FA required"}` alır; bu kullanıcının API token'ları da 403 ile reddedilir. `users` tablosunda olmayan eski `.env` yönetici hesabı (`ADMIN_USER`, ör. ad `/settings`'ten değiştirildiyse ya da bootstrap satırı silindiyse) 2FA kaydı yapamayacağı için politika etkinken **giriş yapamaz** ve var olan oturumu kapatılır; `/users`'taki bir hesabı kullanın. Kalıcı bir `APP_SECRET` yoksa (`.env` yazılamıyor) `REQUIRE_2FA` ile uygulama **başlamaz**: aksi halde kayıt kapalı olduğundan kapsamdaki herkes Hesabım'a hapsolurdu.
+- **Zorunluluk (`REQUIRE_2FA=admins|all`):** kapsamdaki kayıtsız kullanıcının her HTML sayfası `/account#security-2fa`'ya yönlenir (uyarıyla); oturumlu API çağrıları kayıt uçları dışında `403 {"code": "2fa_required", "error": …}` alır; bu kullanıcının API token'ları da 403 ile reddedilir. `users` tablosunda olmayan eski `.env` yönetici hesabı (`ADMIN_USER`, ör. ad `/settings`'ten değiştirildiyse ya da bootstrap satırı silindiyse) 2FA kaydı yapamayacağı için politika etkinken **giriş yapamaz** ve var olan oturumu kapatılır; `/users`'taki bir hesabı kullanın. Kalıcı bir `APP_SECRET` yoksa (`.env` yazılamıyor) `REQUIRE_2FA` ile uygulama **başlamaz**: aksi halde kayıt kapalı olduğundan kapsamdaki herkes Hesabım'a hapsolurdu.
 - **`APP_SECRET`:** sırlar bu anahtardan HKDF-SHA256 ile türetilen AES-256-GCM anahtarıyla, kullanıcıya bağlı (AAD) şifrelenir. Kaybolursa TOTP kodları doğrulanamaz: kullanıcılar kurtarma kodlarıyla girip 2FA'yı kapatıp yeniden kurabilir; kodu olmayanlar için admin sıfırlaması gerekir. Üretilen sır `.env`'in sonuna tek satır olarak eklenir; dosyadaki yorumlar ve diğer satırlar korunur. `.env` yazılamıyorsa sır o çalıştırmayla sınırlı kalır ve 2FA kaydı kapatılır (loga yazılır).
 - **Uçlar** (yalnız etkileşimli oturum; API token ile çağrılamaz): `GET /api/me/2fa` · `POST /api/me/2fa/setup` → `{qrDataURI, secret, otpauthURI}` · `POST /api/me/2fa/enable {password, code}` → `{recoveryCodes}` · `POST /api/me/2fa/disable {password, code}` · `POST /api/me/2fa/recovery-codes {password, code}` · `POST /api/users/:id/2fa/reset` (admin).
 - **Denetim:** `2fa.enable`, `2fa.disable`, `2fa.recovery.regenerate`, `2fa.reset_by_admin`, `auth.2fa.challenge`, `auth.2fa.success`, `auth.2fa.failure` (neden: `bad_code`, `replay`…); `auth.login.success` olayı `mfa` yöntemini taşır. Sır ya da kod asla kayda girmez.

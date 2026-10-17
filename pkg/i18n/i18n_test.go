@@ -1,6 +1,10 @@
 package i18n
 
-import "testing"
+import (
+	"regexp"
+	"strings"
+	"testing"
+)
 
 func TestT_FallbackChain(t *testing.T) {
 	if T("en", "nav.dashboard") != "Dashboard" {
@@ -33,8 +37,14 @@ func TestNormalizeAndCatalog(t *testing.T) {
 	if c["nav.dashboard"] != "Dashboard" || c["role.admin"] != "Admin" {
 		t.Fatal("katalog eksik")
 	}
-	if len(c) != len(catalog["tr"]) {
-		t.Fatalf("katalog TR ile aynı anahtar sayısında olmalı: en=%d tr=%d", len(c), len(catalog["tr"]))
+	client := 0
+	for k := range catalog["tr"] {
+		if !serverOnly(k) {
+			client++
+		}
+	}
+	if len(c) != client {
+		t.Fatalf("katalog TR'nin istemci anahtarlarıyla aynı sayıda olmalı: en=%d tr=%d", len(c), client)
 	}
 }
 
@@ -61,5 +71,56 @@ func TestAuditCatalog_KeyParity(t *testing.T) {
 	}
 	if n < 50 {
 		t.Fatalf("denetim kataloğu beklenenden küçük: %d", n)
+	}
+}
+
+// API hata/başarı iletileri TR ve EN'de birebir aynı anahtarlara ve aynı fmt
+// fiillerine (aynı sırada) sahip olmalı: EN'de eksik anahtar Türkçe'ye düşer,
+// fiil uyuşmazlığı ise "%!d(MISSING)" gibi bozuk metin üretir.
+func TestAPIErrorCatalog_ParityAndVerbs(t *testing.T) {
+	verbs := regexp.MustCompile(`%[-+# 0]*[0-9]*(?:\.[0-9]+)?[a-zA-Z%]`)
+	isAPI := func(k string) bool { return strings.HasPrefix(k, "apierr.") || strings.HasPrefix(k, "apimsg.") }
+	n := 0
+	for k, tr := range catalog["tr"] {
+		if !isAPI(k) {
+			continue
+		}
+		n++
+		en, ok := catalog["en"][k]
+		if !ok {
+			t.Errorf("EN eksik: %s", k)
+			continue
+		}
+		if a, b := strings.Join(verbs.FindAllString(tr, -1), ","), strings.Join(verbs.FindAllString(en, -1), ","); a != b {
+			t.Errorf("%s: fmt fiilleri uyuşmuyor tr=%q en=%q", k, a, b)
+		}
+		if strings.TrimSpace(tr) == "" || strings.TrimSpace(en) == "" {
+			t.Errorf("%s: boş ileti", k)
+		}
+	}
+	for k := range catalog["en"] {
+		if isAPI(k) {
+			if _, ok := catalog["tr"][k]; !ok {
+				t.Errorf("TR eksik: %s", k)
+			}
+		}
+	}
+	if n < 100 {
+		t.Fatalf("API hata kataloğu beklenenden küçük: %d", n)
+	}
+}
+
+// Yalnız sunucuda kullanılan aileler sayfalara gömülen istemci kataloğuna
+// girmez; T() ile yine çözülür.
+func TestCatalog_ExcludesServerOnlyKeys(t *testing.T) {
+	for _, lang := range Supported {
+		for k := range Catalog(lang) {
+			if serverOnly(k) {
+				t.Fatalf("%s istemci kataloğunda olmamalı: %s", lang, k)
+			}
+		}
+	}
+	if T("en", "apierr.invalid_request") != "Invalid request" || T("tr", "apierr.invalid_request") != "Geçersiz istek" {
+		t.Fatal("apierr anahtarları T() ile çözülmeli")
 	}
 }

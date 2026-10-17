@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -22,3 +23,14 @@ func doJSON(s *Server, method, path, body string, cookies []*http.Cookie, csrf s
 }
 
 func strconvFormat(i int64) string { return strconv.FormatInt(i, 10) }
+
+// apiCode JSON hata yanıtının kararlı "code" alanı (gövde JSON değilse "").
+func apiCode(w *httptest.ResponseRecorder) string {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		return ""
+	}
+	return body.Code
+}

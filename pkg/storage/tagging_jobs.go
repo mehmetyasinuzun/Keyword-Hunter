@@ -103,13 +103,16 @@ func (db *DB) ListTaggingJobsByStatuses(statuses []string, limit int) ([]Tagging
 	return jobs, rows.Err()
 }
 
+// TaggingJobRestartedMsg yarıda kalan işe yazılan ileti (API bunu koda eşler).
+const TaggingJobRestartedMsg = "Uygulama yeniden başlatıldı"
+
 // ResetRunningTaggingJobs uygulama kapanmasından kalan running işleri pending'e çeker.
 func (db *DB) ResetRunningTaggingJobs() error {
 	_, err := db.conn.Exec(`
 		UPDATE tagging_jobs
-		SET status = 'pending', error_message = 'Uygulama yeniden başlatıldı'
+		SET status = 'pending', error_message = ?
 		WHERE status = 'running'
-	`)
+	`, TaggingJobRestartedMsg)
 	return err
 }
 

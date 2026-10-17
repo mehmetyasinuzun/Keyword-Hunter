@@ -53,7 +53,10 @@
     KH.data = function (id) { return readJSON(id || 'page-data') || {}; };
     KH.csrf = function () { return readCookie('csrf_token'); };
 
-    // ── CSRF: /api/ ve form POST'larına başlık (tüm fetch çağrıları) ────
+    // ── CSRF + dil: aynı kökenli isteklere başlık (tüm fetch çağrıları) ──
+    // Yazma isteklerine X-CSRF-Token; /api/ çağrılarına sayfanın dili
+    // Accept-Language olarak eklenir ki sunucu hata iletilerini (lang çerezi
+    // hiç ayarlanmamış olsa bile) arayüzle aynı dilde döndürsün.
     const nativeFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
         const options = init ? Object.assign({}, init) : {};
@@ -61,9 +64,12 @@
         const url = typeof input === 'string' ? input : (input && input.url) || '';
         let path = url;
         try { const u = new URL(url, location.href); if (u.origin !== location.origin) path = ''; else path = u.pathname; } catch (_) { }
-        if (path && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-            const headers = new Headers(options.headers || {});
-            if (!headers.has('X-CSRF-Token')) { const tok = KH.csrf(); if (tok) headers.set('X-CSRF-Token', tok); }
+        const write = path && !['GET', 'HEAD', 'OPTIONS'].includes(method);
+        const api = path && path.indexOf('/api/') === 0;
+        if (write || api) {
+            const headers = new Headers(options.headers || (input && typeof input !== 'string' && input.headers) || {});
+            if (write && !headers.has('X-CSRF-Token')) { const tok = KH.csrf(); if (tok) headers.set('X-CSRF-Token', tok); }
+            if (api && !headers.has('Accept-Language')) headers.set('Accept-Language', KH.lang === 'en' ? 'en' : 'tr');
             options.headers = headers;
         }
         return nativeFetch(input, options);
@@ -255,7 +261,8 @@
         if ((res.headers.get('content-type') || '').includes('application/json')) { try { data = await res.json(); } catch (_) { data = null; } }
         if (!res.ok) {
             const msg = (data && data.error) || (res.status === 429 ? KH.tr('Çok fazla istek; birkaç saniye bekleyin', 'Too many requests; wait a few seconds') : res.status === 403 ? KH.tr('Bu işlem için yetkiniz yok', 'You are not allowed to do this') : 'HTTP ' + res.status);
-            const err = new Error(msg); err.status = res.status; err.data = data; throw err;
+            // err.code: sunucunun kararlı hata kodu (apierr.*); metin yerine bununla eşleşin.
+            const err = new Error(msg); err.status = res.status; err.data = data; err.code = (data && data.code) || ''; throw err;
         }
         return data;
     };

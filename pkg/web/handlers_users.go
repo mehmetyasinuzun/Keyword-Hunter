@@ -56,20 +56,20 @@ func (s *Server) handleUserCreate(c *gin.Context) {
 		Role     string `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if len(req.Username) < 3 || len(req.Username) > 64 || strings.ContainsAny(req.Username, " \t\r\n") {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kullanıcı adı 3-64 karakter, boşluksuz olmalı"})
+		apiFail(c, http.StatusBadRequest, "username_invalid")
 		return
 	}
 	if len([]rune(req.Password)) < 8 || len(req.Password) > 256 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Parola 8-256 karakter olmalı"})
+		apiFail(c, http.StatusBadRequest, "password_length")
 		return
 	}
 	if !storage.ValidRole(req.Role) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz rol"})
+		apiFail(c, http.StatusBadRequest, "invalid_role")
 		return
 	}
 	hash, err := hashPassword(req.Password)
@@ -81,7 +81,7 @@ func (s *Server) handleUserCreate(c *gin.Context) {
 	if err != nil {
 		s.audit(c, "user.create", "user:"+req.Username, map[string]any{"role": req.Role, "error": auditErrKind(err, storage.ErrUserExists, "exists")}, false)
 		if err == storage.ErrUserExists {
-			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Bu kullanıcı adı zaten var"})
+			apiFail(c, http.StatusConflict, "username_taken")
 			return
 		}
 		respondInternalError(c, "CreateUser", err)
@@ -96,12 +96,12 @@ func (s *Server) handleUserCreate(c *gin.Context) {
 func (s *Server) handleUserUpdate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	target, err := s.db.GetUserByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Kullanıcı bulunamadı"})
+		apiFail(c, http.StatusNotFound, "user_not_found")
 		return
 	}
 	var req struct {
@@ -110,7 +110,7 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 		Enabled  *bool   `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
@@ -121,7 +121,7 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 		if demoting || disabling {
 			if n, _ := s.db.CountAdmins(); n <= 1 {
 				s.audit(c, "user.update", "user:"+target.Username, map[string]any{"error": "last_admin", "demote": demoting, "disable": disabling}, false)
-				c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Son etkin admin düşürülemez/pasifleştirilemez"})
+				apiFail(c, http.StatusBadRequest, "last_admin_demote")
 				return
 			}
 		}
@@ -129,7 +129,7 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 
 	if req.Password != nil && *req.Password != "" {
 		if len([]rune(*req.Password)) < 8 || len(*req.Password) > 256 {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Parola 8-256 karakter olmalı"})
+			apiFail(c, http.StatusBadRequest, "password_length")
 			return
 		}
 		hash, err := hashPassword(*req.Password)
@@ -163,7 +163,7 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 	changes := map[string]any{"userId": target.ID}
 	if req.Role != nil {
 		if !storage.ValidRole(*req.Role) {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz rol"})
+			apiFail(c, http.StatusBadRequest, "invalid_role")
 			return
 		}
 		if err := s.db.UpdateUserRole(id, *req.Role); err != nil {
@@ -201,23 +201,23 @@ func (s *Server) handleUserUpdate(c *gin.Context) {
 func (s *Server) handleUserDelete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz ID"})
+		apiFail(c, http.StatusBadRequest, "invalid_id")
 		return
 	}
 	target, err := s.db.GetUserByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Kullanıcı bulunamadı"})
+		apiFail(c, http.StatusNotFound, "user_not_found")
 		return
 	}
 	if strings.EqualFold(target.Username, c.GetString("username")) {
 		s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"error": "self"}, false)
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Kendinizi silemezsiniz"})
+		apiFail(c, http.StatusBadRequest, "delete_self")
 		return
 	}
 	if target.Role == storage.RoleAdmin {
 		if n, _ := s.db.CountAdmins(); n <= 1 {
 			s.audit(c, "user.delete", "user:"+target.Username, map[string]any{"error": "last_admin"}, false)
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Son admin silinemez"})
+			apiFail(c, http.StatusBadRequest, "last_admin_delete")
 			return
 		}
 	}
@@ -267,11 +267,11 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 		RevokeTokens bool `json:"revokeTokens"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Geçersiz istek"})
+		apiFail(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	if len([]rune(req.New)) < 8 || len(req.New) > 256 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Yeni parola 8-256 karakter olmalı"})
+		apiFail(c, http.StatusBadRequest, "new_password_length")
 		return
 	}
 	username := c.GetString("username")
@@ -280,7 +280,7 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 		// bootstrap kimlik deposu (users tablosunda yoksa)
 		if s.creds == nil || !s.creds.Verify(username, req.Current) {
 			s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "wrong_current"}, false)
-			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Mevcut parola yanlış"})
+			apiFail(c, http.StatusForbidden, "wrong_password")
 			return
 		}
 		// Update hatası yutulursa boş hash .env'e yazılıp admin kilitlenebilir.
@@ -298,15 +298,14 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 			if err := s.envStore.Update(map[string]string{"ADMIN_PASS_HASH": hash, "ADMIN_PASS": ""}); err != nil {
 				logger.Error("ENV PERSIST FAILED (admin parola): %v", err)
 				s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "env_persist"}, false)
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false,
-					"error": "Parola bu oturum için değişti ancak .env dosyasına kalıcı yazılamadı; yeniden başlatmada eski parola geri gelir. Dosya izinlerini kontrol edin."})
+				apiFail(c, http.StatusInternalServerError, "password_env_persist")
 				return
 			}
 		}
 	} else {
 		if !verifyBcrypt(u.PasswordHash, req.Current) {
 			s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "wrong_current"}, false)
-			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "Mevcut parola yanlış"})
+			apiFail(c, http.StatusForbidden, "wrong_password")
 			return
 		}
 		hash, err := hashPassword(req.New)
@@ -340,7 +339,7 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 			// Parola değişti; token iptali başarısızsa kullanıcı bunu bilmeli.
 			logger.Error("API TOKEN REVOKE FAILED (öz parola, kullanıcı=%s): %v", username, err)
 			s.audit(c, "me.password.change", "user:"+username, map[string]any{"error": "token_revoke"}, false)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Parola değişti ancak API token'ları iptal edilemedi; Hesabım sayfasından tek tek iptal edin"})
+			apiFail(c, http.StatusInternalServerError, "password_tokens_revoke_failed")
 			return
 		}
 		tokensRevoked = n

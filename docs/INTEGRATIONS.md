@@ -250,7 +250,7 @@ curl -sS -X POST -H "Authorization: Bearer $KH_TOKEN" -H 'Content-Type: applicat
 | `POST /api/integrations/misp/test` | admin oturumu | Kayıtlı ayarlar ya da gövdede taslak |
 | `POST /api/integrations/misp/push` | analyst+ (oturum + CSRF ya da `write` token) | `{resultIds: [...]}` (1–200) |
 
-Ayar ve test uçları API token ile **çağrılamaz** (`403 "this endpoint requires an interactive session"`);
+Ayar ve test uçları API token ile **çağrılamaz** (`403 {"code": "session_required", "error": …}`);
 gönderim ucu SOAR otomasyonu için `write` kapsamlı token'a açıktır.
 
 ---

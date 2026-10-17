@@ -2,6 +2,7 @@ package tor
 
 import (
 	"bufio"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -63,8 +64,10 @@ func TestNewNym_AuthAndCooldown(t *testing.T) {
 	if err := c.NewNym(false); err != nil {
 		t.Fatalf("newnym: %v", err)
 	}
-	if err := c.NewNym(false); err == nil {
-		t.Fatal("bekleme süresi içinde ikinci NEWNYM reddedilmeli")
+	err := c.NewNym(false)
+	var cd *CooldownError
+	if !errors.As(err, &cd) || cd.Wait <= 0 {
+		t.Fatalf("bekleme süresi içinde ikinci NEWNYM CooldownError ile reddedilmeli: %v", err)
 	}
 	if err := c.NewNym(true); err != nil {
 		t.Fatalf("force newnym: %v", err)

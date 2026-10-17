@@ -176,7 +176,7 @@ func TestMISP_KeyRequiresEncryptionKey(t *testing.T) {
 	s, admin, _, _ := newMISPServer(t)
 	s.secretSealer = nil
 	w := saveMISP(t, s, admin, fmt.Sprintf(`{"baseUrl":"https://misp.example.org","apiKey":%q}`, testMISPKey))
-	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "APP_SECRET") {
+	if w.Code != http.StatusConflict || apiCode(w) != "misp_secret_unavailable" || !strings.Contains(w.Body.String(), "APP_SECRET") {
 		t.Fatalf("APP_SECRET yokken anahtar düz metin saklanmamalı: %d %s", w.Code, w.Body.String())
 	}
 }
@@ -224,7 +224,7 @@ func TestMISP_OriginChangeRequiresKeyReentry(t *testing.T) {
 	configureMISP(t, s, admin, f)
 	other := newFakeMISP(t) // saldırganın sunucusu
 	// Kaydetme ve test: anahtar olmadan başka bir sunucuya taşınamaz.
-	if w := saveMISP(t, s, admin, fmt.Sprintf(`{"baseUrl":%q}`, other.URL)); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "yeniden girin") {
+	if w := saveMISP(t, s, admin, fmt.Sprintf(`{"baseUrl":%q}`, other.URL)); w.Code != http.StatusBadRequest || apiCode(w) != "misp_config_invalid" || !strings.Contains(w.Body.String(), "yeniden girin") {
 		t.Fatalf("adres değişince anahtar istenmeli: %d %s", w.Code, w.Body.String())
 	}
 	if w := doJSON(s, http.MethodPost, "/api/integrations/misp/test", fmt.Sprintf(`{"baseUrl":%q}`, other.URL), admin, csrfOf(admin)); w.Code != http.StatusBadRequest {
@@ -427,7 +427,7 @@ func TestMISP_PushPermissionsAndErrors(t *testing.T) {
 	}
 	adminTok := createToken(t, s, mkTokenUser(t, s, "boss", "boss-pass-123", storage.RoleAdmin), "a", storage.TokenScopeWrite, 0)
 	for _, path := range []string{"/api/integrations/misp/config", "/api/integrations/misp/test"} {
-		if w := bearer(s, http.MethodPost, path, `{}`, adminTok.Token, nil, ""); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "oturum") {
+		if w := bearer(s, http.MethodPost, path, `{}`, adminTok.Token, nil, ""); w.Code != http.StatusForbidden || apiCode(w) != "session_required" {
 			t.Fatalf("token ile %s: %d %s", path, w.Code, w.Body.String())
 		}
 	}

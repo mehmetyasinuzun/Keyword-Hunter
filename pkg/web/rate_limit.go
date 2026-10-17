@@ -59,9 +59,7 @@ func (rl *IPRateLimiter) Middleware() gin.HandlerFunc {
 				taxiiError(c, http.StatusTooManyRequests, "Too Many Requests", "Rate limit exceeded; retry later")
 				return
 			}
-			c.AbortWithStatusJSON(429, gin.H{
-				"error": "Cok fazla istek gonderildi. Lutfen kisa sure sonra tekrar deneyin",
-			})
+			apiAbort(c, http.StatusTooManyRequests, "too_many_requests")
 			return
 		}
 		c.Next()

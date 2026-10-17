@@ -208,11 +208,11 @@ func (s *Server) renderError(c *gin.Context, status int) {
 		return
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-		msg := "Bulunamadı"
-		if status == 403 {
-			msg = "Bu işlem için yetkiniz yok"
+		code := "not_found"
+		if status == http.StatusForbidden {
+			code = "forbidden"
 		}
-		c.AbortWithStatusJSON(status, gin.H{"error": msg})
+		apiAbort(c, status, code)
 		return
 	}
 	key := "err.404"

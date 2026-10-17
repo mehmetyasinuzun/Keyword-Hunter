@@ -2,6 +2,29 @@
 
 ## Yayımlanmamış
 
+### API hata iletileri TR/EN + kararlı hata kodları
+- Her `/api` hata yanıtı (ara katmanlar dahil: oturum 401, CSRF 403, rol/kapsam 403, hız sınırı 429,
+  token, 2FA, denetim, entegrasyon) artık `{"error": <ileti>, "code": <kararlı kod>}` biçimindedir;
+  mevcut `success:false` / `retryAfter` alanları ve HTTP durumları korunur. İletiler
+  `pkg/i18n/catalog_apierr.go`'da (`apierr.<kod>`, TR+EN birebir). İngilizce arayüzde artık Türkçe
+  bildirim çıkmaz.
+- Dil: `lang` çerezi → `Accept-Language` (token/TAXII istemcileri; q değerli) → `tr`. Arayüz `/api`
+  çağrılarına sayfa dilini `Accept-Language` olarak ekler; `KH.api` hatası `err.code` taşır.
+- **Uyumluluk:** iletiye göre eşleşen istemciler `code`'a geçmeli — örn. REQUIRE_2FA reddi artık
+  sabit `"2FA required"` metni değil, `code: "2fa_required"` ile tanınır; token ile çağrılamayan uçların
+  reddi (`session_required`) gibi eski karma "TR (EN)" iletiler artık İngilizce parça içermez — istemci
+  `Accept-Language: en` göndermedikçe yalnız Türkçedir. Başarı iletileri (`message`)
+  de istek dilindedir. Tor devre yenilemede bekleme süresi tipli hatadan (`tor.CooldownError`) okunur.
+- Sayfa çekme hataları (yeniden tarama, graf derinleştirme, tekil etiketleme) sınıflandırılır: Tor kapalı
+  (`tor_unreachable`), site çevrimdışı (`site_unreachable`), yanıt yok (`site_not_responding`), zaman aşımı
+  (`site_timeout`) — iletinin tamamı istek dilindedir; alt katmanın Türkçe metni yanıta girmez.
+  Tanınmayan hatalar uç koduyla (`analyze_failed`, `expand_failed`, `tag_fetch_failed`) ham ayrıntı taşır.
+- Toplu etiketleme iş durumu (`GET /api/batch-auto-tag/:id`) kayıtlı hata iletisini istek dilinde
+  `error` + kararlı `errorCode` (`job_cancelled_by_user`, `tagging_queue_full`, `job_all_failed`…) olarak döndürür.
+- Testler: koddaki her kodun iki katalogda da bulunduğu (kaynak taraması; ölü anahtar da yakalanır),
+  TR/EN fmt fiili eşleşmesi, elle yazılmış hata gövdesi kalmadığı ve çerez / Accept-Language ile
+  İngilizce yanıt.
+
 ### Entegrasyonlar: TAXII 2.1 sunucusu + MISP gönderimi
 - **TAXII 2.1 (salt okunur, `/taxii2/`):** keşif, API kökü (`/taxii2/kh/`), koleksiyon listesi/tekil,
   `objects/` (zarf; `added_after`, `limit` 100/1000, opak `next`, `match[id|type|version|spec_version]`),
@@ -45,7 +68,7 @@
 - **Yönetim:** etkinleştirme mevcut parolayı ister; parola + kodla kapatma ve kod yenileme; admin için `/users`'ta 2FA rozeti
   (açık / eksik / kapalı) ve "2FA'yı sıfırla" (kendi hesabına uygulanamaz).
 - **Zorunluluk:** `REQUIRE_2FA=none|admins|all`; kayıtsız kullanıcı Hesabım'a yönlenir,
-  API `403 {"error":"2FA required"}`, token'ları reddedilir. Politika etkinken `users` dışı
+  API `403 {"code":"2fa_required"}`, token'ları reddedilir. Politika etkinken `users` dışı
   `.env` yönetici girişi reddedilir; kalıcı `APP_SECRET` yoksa uygulama başlamaz.
 - **`APP_SECRET`:** yoksa üretilip etkin `.env`'in sonuna eklenir (yorumlar korunur, değer loglanmaz); yazılamazsa
   2FA kaydı o çalıştırmada kapalıdır.

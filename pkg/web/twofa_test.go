@@ -566,7 +566,7 @@ func TestTwoFA_RequireAllEnforcement(t *testing.T) {
 		} else {
 			w = doJSON(s, http.MethodPost, c.path, `{}`, ck, csrfOf(ck))
 		}
-		if w.Code != http.StatusForbidden || decodeJSON(t, w)["error"] != "2FA required" {
+		if w.Code != http.StatusForbidden || apiCode(w) != "2fa_required" {
 			t.Fatalf("%s %s: %d %s", c.method, c.path, w.Code, w.Body.String())
 		}
 	}
@@ -574,7 +574,7 @@ func TestTwoFA_RequireAllEnforcement(t *testing.T) {
 		t.Fatalf("durum ucu açık olmalı: %d", w.Code)
 	}
 	// Token: kayıt muafiyeti yok, 403
-	if w := do(s, http.MethodGet, "/api/stats", nil, nil, bearer); w.Code != http.StatusForbidden || decodeJSON(t, w)["error"] != "2FA required" {
+	if w := do(s, http.MethodGet, "/api/stats", nil, nil, bearer); w.Code != http.StatusForbidden || apiCode(w) != "2fa_required" {
 		t.Fatalf("kayıtsız kullanıcının token'ı reddedilmeli: %d %s", w.Code, w.Body.String())
 	}
 	if w := do(s, http.MethodGet, "/api/whoami", nil, nil, bearer); w.Code != http.StatusForbidden {
@@ -628,7 +628,7 @@ func TestTwoFA_TokenDenied(t *testing.T) {
 			t.Errorf("%s token yasak listesinde değil", c.path)
 		}
 		w := do(s, c.method, c.path, nil, nil, h)
-		if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "interactive session") {
+		if w.Code != http.StatusForbidden || apiCode(w) != "session_required" {
 			t.Fatalf("%s %s token ile: %d %s", c.method, c.path, w.Code, w.Body.String())
 		}
 	}
@@ -877,7 +877,7 @@ func TestTwoFA_BootstrapAccountBlockedByPolicy(t *testing.T) {
 		if w.Header().Get("Location") != "/login?error=1" || cookieNamed(w, "session") != nil {
 			t.Fatalf("%s: bootstrap girişi reddedilmeli: %s", policy, w.Header().Get("Location"))
 		}
-		if w := do(s, http.MethodGet, "/api/users", nil, old, nil); w.Code != http.StatusForbidden || decodeJSON(t, w)["error"] != "2FA required" {
+		if w := do(s, http.MethodGet, "/api/users", nil, old, nil); w.Code != http.StatusForbidden || apiCode(w) != "2fa_required" {
 			t.Fatalf("%s: bootstrap oturumu API'de reddedilmeli: %d %s", policy, w.Code, w.Body.String())
 		}
 		if sess, _ := s.db.GetSession("bootstrap-sess"); sess != nil {

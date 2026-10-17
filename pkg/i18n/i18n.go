@@ -3,7 +3,10 @@
 // arayüzü bozmaz.
 package i18n
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // DefaultLang varsayılan dil.
 const DefaultLang = "tr"
@@ -47,16 +50,35 @@ func T(lang, key string) string {
 	return key
 }
 
-// Catalog bir dilin tüm anahtarlarını döndürür (istemci tarafı JS için).
+// serverOnlyPrefixes yalnız sunucuda kullanılan anahtar aileleri: API hata ve
+// başarı iletileri JSON yanıtında zaten çevrilmiş gelir; her sayfaya gömülen
+// istemci kataloğunu boşuna şişirmesinler.
+var serverOnlyPrefixes = []string{"apierr.", "apimsg."}
+
+func serverOnly(key string) bool {
+	for _, p := range serverOnlyPrefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// Catalog bir dilin istemci tarafı (JS) anahtarlarını döndürür; yalnız
+// sunucuda kullanılan aileler (serverOnlyPrefixes) dahil edilmez.
 func Catalog(lang string) map[string]string {
 	lang = Normalize(lang)
 	out := make(map[string]string, len(catalog[DefaultLang]))
 	for k, v := range catalog[DefaultLang] {
-		out[k] = v
+		if !serverOnly(k) {
+			out[k] = v
+		}
 	}
 	if m, ok := catalog[lang]; ok {
 		for k, v := range m {
-			out[k] = v
+			if !serverOnly(k) {
+				out[k] = v
+			}
 		}
 	}
 	return out
@@ -74,4 +96,24 @@ func register(lang string, msgs map[string]string) {
 	for k, v := range msgs {
 		m[k] = v
 	}
+}
+
+// Has anahtarın verilen dilde (geri düşme OLMADAN) tanımlı olup olmadığını
+// döndürür; çeviri eksiklerini yakalayan testler içindir.
+func Has(lang, key string) bool {
+	_, ok := catalog[lang][key]
+	return ok
+}
+
+// KeysWithPrefix bir dilde verilen önekle başlayan tüm anahtarları sıralı
+// döndürür (ör. "apierr." — kullanılmayan anahtar denetimi için).
+func KeysWithPrefix(lang, prefix string) []string {
+	var out []string
+	for k := range catalog[lang] {
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
