@@ -75,7 +75,11 @@
 
     function relTimes() { document.querySelectorAll('[data-ago]').forEach(el => { if (el.dataset.ago) { el.title = el.textContent; el.textContent = KH.ago(el.dataset.ago); } }); }
 
-    KH.act({ 'load-new': loadNewResults });
+    KH.act({
+        'load-new': loadNewResults,
+        // Kritiklik çubuğu bölütü → o seviyeden itibaren bulgular (fare kısayolu)
+        'sev-go': (el) => { location.href = '/results?minCriticality=' + encodeURIComponent(el.dataset.level); },
+    });
     document.addEventListener('DOMContentLoaded', () => {
         loadEngineHealth(); loadNewResults(); loadArtifactStats(); loadWatchSummary(); loadShots(); relTimes();
         setInterval(() => { if (!document.hidden) loadNewResults(); }, 60000);

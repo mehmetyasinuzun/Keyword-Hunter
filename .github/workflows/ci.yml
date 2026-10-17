@@ -84,3 +84,80 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags="-s -w" -o /tmp/kh ./cmd/main.go
+
+  # Uçtan uca: tohumlanmış demo veritabanıyla gerçek sunucu + gerçek Chromium.
+  # Tor yoktur (TOR_PROXY kapalı bir porta işaret eder): uygulama Tor olmadan
+  # açılmalı, Tor'a bağlı özellikler zarifçe hata vermelidir.
+  e2e:
+    name: E2E (Playwright + axe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KH_BASE_URL: http://127.0.0.1:8080
+      KH_ADMIN_USER: admin
+      # Yalnız bu geçici CI veritabanı için; gerçek bir sır değildir.
+      KH_ADMIN_PASS: E2e-Admin-Pass-CI-2026!
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build -trimpath -o "$RUNNER_TEMP/keywordhunter" ./cmd
+      - name: Seed demo database (cmd/khseed)
+        run: go run ./cmd/khseed -db "$RUNNER_TEMP/kh-e2e.db" -reset -admin-user "$KH_ADMIN_USER" -admin-pass "$KH_ADMIN_PASS"
+      - name: Start server
+        run: |
+          cat > "$RUNNER_TEMP/e2e.env" <<ENV
+          ADMIN_USER=${KH_ADMIN_USER}
+          ADMIN_PASS=${KH_ADMIN_PASS}
+          WEB_ADDR=127.0.0.1:8080
+          WEB_SECURE_COOKIES=false
+          TOR_PROXY=127.0.0.1:9
+          DB_PATH=${RUNNER_TEMP}/kh-e2e.db
+          LOG_DIR=${RUNNER_TEMP}/kh-logs
+          LOG_LEVEL=info
+          RATE_LIMIT_RPS=200
+          RATE_LIMIT_BURST=500
+          WATCHLIST_SEED=none
+          ENV
+          ENV_FILE="$RUNNER_TEMP/e2e.env" nohup "$RUNNER_TEMP/keywordhunter" > "$RUNNER_TEMP/server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/server.pid"
+      - name: Wait for /healthz
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8080/healthz; then echo "sunucu hazır (${i}s)"; exit 0; fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/server.pid")" 2>/dev/null; then echo "sunucu kapandı"; cat "$RUNNER_TEMP/server.log"; exit 1; fi
+            sleep 1
+          done
+          echo "sunucu 60 sn içinde hazır olmadı"; cat "$RUNNER_TEMP/server.log"; exit 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: npm ci
+        working-directory: e2e
+        run: npm ci
+      - name: Install Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Playwright
+        working-directory: e2e
+        run: npx playwright test
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/server.pid" ]; then kill "$(cat "$RUNNER_TEMP/server.pid")" 2>/dev/null || true; fi
+          cp "$RUNNER_TEMP/server.log" e2e/server.log 2>/dev/null || true
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            e2e/server.log
+          retention-days: 14

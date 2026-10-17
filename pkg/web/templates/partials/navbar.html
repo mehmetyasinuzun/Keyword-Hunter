@@ -5,7 +5,7 @@
 <a class="kh-skip" href="#main">{{t .Lang "shell.skip"}}</a>
 <div class="kh-app">
   <aside class="kh-sidebar" id="kh-sidebar" aria-label="{{t .Lang "shell.menu"}}">
-    <a class="kh-brand" href="/dashboard" aria-label="KeywordHunter">
+    <a class="kh-brand" href="/dashboard">
       <span class="kh-brand-mark">{{template "logo" .}}</span>
       <span class="kh-brand-name">KeywordHunter</span>
       <span class="kh-brand-tag">CTI</span>
@@ -38,8 +38,11 @@
         {{if .Crumb.GroupKey}}<span class="grp">{{t .Lang .Crumb.GroupKey}}</span><span class="sep">/</span><span class="here">{{t .Lang .Crumb.LabelKey}}</span>{{end}}
       </div>
       <div class="spacer"></div>
-      <button class="kh-cmdk" type="button" data-action="palette" aria-label="{{t .Lang "shell.palette"}}">
-        {{icon "search"}}<span class="txt">{{t .Lang "shell.paletteHint"}}</span><span class="kbds"><kbd>Ctrl</kbd><kbd>K</kbd></span>
+      {{/* Erişilebilir ad görünen metni içerir (WCAG 2.5.3 "Label in Name"); dar
+           ekranda metin gizlendiğinde ad yine ekran okuyucu metninden gelir. ":"
+           .txt içindedir: ipucuyla birlikte gizlenir ("Komut paleti:" kalmaz). */}}
+      <button class="kh-cmdk" type="button" data-action="palette" aria-keyshortcuts="Control+K Meta+K">
+        {{icon "search"}}<span class="kh-sr">{{t .Lang "shell.palette"}}<span class="txt">:</span> </span><span class="txt">{{t .Lang "shell.paletteHint"}}</span><span class="kbds" aria-hidden="true"><kbd>Ctrl</kbd><kbd>K</kbd></span>
       </button>
       <a class="kh-health" href="/monitor" id="nav-health" title="{{t .Lang "nav.monitorLong"}}"><span class="kh-dot unknown"></span><span class="txt">…</span></a>
       <button class="kh-iconbtn" type="button" data-action="theme-cycle" aria-label="{{t .Lang "common.theme"}}" data-tip="{{t .Lang "common.theme"}}">
@@ -47,9 +50,11 @@
         <svg class="ico kh-theme-ico light" aria-hidden="true"><use href="#i-sun"/></svg>
         <svg class="ico kh-theme-ico dark" aria-hidden="true"><use href="#i-moon"/></svg>
       </button>
-      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}" data-tip="{{t .Lang "common.language"}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
+      {{/* aria-label görünen "TR/EN"yi içerir (2.5.3) ve data-tip'in ::after
+           içeriğinin ada eklenmesini ("Dil: TR Dil") engeller. */}}
+      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}: {{if eq .Lang "en"}}EN{{else}}TR{{end}}" data-tip="{{t .Lang "common.language"}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
       <div class="kh-menu-wrap">
-        <button class="kh-avatar" type="button" data-action="menu-toggle" data-target="kh-user-menu" aria-haspopup="menu" aria-expanded="false" aria-label="{{.User}}">{{initials .User}}</button>
+        <button class="kh-avatar" type="button" data-action="menu-toggle" data-target="kh-user-menu" aria-haspopup="menu" aria-expanded="false" title="{{.User}}"><span aria-hidden="true">{{initials .User}}</span><span class="kh-sr">{{.User}}</span></button>
         <div class="kh-menu" id="kh-user-menu" role="menu">
           <div class="kh-menu-head"><div class="u">{{.User}}</div><div class="r">{{t .Lang "shell.signedInAs"}} · {{t .Lang (printf "role.%s" .Role)}}</div></div>
           <div class="kh-menu-seg" role="group" aria-label="{{t .Lang "common.theme"}}">

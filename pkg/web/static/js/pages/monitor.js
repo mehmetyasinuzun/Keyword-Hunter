@@ -163,7 +163,24 @@
         if (!btn) return;
         KH.api('/api/tor/status').then(d => {
             torInfo = d;
-            if (!d.configured) { btn.classList.add('is-off'); btn.title = d.hint || T('Tor kontrol portu yapılandırılmamış', 'Tor control port is not configured'); }
+            // Yapılandırılmamış: düğme etkin kalır (aria-disabled DEĞİL — çekirdek
+            // dağıtıcı aria-disabled öğelerdeki tıklamayı yutar) ve tıklanınca
+            // nedenini uyarı olarak söyler; neden ayrıca aria-describedby ile
+            // ekran okuyuculara, title ile fareye iletilir.
+            if (!d.configured) {
+                const hint = d.hint || T('Tor kontrol portu yapılandırılmamış', 'Tor control port is not configured');
+                btn.classList.add('is-off');
+                btn.title = hint;
+                let sr = $('newnym-hint');
+                if (!sr) {
+                    sr = document.createElement('span');
+                    sr.id = 'newnym-hint';
+                    sr.className = 'kh-sr';
+                    btn.after(sr);
+                }
+                sr.textContent = hint;
+                btn.setAttribute('aria-describedby', 'newnym-hint');
+            }
             else if (!d.canRenew) btn.title = T('Yeni devre için ', 'Next circuit in ') + d.waitSeconds + T(' sn bekleyin', ' s');
             else btn.title = KH.t('mon.newnymTip');
         }).catch(() => { });

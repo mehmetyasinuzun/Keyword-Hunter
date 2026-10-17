@@ -157,7 +157,8 @@
         </div>
       </div>
     </form>
-    <div class="kh-table-wrap st-sp-table">
+    {{/* Dar ekranda yatay kayar: klavyeyle kaydırılabilsin (WCAG 2.1.1) */}}
+    <div class="kh-table-wrap st-sp-table" role="region" tabindex="0" aria-label="{{t .Lang "set.sp.title"}}">
       <table class="kh-table">
         <thead><tr><th>Host</th><th>{{t .Lang "set.sp.cookies"}}</th><th class="center">JS</th><th class="hide-sm">User-Agent</th><th>{{t .Lang "set.sp.updated"}}</th><th class="right">{{t .Lang "common.actions"}}</th></tr></thead>
         <tbody id="sp-body"><tr><td colspan="6"><div class="kh-skel"></div></td></tr></tbody>
@@ -288,7 +289,7 @@
       <div class="int-step"><h4>{{icon "layers"}} {{t .Lang "int.taxii.opencti"}}</h4><p>{{t .Lang "int.taxii.openctiBody"}}</p></div>
       <div class="int-step"><h4>{{icon "shield"}} {{t .Lang "int.taxii.sentinel"}}</h4><p>{{t .Lang "int.taxii.sentinelBody"}}</p></div>
     </div>
-    <pre class="int-curl"><code>curl -H "Accept: application/taxii+json;version=2.1" \
+    <pre class="int-curl" tabindex="0" aria-label="{{t .Lang "acct.r.curl"}}"><code>curl -H "Accept: application/taxii+json;version=2.1" \
      -u ":kh_…" \
      "{{.taxii.apiRoot}}collections/"</code></pre>
     <p class="kh-hint mt-2">{{icon "file"}} {{t .Lang "int.taxii.docs"}}</p>

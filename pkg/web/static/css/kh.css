@@ -34,7 +34,8 @@
   /* Metin */
   --text: #e8ebf4;
   --text-2: #a4adc4;
-  --text-3: #6c7590;
+  /* --text-3 en açık yüzeyde (surface-3) bile WCAG AA ≥4.5:1 */
+  --text-3: #838ca6;
   --text-inverse: #05070c;
   /* Marka & etkileşim */
   --brand-1: #22d3ee;
@@ -94,9 +95,9 @@
   --surface: rgba(255, 255, 255, .82); --surface-solid: #ffffff; --surface-2: #f5f7fc; --surface-3: #eaeef7;
   --surface-hover: rgba(15, 23, 42, .035); --overlay: rgba(15, 23, 42, .38);
   --border: rgba(15, 23, 42, .08); --border-strong: rgba(15, 23, 42, .16); --input-bg: #ffffff;
-  --text: #0f172a; --text-2: #475569; --text-3: #8391a7; --text-inverse: #ffffff;
-  --primary: #0284c7; --primary-strong: #0369a1; --primary-soft: rgba(2, 132, 199, .09); --primary-ring: rgba(2, 132, 199, .28);
-  --ok: #059669; --warn: #d97706; --err: #e11d48; --info: #0284c7; --violet: #7c3aed;
+  --text: #0f172a; --text-2: #475569; --text-3: #5b6a80; --text-inverse: #ffffff;
+  --primary: #0369a1; --primary-strong: #075985; --primary-soft: rgba(2, 132, 199, .09); --primary-ring: rgba(2, 132, 199, .28);
+  --ok: #036c4e; --warn: #9a4508; --err: #e11d48; --info: #0369a1; --violet: #7c3aed;
   --sev-1: #0284c7; --sev-2: #0d9488; --sev-3: #ca8a04; --sev-4: #ea580c; --sev-5: #e11d48;
   --chart-1: #0284c7; --chart-2: #7c3aed; --chart-3: #0d9488; --chart-4: #ea580c;
   --chart-5: #65a30d; --chart-6: #db2777; --chart-7: #ca8a04; --chart-8: #2563eb;
@@ -115,9 +116,9 @@
     --surface: rgba(255, 255, 255, .82); --surface-solid: #ffffff; --surface-2: #f5f7fc; --surface-3: #eaeef7;
     --surface-hover: rgba(15, 23, 42, .035); --overlay: rgba(15, 23, 42, .38);
     --border: rgba(15, 23, 42, .08); --border-strong: rgba(15, 23, 42, .16); --input-bg: #ffffff;
-    --text: #0f172a; --text-2: #475569; --text-3: #8391a7; --text-inverse: #ffffff;
-    --primary: #0284c7; --primary-strong: #0369a1; --primary-soft: rgba(2, 132, 199, .09); --primary-ring: rgba(2, 132, 199, .28);
-    --ok: #059669; --warn: #d97706; --err: #e11d48; --info: #0284c7; --violet: #7c3aed;
+    --text: #0f172a; --text-2: #475569; --text-3: #5b6a80; --text-inverse: #ffffff;
+    --primary: #0369a1; --primary-strong: #075985; --primary-soft: rgba(2, 132, 199, .09); --primary-ring: rgba(2, 132, 199, .28);
+    --ok: #036c4e; --warn: #9a4508; --err: #e11d48; --info: #0369a1; --violet: #7c3aed;
     --sev-1: #0284c7; --sev-2: #0d9488; --sev-3: #ca8a04; --sev-4: #ea580c; --sev-5: #e11d48;
     --chart-1: #0284c7; --chart-2: #7c3aed; --chart-3: #0d9488; --chart-4: #ea580c;
     --chart-5: #65a30d; --chart-6: #db2777; --chart-7: #ca8a04; --chart-8: #2563eb;
@@ -340,8 +341,10 @@ svg.kh-theme-ico { display: none; }
 @media (max-width: 560px) { .kh-health .txt, .kh-crumbs .grp, .kh-crumbs .sep { display: none; } }
 
 /* Komut paleti */
-.kh-palette-overlay { position: fixed; inset: 0; z-index: 3000; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; background: var(--overlay); backdrop-filter: blur(6px); opacity: 0; pointer-events: none; transition: opacity var(--dur-2) var(--ease-out); }
-.kh-palette-overlay.open { opacity: 1; pointer-events: auto; }
+/* Kapalı palet görünmez ve erişilebilirlik ağacının dışında (visibility): yalnız
+   opacity ile gizlenen bir role=dialog ekran okuyucuda gezilebilir kalırdı. */
+.kh-palette-overlay { position: fixed; inset: 0; z-index: 3000; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; background: var(--overlay); backdrop-filter: blur(6px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--dur-2) var(--ease-out), visibility 0s linear var(--dur-2); }
+.kh-palette-overlay.open { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
 .kh-palette { width: 640px; max-width: 100%; border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-solid); border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, .02); transform: translateY(-10px) scale(.98); transition: transform var(--dur-3) var(--ease-spring); }
 .kh-palette-overlay.open .kh-palette { transform: none; }
 .kh-palette-input { display: flex; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--border); color: var(--text-3); }
@@ -760,6 +763,10 @@ details.kh-details[open] > summary::before { transform: rotate(90deg); }
 /* Sağ kenardaki ipuçları taşmasın */
 [data-tip][data-tip-end]::after { left: auto; right: 0; transform: translateY(4px); }
 [data-tip][data-tip-end]:hover::after, [data-tip][data-tip-end]:focus-visible::after { transform: none; }
+/* .kh-btn taşmayı keser (birincil düğmenin parlama efekti için); ipuçlu
+   düğmelerde baloncuk düğmenin üstüne çıkabilsin. .primary ::after'ı
+   parlamaya ayırdığından hariç tutulur. */
+.kh-btn[data-tip]:not(.primary) { overflow: visible; }
 /* Filtre olarak kullanılan istatistik kutusu */
 button.kh-stat { display: block; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 button.kh-stat[aria-pressed="true"] { border-color: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent); }

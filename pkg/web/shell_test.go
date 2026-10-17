@@ -86,3 +86,55 @@ func TestSearchPost_RequiresAnalystAndCSRF(t *testing.T) {
 		t.Fatalf("CSRF'siz arama: %d (403 bekleniyordu)", w.Code)
 	}
 }
+
+// Kabuk ve panodaki erişilebilir adlar (axe: label-content-name-mismatch,
+// link-name, nested-interactive). Uçtan uca axe taraması e2e/'de; bu test aynı
+// gerilemeyi tarayıcısız, her `go test`te yakalar.
+func TestShell_AccessibleNames(t *testing.T) {
+	s := newTestServer(t)
+	if _, err := s.db.SaveResults([]storage.SearchResult{
+		{Title: "örnek bulgu", URL: "http://" + strings.Repeat("a", 55) + "d.onion/x", Source: "Tordex", Query: "erişilebilirlik", Criticality: 4},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// "Son aramalar" tablosu: satır başına ikon-tek harita bağlantısı
+	if err := s.db.SaveSearchHistory("erişilebilirlik", 1); err != nil {
+		t.Fatal(err)
+	}
+	admin := loginAs(t, s, "admin", "correct-horse")
+	w := do(s, http.MethodGet, "/dashboard", nil, admin, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dashboard: %d", w.Code)
+	}
+	body := w.Body.String()
+
+	mustContain := map[string]string{
+		// Avatar: görünen baş harfler gizli, ad ekran okuyucu metninden (kullanıcı adı).
+		"avatar adı": `<span aria-hidden="true">AD</span><span class="kh-sr">admin</span>`,
+		// ":" .txt içinde, görünen ipucuyla birlikte gizlenir: dar ekranda ad "Komut paleti:" olmaz.
+		"palet adı":      `<span class="kh-sr">Komut paleti<span class="txt">:</span> </span><span class="txt">`,
+		"palet kısayolu": `aria-keyshortcuts="Control+K Meta+K"`,
+		"palet tuşları":  `<span class="kbds" aria-hidden="true">`,
+		// aria-label data-tip (::after) içeriğini addan dışlar: "Dil: TR Dil" olmaz.
+		"dil düğmesi adı":    `data-action="lang-toggle" aria-label="Dil: TR" data-tip="Dil"><span class="lbl">TR</span>`,
+		"harita bağlantısı":  `aria-label="Harita: erişilebilirlik"`,
+		"kritiklik bölütü":   `<span class="sev-seg s4" data-action="sev-go" data-level="4"`,
+		"marka (görünen ad)": `<a class="kh-brand" href="/dashboard">`,
+	}
+	for what, want := range mustContain {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s: %q bulunamadı", what, want)
+		}
+	}
+	for what, bad := range map[string]string{
+		"avatar aria-label (görünen metni içermiyor)": `class="kh-avatar" type="button" data-action="menu-toggle" data-target="kh-user-menu" aria-haspopup="menu" aria-expanded="false" aria-label=`,
+		"role=img içinde bağlantı":                    `<a class="sev-seg`,
+		"marka aria-label":                            `aria-label="KeywordHunter"`,
+		"dil düğmesinde yinelenen ad":                 `<span class="kh-sr">Dil: </span>`,
+		"palet adında sarkan iki nokta":               `<span class="kh-sr">Komut paleti: </span>`,
+	} {
+		if strings.Contains(body, bad) {
+			t.Errorf("%s: %q hâlâ var", what, bad)
+		}
+	}
+}

@@ -28,3 +28,11 @@ updates:
     groups:
       docker-images:
         patterns: ["*"]
+  # Uçtan uca test bağımlılıkları (Playwright + axe-core); tek haftalık PR.
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule:
+      interval: weekly
+    groups:
+      e2e:
+        patterns: ["*"]

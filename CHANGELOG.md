@@ -2,6 +2,27 @@
 
 ## Yayımlanmamış
 
+### Uçtan uca test paketi (Playwright + axe) CI'da
+- `cmd/khseed`: boş bir veritabanını deterministik (sabit çekirdek), gerçekçi demo verisiyle kurar —
+  sorgu/motor/kritiklik/kategori çeşitliliğinde etiketli bulgular, IOC'ler, vaka durumu ve notlar,
+  arama geçmişi, planlı taramalar, kontrol geçmişli izleme listesi, sağlıklı motor istatistikleri,
+  normal yoldan (hash zinciri) yazılmış denetim olayları ve bilinen parolalı `analyst` / `viewer`
+  hesapları. `-reset` ile idempotent; `-db` zorunlu ve `.env`'deki `DB_PATH` ile aynı dosyaysa reddedilir
+  (uygulama veritabanı asla silinmez); `make demo` / `make seed` (demo yalnız `127.0.0.1`'e bağlanır).
+- `e2e/`: Playwright 1.56 + @axe-core/playwright. Giriş (hatalı/başarılı), tüm menü sayfaları +
+  Hesabım + Denetim koyu/açık/İngilizce'de sıfır konsol hatası ve sıfır CSP ihlali
+  (`securitypolicyviolation`), 390 px'te yatay taşma yok, Ctrl+K paleti, kalıcı tema, viewer → markalı
+  403, API token oluştur → Bearer → iptal → 401, 2FA kaydı + testte hesaplanan RFC 6238 TOTP ile giriş,
+  denetim kaydında giriş olayları ve axe taraması (`serious`/`critical` = 0).
+- CI: yeni `e2e` işi (tohumla → Tor'suz sunucu → `/healthz` → Chromium → rapor + sunucu logu artefakt).
+- Erişilebilirlik düzeltmeleri (axe bulguları, bastırma yok): `--text-3` her iki temada ≥4.5:1
+  kontrast; açık temada `--primary`/`--ok`/`--warn` koyulaştırıldı (beyaz yazılı birincil düğme
+  4.1 → 5.9:1); kapalı komut paleti erişilebilirlik ağacından çıkarıldı (`visibility`); üst bar
+  düğmelerinin adı görünen metni içerir (WCAG 2.5.3); panodaki ikon-tek harita bağlantısına ad;
+  kritiklik çubuğu `role=img` içinde etkileşimli öğe barındırmaz; yapılandırılmamış Tor yenileme
+  düğmesi etkin kalır, nedeni `aria-describedby` ile okunur ve tıklanınca uyarı verir; ipuçlu `.kh-btn`
+  baloncukları artık kırpılmaz; ayarlardaki kayan tablo ve kod bloğu klavyeyle kaydırılabilir.
+
 ### Güvenlik: CSP `style-src 'self'` (`'unsafe-inline'` kaldırıldı)
 - Politika artık hiçbir yönergede `'unsafe-inline'` içermiyor: `script-src 'self'; style-src 'self'`.
   HTML'e sızan güvenilmez bir metin satır içi CSS ile veri sızdıramaz (öznitelik seçicili arka plan

@@ -1,0 +1,21 @@
+{
+  "name": "keywordhunter-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KeywordHunter uçtan uca testleri (Playwright + axe-core)",
+  "license": "MIT",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.56.1"
+  },
+  "overrides": {
+    "playwright-core": "1.56.1"
+  }
+}

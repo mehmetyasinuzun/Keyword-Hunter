@@ -2,7 +2,9 @@
 
 .mon-updated { display: inline-flex; align-items: center; gap: 8px; font: .74rem var(--font-mono); color: var(--text-3); white-space: nowrap; }
 .mon-kpi-bar { margin-top: 10px; }
-#newnym-btn.is-off { opacity: .6; }
+/* Tor denetimi yapılandırılmamış: tıklanabilir (nedenini söyler) ama "kapalı"
+   görünür. Opaklık yerine kesikli kenar — metin kontrastı WCAG AA'da kalır. */
+#newnym-btn.is-off { border-style: dashed; }
 
 .mon-head { flex-wrap: wrap; }
 .mon-search .kh-input { width: 200px; }

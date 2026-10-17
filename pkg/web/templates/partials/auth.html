@@ -27,6 +27,6 @@
         <svg class="ico kh-theme-ico light" aria-hidden="true"><use href="#i-sun"/></svg>
         <svg class="ico kh-theme-ico dark" aria-hidden="true"><use href="#i-moon"/></svg>
       </button>
-      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
+      <button class="kh-iconbtn" type="button" data-action="lang-toggle" aria-label="{{t .Lang "common.language"}}: {{if eq .Lang "en"}}EN{{else}}TR{{end}}"><span class="lbl">{{if eq .Lang "en"}}EN{{else}}TR{{end}}</span></button>
     </div>
 {{end}}

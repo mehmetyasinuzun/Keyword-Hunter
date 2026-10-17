@@ -40,7 +40,11 @@ gereken sözleşmeyi tanımlar.
    ve koyu tema birlikte çalışsın.
 6. **Erişilebilirlik.** Her etkileşimli öğe gerçek bir `<button>`/`<a>`'dır;
    ikon-tek butonlarda `aria-label`, modallarda odak tuzağı (çekirdek sağlar),
-   `prefers-reduced-motion` desteği (çekirdek sağlar).
+   `prefers-reduced-motion` desteği (çekirdek sağlar). Görünen metni olan bir
+   denetime `aria-label` verilecekse görünen metni içermelidir (WCAG 2.5.3);
+   ikon-tek bağlantılar da ad taşır. Metin renkleri her temada en az 4.5:1
+   kontrast sağlar (`--text-3` dahil). `e2e/tests/a11y.spec.js` her sayfayı
+   axe-core ile tarar (koyu + açık tema); `serious`/`critical` ihlal CI'ı kırar.
 
 ## Sayfa iskeleti
 

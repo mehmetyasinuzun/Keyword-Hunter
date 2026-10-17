@@ -48,7 +48,9 @@
     <div class="kh-card span-2">
       <div class="kh-card-title">{{icon "fire"}} {{t .Lang "dash.sevDist"}} <span class="hint">{{t .Lang "dash.sevHint"}}</span></div>
       <div class="sev-stack" role="img" aria-label="{{t .Lang "dash.sevDist"}}">
-        {{range .sevList}}{{if .Count}}<a class="sev-seg s{{.Level}}" href="/results?minCriticality={{.Level}}" data-bar="{{.Pct}}" title="SEV {{.Level}} · {{.Count}} ({{.Pct}}%)"></a>{{end}}{{end}}
+        {{/* Bölütler yalnız fare kısayoludur (role=img içinde etkileşimli öğe olmaz):
+             klavye ve ekran okuyucu aynı süzgece aşağıdaki SEV hücrelerinden ulaşır. */}}
+        {{range .sevList}}{{if .Count}}<span class="sev-seg s{{.Level}}" data-action="sev-go" data-level="{{.Level}}" data-bar="{{.Pct}}" title="SEV {{.Level}} · {{.Count}} ({{.Pct}}%)"></span>{{end}}{{end}}
       </div>
       <div class="sev-cells kh-stagger">
         {{range .sevList}}
@@ -130,7 +132,7 @@
           <td class="kh-mono fw-6">{{.Query}}</td>
           <td class="num">{{.ResultCount}}</td>
           <td class="muted nowrap" data-ago="{{isoTime .SearchedAt}}">{{formatTime .SearchedAt}}</td>
-          <td class="right nowrap"><a class="kh-btn xs subtle" href="/results?q={{.Query}}">{{t $.Lang "dash.findings"}}</a> <a class="kh-btn xs subtle" href="/results/graph?q={{.Query}}">{{icon "graph"}}</a></td>
+          <td class="right nowrap"><a class="kh-btn xs subtle" href="/results?q={{.Query}}">{{t $.Lang "dash.findings"}}</a> <a class="kh-btn xs subtle" href="/results/graph?q={{.Query}}" aria-label="{{t $.Lang "dash.map"}}: {{.Query}}" data-tip="{{t $.Lang "dash.map"}}" data-tip-end>{{icon "graph"}}</a></td>
         </tr>
         {{end}}
         </tbody></table></div>

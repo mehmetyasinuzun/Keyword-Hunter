@@ -5,6 +5,8 @@
 #   ./run.sh test       testler (race)
 #   ./run.sh docker     docker compose up -d --build
 #   ./run.sh release    tüm platformlar için ikili üret (./dist)
+#   ./run.sh seed       demo veritabanını (data/demo.db) baştan kur
+#   ./run.sh demo       seed + demo veritabanıyla çalıştır
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -41,6 +43,17 @@ case "${1:-run}" in
              os="${pair%/*}"; arch="${pair#*/}"; ext=""; [ "$os" = windows ] && ext=".exe"
              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/keywordhunter-$os-$arch$ext" ./cmd && echo "[+] dist/keywordhunter-$os-$arch$ext"
            done ;;
+  seed)    need_go; ensure_env; mkdir -p data
+           # Admin kimliği .env'den (ADMIN_USER / ADMIN_PASS ya da ADMIN_PASS_HASH) okunur.
+           go run ./cmd/khseed -env .env -db "${DEMO_DB:-data/demo.db}" -reset ;;
+  demo)    need_go; ensure_env; mkdir -p data bin
+           go run ./cmd/khseed -env .env -db "${DEMO_DB:-data/demo.db}" -reset
+           go build -trimpath -o bin/keywordhunter ./cmd
+           # Demo hesaplarının parolaları herkesçe bilinir: .env'deki WEB_ADDR
+           # (ör. :8080 = tüm arayüzler) ne olursa olsun yalnız loopback'e bağlan.
+           echo "[*] Demo veritabanı: ${DEMO_DB:-data/demo.db} → http://127.0.0.1:${DEMO_PORT:-8080} (yalnız localhost)"
+           # Ortam değişkenleri .env'deki DB_PATH/WEB_ADDR'i ezer; asıl veritabanınıza dokunulmaz.
+           WEB_ADDR="127.0.0.1:${DEMO_PORT:-8080}" DB_PATH="${DEMO_DB:-data/demo.db}" exec ./bin/keywordhunter ;;
   run|*)   need_go; ensure_env; check_tor; mkdir -p bin
            go build -trimpath -o bin/keywordhunter ./cmd
            echo "[*] Başlatılıyor → http://localhost$(grep -E '^WEB_ADDR=' .env | cut -d= -f2- | tr -d '"' || echo :8080)"

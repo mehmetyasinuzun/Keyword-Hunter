@@ -1,6 +1,6 @@
 /* Panel — kritiklik yığını, hücreler, sağlık halkası, hızlı erişim, akış, görüntüler */
 .sev-stack { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--surface-hover); gap: 2px; margin-bottom: 16px; }
-.sev-seg { display: block; height: 100%; width: 0; transition: width 1s var(--ease-out), filter var(--dur-2); }
+.sev-seg { display: block; height: 100%; width: 0; cursor: pointer; transition: width 1s var(--ease-out), filter var(--dur-2); }
 .sev-seg:hover { filter: brightness(1.25); }
 .sev-seg.s1 { background: var(--sev-1); } .sev-seg.s2 { background: var(--sev-2); } .sev-seg.s3 { background: var(--sev-3); } .sev-seg.s4 { background: var(--sev-4); } .sev-seg.s5 { background: var(--sev-5); }
 .sev-cells { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
