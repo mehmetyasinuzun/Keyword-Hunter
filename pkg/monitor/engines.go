@@ -25,9 +25,24 @@ type EngineMonitor struct {
 	once     sync.Once
 	interval time.Duration
 
+	// engines denetlenen motor listesi; nil ise search.SearchEngines (testler
+	// httptest adresli motorlar verir).
+	engines []search.Engine
+
 	// onAllDown ardışık kontrollerde tüm motorlar düştüğünde çağrılır (Tor devre yenileme).
-	onAllDown  func()
+	onAllDown func()
+	// streakMu downStreak'i korur: CheckNow (API) ile zamanlayıcı turu aynı anda
+	// checkAll çalıştırabilir.
+	streakMu   sync.Mutex
 	downStreak int
+}
+
+// engineList denetlenecek motorları döndürür.
+func (em *EngineMonitor) engineList() []search.Engine {
+	if em.engines != nil {
+		return em.engines
+	}
+	return search.SearchEngines
 }
 
 // SetAllDownHook tüm motorlar art arda düştüğünde tetiklenecek geri çağrıyı atar.
@@ -92,7 +107,7 @@ func (em *EngineMonitor) Start() {
 			}
 		}
 	}()
-	logger.Info("Engine Monitor başlatıldı (aralık: %v, %d motor)", em.interval, len(search.SearchEngines))
+	logger.Info("Engine Monitor başlatıldı (aralık: %v, %d motor)", em.interval, len(em.engineList()))
 }
 
 // Stop izlemeyi durdurur
@@ -113,7 +128,7 @@ func (em *EngineMonitor) checkAll() {
 	sem := make(chan struct{}, 5)
 	var wg sync.WaitGroup
 
-	for _, eng := range search.SearchEngines {
+	for _, eng := range em.engineList() {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(e search.Engine) {
@@ -135,16 +150,22 @@ func (em *EngineMonitor) checkAll() {
 					up++
 				}
 			}
+			em.streakMu.Lock()
+			fire := false
 			if up == 0 {
 				em.downStreak++
 				// İki ardışık tam-düşük turdan sonra yeni devre iste (geçici dalgalanmada tetiklenmesin)
 				if em.downStreak >= 2 {
-					logger.Warn("Engine Monitor: tüm aktif motorlar çevrimdışı — Tor devre yenileme tetikleniyor")
-					em.onAllDown()
+					fire = true
 					em.downStreak = 0
 				}
 			} else {
 				em.downStreak = 0
+			}
+			em.streakMu.Unlock()
+			if fire {
+				logger.Warn("Engine Monitor: tüm aktif motorlar çevrimdışı — Tor devre yenileme tetikleniyor")
+				em.onAllDown()
 			}
 		}
 	}

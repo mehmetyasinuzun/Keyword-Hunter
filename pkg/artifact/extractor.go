@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 var _ = sync.Once{}
@@ -363,6 +364,15 @@ func extractContext(text string, start, end, contextLen int) string {
 	contextEnd := end + contextLen
 	if contextEnd > len(text) {
 		contextEnd = len(text)
+	}
+
+	// Pencere sınırları çok baytlı bir karakterin ortasına denk gelebilir
+	// (Türkçe/Kiril metin); karakter başına hizala ki bağlam geçerli UTF-8 kalsın.
+	for contextStart > 0 && !utf8.RuneStart(text[contextStart]) {
+		contextStart--
+	}
+	for contextEnd < len(text) && !utf8.RuneStart(text[contextEnd]) {
+		contextEnd++
 	}
 
 	context := text[contextStart:contextEnd]

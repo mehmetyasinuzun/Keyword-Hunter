@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"keywordhunter-mvp/pkg/shared"
 )
 
 // ResultArtifact bir bulgudan çıkarılmış IOC/artifact (e-posta, cüzdan, IP, hash…).
@@ -91,14 +93,16 @@ func (db *DB) ReplaceArtifacts(resultID int64, items []ResultArtifact) (int, err
 		if v == "" || len(v) > 512 {
 			continue
 		}
-		ctx := a.Context
-		if len(ctx) > 300 {
-			ctx = ctx[:300]
-		}
-		if _, err := stmt.Exec(resultID, a.Type, v, ctx, a.Confidence); err == nil {
-			n++
-			if !prev[a.Type+"\x00"+v] {
-				added = true
+		// Bayt sınırı karakter ortasından kesmesin (geçersiz UTF-8 saklanırdı).
+		ctx := shared.TruncateBytes(a.Context, 300)
+		// INSERT OR IGNORE yinelenen (tür, değer) için hata vermez; yalnız
+		// gerçekten eklenen satırlar sayılır (aksi halde IOC sayısı şişerdi).
+		if res, err := stmt.Exec(resultID, a.Type, v, ctx, a.Confidence); err == nil {
+			if aff, _ := res.RowsAffected(); aff > 0 {
+				n++
+				if !prev[a.Type+"\x00"+v] {
+					added = true
+				}
 			}
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 
@@ -83,11 +84,19 @@ func cleanURL(urlStr string) string {
 	return strings.TrimSpace(urlStr)
 }
 
+// maxResultURLLen sonuç URL'si üst sınırı (shared.IsPublicWebURL ile aynı). Motor
+// sayfası saldırgan kontrolünde olabilir; sınırsız bir "URL" veritabanına ve
+// arayüze taşınmasın.
+const maxResultURLLen = 2048
+
 // isValidResultURL URL'in geçerli bir sonuç olup olmadığını kontrol eder
 func isValidResultURL(urlStr string) bool {
 	// Önce URL'yi temizle
 	urlStr = cleanURL(urlStr)
 	lowerURL := strings.ToLower(urlStr)
+	if len(urlStr) > maxResultURLLen {
+		return false
+	}
 
 	// 0. URL'de boşluk varsa geçersiz
 	if strings.Contains(urlStr, " ") {
@@ -433,6 +442,10 @@ func extractTitleFromURL(url string) string {
 		path = strings.ReplaceAll(path, ".htm", "")
 
 		if len(path) > 3 {
+			// Başlık sınırlı kalsın (cleanTitle ile aynı 150 rune, köşeli parantez dahil)
+			if utf8.RuneCountInString(path) > 148 {
+				path = shared.TruncateRunes(path, 145) + "..."
+			}
 			// İlk harfi büyük yap (rune-güvenli)
 			pathRunes := []rune(path)
 			if len(pathRunes) > 0 {

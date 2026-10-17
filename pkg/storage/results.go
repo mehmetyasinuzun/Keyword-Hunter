@@ -537,17 +537,18 @@ func normalizeTags(tags string) []string {
 // Helper functions
 func splitTags(s string) []string {
 	var result []string
-	current := ""
+	// strings.Builder: "current += string(c)" uzun girdide karesel kopyalıyordu.
+	var current strings.Builder
 	for _, c := range s {
 		if c == ',' {
-			result = append(result, current)
-			current = ""
+			result = append(result, current.String())
+			current.Reset()
 		} else {
-			current += string(c)
+			current.WriteRune(c)
 		}
 	}
-	if current != "" {
-		result = append(result, current)
+	if current.Len() > 0 {
+		result = append(result, current.String())
 	}
 	return result
 }

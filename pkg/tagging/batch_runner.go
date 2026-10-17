@@ -77,12 +77,15 @@ func NewBatchRunner(db *storage.DB, engine *Engine, workerCount int) *BatchRunne
 // açılışta kaldıkları yerden (processed_count) devam edebilsinler.
 func (r *BatchRunner) Stop() {
 	r.stopOnce.Do(func() {
-		close(r.queue)
 		r.mu.Lock()
 		r.stopping = true
 		for _, cancel := range r.cancels {
 			cancel()
 		}
+		// Kanal kilit altında kapanır: Submit/RecoverPendingJobs "kapanıyor mu"
+		// kontrolü ile kuyruğa gönderimi aynı kilitte yapar; kapanış sırasında
+		// gelen bir istek kapalı kanala gönderip panik etmez.
+		close(r.queue)
 		r.mu.Unlock()
 	})
 	r.wg.Wait()
@@ -103,7 +106,11 @@ func (r *BatchRunner) RecoverPendingJobs() error {
 	}
 
 	queued := 0
+	r.mu.RLock()
 	for _, job := range jobs {
+		if r.stopping {
+			break
+		}
 		select {
 		case r.queue <- job.ID:
 			queued++
@@ -111,6 +118,7 @@ func (r *BatchRunner) RecoverPendingJobs() error {
 			logger.Warn("TAG JOB RECOVERY: kuyruk dolu, iş atlandı: %s", job.ID)
 		}
 	}
+	r.mu.RUnlock()
 
 	if queued > 0 {
 		logger.Info("TAG JOB RECOVERY: %d iş kuyruğa geri alındı", queued)
@@ -164,11 +172,19 @@ func (r *BatchRunner) Submit(ctx context.Context, resultIDs []int64, query strin
 		return nil, fmt.Errorf("iş kaydedilemedi: %w", err)
 	}
 
-	select {
-	case r.queue <- job.ID:
-	default:
-		// Kuyruk dolu: işi askıda bırakmak yerine kullanıcıya söyle (recovery
-		// yalnızca açılışta çalışır, iş sessizce beklerdi).
+	r.mu.RLock()
+	queued := false
+	if !r.stopping {
+		select {
+		case r.queue <- job.ID:
+			queued = true
+		default:
+		}
+	}
+	r.mu.RUnlock()
+	if !queued {
+		// Kuyruk dolu (ya da uygulama kapanıyor): işi askıda bırakmak yerine
+		// kullanıcıya söyle (recovery yalnızca açılışta çalışır, iş sessizce beklerdi).
 		_ = r.db.MarkTaggingJobFinished(job.ID, StatusFailed, JobMsgQueueFull)
 		logger.Warn("TAG JOB SUBMIT: kuyruk dolu, iş reddedildi: %s", job.ID)
 		return nil, ErrQueueFull

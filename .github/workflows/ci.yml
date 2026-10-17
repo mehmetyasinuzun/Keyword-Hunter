@@ -34,6 +34,33 @@ jobs:
           for f in $(find pkg/web/static/js -name '*.js' -not -path '*/vendor/*'); do node --check "$f"; done
       - name: Test (race)
         run: go test -race -count=1 ./...
+      # Düşmanca dark web girdisini işleyen ayrıştırıcıların yerel fuzz hedefleri
+      # (IOC çıkarımı, bağlantı/metin ayrıştırma, URL normalizasyonu) her biri kısa
+      # süre koşar; yeni `func FuzzXxx` hedefleri otomatik bulunur. Tohum korpusu
+      # (f.Add + testdata/fuzz) zaten `go test` ile her PR'da koşar.
+      - name: Fuzz (10 s per target)
+        run: |
+          set -euo pipefail
+          n=0
+          for f in $(grep -rlE --include='*_test.go' '^func Fuzz[A-Za-z0-9_]*\(' pkg cmd | sort); do
+            dir="./$(dirname "$f")"
+            for name in $(grep -oE '^func Fuzz[A-Za-z0-9_]*' "$f" | sed 's/^func //'); do
+              echo "::group::${name} (${dir})"
+              go test -run='^$' -fuzz="^${name}\$" -fuzztime=10s "$dir"
+              echo "::endgroup::"
+              n=$((n + 1))
+            done
+          done
+          echo "${n} fuzz hedefi koştu"
+          if [ "$n" -eq 0 ]; then echo "fuzz hedefi bulunamadı"; exit 1; fi
+      - name: Upload fuzz crashers
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crashers
+          path: '**/testdata/fuzz/**'
+          if-no-files-found: ignore
+          retention-days: 14
       # pkg/capture'ın gerçek tarayıcı testleri (sahte SOCKS5 + sahte .onion) yalnız
       # CHROME_BIN verildiğinde koşar; runner'daki Chrome ile chromedp entegrasyonu
       # her PR'da uçtan uca doğrulanır.

@@ -232,7 +232,9 @@ func (db *DB) GetAnalyticsData(interval string, query string) (*AnalyticsData, e
 	// 7. Kelime Sıklığı İstatistikleri
 	var totalHits, avgHits, maxHits, withHits, withoutHits int
 	db.conn.QueryRow(`SELECT COALESCE(SUM(keyword_count), 0) FROM search_results`+whereClause, args...).Scan(&totalHits)
-	db.conn.QueryRow(`SELECT COALESCE(AVG(keyword_count), 0) FROM search_results`+whereClause, args...).Scan(&avgHits)
+	// AVG REAL döner; tam sayı olmayan ortalama (ör. 3.2) int'e Scan edilemez ve
+	// hata yutulduğu için AvgHits 0 kalırdı. SQL tarafında yuvarlanır.
+	db.conn.QueryRow(`SELECT CAST(ROUND(COALESCE(AVG(keyword_count), 0)) AS INTEGER) FROM search_results`+whereClause, args...).Scan(&avgHits)
 	db.conn.QueryRow(`SELECT COALESCE(MAX(keyword_count), 0) FROM search_results`+whereClause, args...).Scan(&maxHits)
 
 	withWhere := whereClause

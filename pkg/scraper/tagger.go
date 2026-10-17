@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"keywordhunter-mvp/pkg/shared"
 )
@@ -17,6 +19,31 @@ func countKeyword(haystack, keyword string) int {
 	}
 	return strings.Count(haystack, keyword)
 }
+
+// containsWholeWord kw'nin metinde tam kelime (harf/rakam sınırlı) olarak
+// geçip geçmediğini söyler. Düz alt dizgi araması "administrator" içinde "rat"
+// ve "tor", "history" içinde "tor" bulup her sayfaya yanlış CTI etiketi ekliyordu.
+func containsWholeWord(text, kw string) bool {
+	if kw == "" {
+		return false
+	}
+	for off := 0; off < len(text); {
+		i := strings.Index(text[off:], kw)
+		if i < 0 {
+			return false
+		}
+		start, end := off+i, off+i+len(kw)
+		before, _ := utf8.DecodeLastRuneInString(text[:start])
+		after, _ := utf8.DecodeRuneInString(text[end:])
+		if (start == 0 || !isWordRune(before)) && (end == len(text) || !isWordRune(after)) {
+			return true
+		}
+		off = start + 1
+	}
+	return false
+}
+
+func isWordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
 
 // TagResult otomatik etiket sonucu
 type TagResult struct {
@@ -142,11 +169,7 @@ func (s *Scraper) ExtractTopKeywords(ctx context.Context, urlStr, searchQuery st
 	text := s.htmlToText(content.RawContent)
 	textLower := strings.ToLower(text)
 	result.Title = extractHTMLTitle(content.RawContent)
-	if len(text) > maxTextForArtifacts {
-		result.Text = text[:maxTextForArtifacts]
-	} else {
-		result.Text = text
-	}
+	result.Text = shared.TruncateBytes(text, maxTextForArtifacts)
 
 	// Aranan kelime kaç kez geçiyor?
 	result.KeywordHits = countKeyword(textLower, strings.ToLower(searchQuery))
@@ -202,7 +225,11 @@ func (s *Scraper) ExtractTopKeywords(ctx context.Context, urlStr, searchQuery st
 	// CTI anahtar kelimelerinden içerikte geçenleri ekle (yoksa bile)
 	for _, keyword := range shared.HighValueKeywords {
 		keywordLower := strings.ToLower(keyword)
-		if strings.Contains(textLower, keywordLower) {
+		// Arama kelimesi yukarıda bilinçli olarak dışlandı; burada geri eklenmesin.
+		if keywordLower == strings.ToLower(searchQuery) {
+			continue
+		}
+		if containsWholeWord(textLower, keywordLower) {
 			// Daha önce eklenmemişse ekle
 			found := false
 			for _, sw := range scoredWords {
@@ -304,7 +331,11 @@ func (s *Scraper) ExtractTopKeywordsFromHTML(htmlContent, searchQuery string, ma
 	// CTI anahtar kelimeleri ekle
 	for _, keyword := range shared.HighValueKeywords {
 		keywordLower := strings.ToLower(keyword)
-		if strings.Contains(textLower, keywordLower) {
+		// Arama kelimesi yukarıda bilinçli olarak dışlandı; burada geri eklenmesin.
+		if keywordLower == strings.ToLower(searchQuery) {
+			continue
+		}
+		if containsWholeWord(textLower, keywordLower) {
 			found := false
 			for _, sw := range scoredWords {
 				if sw.word == keywordLower {

@@ -1,6 +1,10 @@
 package artifact
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestExtract_FindsCommonIOCs(t *testing.T) {
 	text := `Contact: leaks@protonmail.com or admin@example.com. BTC 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2 wallet.
@@ -45,5 +49,18 @@ func TestExtract_FindsCommonIOCs(t *testing.T) {
 func TestLuhn(t *testing.T) {
 	if !luhnValid("4111111111111111") || luhnValid("4111111111111112") || luhnValid("abc") {
 		t.Fatal("Luhn hatalı")
+	}
+}
+
+// TestExtract_ContextIsValidUTF8 50 baytlık bağlam penceresi çok baytlı bir
+// karakterin ortasına denk gelse de bağlam geçerli UTF-8 kalmalı (Türkçe sayfa).
+func TestExtract_ContextIsValidUTF8(t *testing.T) {
+	text := strings.Repeat("ş", 30) + " mail: ali.veli@protonmail.com " + strings.Repeat("ğ", 30)
+	arts := NewExtractor().Extract(text, "")
+	if len(arts) != 1 || arts[0].Type != TypeEmail {
+		t.Fatalf("tek e-posta bekleniyordu: %+v", arts)
+	}
+	if !utf8.ValidString(arts[0].Context) || !strings.Contains(arts[0].Context, "ali.veli@protonmail.com") {
+		t.Fatalf("bağlam geçersiz UTF-8: %q", arts[0].Context)
 	}
 }

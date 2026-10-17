@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,6 +23,12 @@ type ExtractedLink struct {
 	LinkType string // "internal" veya "external"
 }
 
+// Bağlantı çıkarımı regex'leri bir kez derlenir (her sayfada yeniden derleme yoktu).
+var (
+	reAnchor   = regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
+	reAnchorIn = regexp.MustCompile(`<[^>]*>`)
+)
+
 // ExtractLinks bir sayfadan tüm linkleri çıkarır ve iç/dış olarak ayırır
 func (s *Scraper) ExtractLinks(pageURL string, htmlContent string) ([]ExtractedLink, error) {
 	// Sayfa domain'ini al
@@ -30,19 +37,20 @@ func (s *Scraper) ExtractLinks(pageURL string, htmlContent string) ([]ExtractedL
 	var links []ExtractedLink
 	seen := make(map[string]bool)
 
-	// <a> taglarını bul
-	linkRegex := regexp.MustCompile(`(?is)<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)</a>`)
-	matches := linkRegex.FindAllStringSubmatch(htmlContent, -1)
-
-	// HTML tag temizleme
-	tagRegex := regexp.MustCompile(`<[^>]*>`)
+	// <a> taglarını bul. Script/style gövdeleri önce atılır: içlerindeki
+	// "<a href=...>" dizgileri hayalet bağlantı üretir ve regex'in sonraki
+	// gerçek </a>'ya kadar uzanmasıyla gerçek bağlantıları yutardı.
+	htmlContent = reStyle.ReplaceAllString(reScript.ReplaceAllString(htmlContent, " "), " ")
+	matches := reAnchor.FindAllStringSubmatch(htmlContent, -1)
 
 	for _, match := range matches {
 		if len(match) < 3 {
 			continue
 		}
 
-		href := strings.TrimSpace(match[1])
+		// Öznitelik değeri HTML varlıklarıyla kodlanmıştır ("?a=1&amp;b=2");
+		// çözülmeden istek atılırsa sorgu parametreleri bozulur.
+		href := strings.TrimSpace(html.UnescapeString(match[1]))
 		titleHTML := match[2]
 
 		// URL'yi normalize et
@@ -63,7 +71,7 @@ func (s *Scraper) ExtractLinks(pageURL string, htmlContent string) ([]ExtractedL
 		}
 
 		// Title çıkar
-		title := strings.TrimSpace(tagRegex.ReplaceAllString(titleHTML, ""))
+		title := strings.TrimSpace(html.UnescapeString(reAnchorIn.ReplaceAllString(titleHTML, "")))
 		if title == "" {
 			title = extractTitleFromURLPath(normalizedURL)
 		}
@@ -226,7 +234,19 @@ func normalizeURL(href, baseURL string) string {
 	if err != nil {
 		return ""
 	}
-	return base.ResolveReference(ref).String()
+	// Yalnız host'u olan http(s) bağlantı: "JavaScript:", "data:", "ftp:",
+	// "file:" gibi şemalar (büyük/küçük harf fark etmeksizin) ve "http:0" gibi
+	// host'suz opak biçimler graf düğümü/örümcek hedefi olmaz.
+	resolved := base.ResolveReference(ref)
+	if (resolved.Scheme != "http" && resolved.Scheme != "https") || resolved.Host == "" {
+		return ""
+	}
+	// "//::" gibi bir göreli referans geri ayrıştırılamayan "http://::" üretir.
+	out := resolved.String()
+	if _, err := url.Parse(out); err != nil {
+		return ""
+	}
+	return out
 }
 
 // CountKeywords bir sayfadaki anahtar kelime sayısını döndürür

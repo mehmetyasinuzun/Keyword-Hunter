@@ -239,15 +239,33 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 			continue
 		}
 
+		// Satırlar önce belleğe alınır ve rows kapatılır: açılmış düğümlerin
+		// çocuklarını yükleyen sorgu (loadGraphChildren) tek DB bağlantısında
+		// (SetMaxOpenConns=1) açık result-set varken sonsuza dek beklerdi —
+		// /graph isteği ve onunla birlikte tüm veritabanı erişimi kilitlenirdi.
+		type resultRow struct {
+			id                 int64
+			source, title, url string
+		}
+		var resultRows []resultRow
+		for rows.Next() {
+			var rr resultRow
+			if err := rows.Scan(&rr.id, &rr.source, &rr.title, &rr.url); err != nil {
+				continue
+			}
+			resultRows = append(resultRows, rr)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
+
 		// Kaynak bazlı gruplama için map
 		engineResults := make(map[string][]*GraphNode)
 
-		for rows.Next() {
-			var id int64
-			var source, title, url string
-			if err := rows.Scan(&id, &source, &title, &url); err != nil {
-				continue
-			}
+		for _, rr := range resultRows {
+			id, source, title, url := rr.id, rr.source, rr.title, rr.url
 
 			// Global URL count kullan (çoklu kaynaklarda bulunanlar)
 			count := 1
@@ -279,11 +297,6 @@ func (db *DB) GetGraphData(queryFilter string, opts GraphDataOptions) (*GraphNod
 
 			engineResults[source] = append(engineResults[source], resultNode)
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		rows.Close()
 
 		// Engine node'larını oluştur
 		engineNames := make([]string, 0, len(engineResults))

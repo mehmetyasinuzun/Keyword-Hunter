@@ -17,6 +17,10 @@ func TestNormalizeURL(t *testing.T) {
 		"http://abc.onion/":          "http://abc.onion",
 		"":                           "",
 		"http://abc.onion/a?b=1#c":   "http://abc.onion/a?b=1",
+		// parçadan önceki boşluk/eğik çizgi de kırpılır (aynı sayfa tek anahtar)
+		"http://abc.onion/a #x":   "http://abc.onion/a",
+		"http://abc.onion/a/ /":   "http://abc.onion/a",
+		"\thttp://abc.onion/a/\n": "http://abc.onion/a",
 	}
 	for in, want := range cases {
 		if got := normalizeURL(in); got != want {

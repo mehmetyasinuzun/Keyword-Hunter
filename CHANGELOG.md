@@ -1,5 +1,53 @@
 # Değişiklik Günlüğü
 
+## v0.17.0 — unreleased
+
+### Test ve fuzz
+- Veri toplama çekirdeğine davranışsal testler (Tor'suz: httptest sunucusu, `.onion` adlarını test
+  sunucusuna bağlayan dialer, bellek içi site grafı). Kapsam (`go test -cover`, önce → sonra):
+  scraper %3,9 → %94,3 · monitor %6,4 → %94,2 · scheduler %11,2 → %87,5 · tagging %31,2 → %88,7 ·
+  crawler %35,0 → %93,2 · storage %46,8 → %86,4 · shared %48,1 → %90,0 · logger %46,0 → %92,0 ·
+  search %56,8 → %93,9 · artifact %69,7 → %76,9.
+- Kapsanan davranışlar: motor sonuç sayfası ayrıştırma (`pkg/search/testdata/engines/` altında Tordex,
+  Ahmia, Torch ve düz metin listesi biçimini taklit eden HTML örnekleri), tekilleştirme ve sayfalama
+  (yeni sonuç gelmeyen sayfada durma); planlı taramada due zamanı/sırası ve "yalnız yeni URL" farkı
+  (webhook ve genel bildirim eşikleri); motor izleyicide up/down sınıflandırması, art arda düşüş
+  sayaçları ve iki tur tam-düşükte Tor devre yenileme kancası; örümcekte BFS derinlik/sayfa sınırı,
+  aynı-host ve yalnız-onion kuralları, iptal ve kuyruk taşması; toplu etiketlemede kaldığı yerden devam,
+  iptal, kapanışta duraklatma; storage'da filtre/LIKE kaçışı/sıralama/sayfalama, vaka durumu, etiket ve
+  IOC sorguları, izleme listesi uptime/değişiklik, graf ağacı, analitik toplamları.
+- Küçük test dikişleri (davranış değişmez): scheduler arama arayüzü, örümcek bağlantı çekici + gecikme
+  alanı, motor izleyicide motor listesi alanı.
+- 11 yerel Go fuzz hedefi (düşmanca dark web girdisi): `FuzzExtract` (IOC), `FuzzHTMLToText`,
+  `FuzzExtractLinks`, `FuzzNormalizeURL`, `FuzzExtractTopKeywordsFromHTML`, `FuzzParseResults`,
+  `FuzzVisitKey`, `FuzzExtractDomain`, `FuzzTruncate`, `FuzzDetectChallenge`, `FuzzNormalizeTags`. Her
+  biri gerçek değişmezler doğrular (sınırlı/geçerli UTF-8 çıktı, yalnız http(s) bağlantı, sabit nokta,
+  determinizm); yerelde her biri 60 sn koştu. Bulunan girdiler `testdata/fuzz/` altında regresyon tohumu.
+- CI (Test & Vet): `^func Fuzz` ile otomatik bulunan her hedef 10 sn koşar; çökme girdileri artefakt
+  olarak yüklenir.
+- Düzeltilen hatalar:
+  - **Graf kilitlenmesi:** bir sonuç düğümü derinleştirildikten sonra `/graph` (`GetGraphData`), açık
+    result-set varken çocuk sorgusu attığı için tek DB bağlantısında sonsuza dek bekliyor ve tüm
+    veritabanı erişimini kilitliyordu. Satırlar önce belleğe alınıyor.
+  - Toplu etiketleme: kapanış sırasında gelen `Submit`/kurtarma kapalı kuyruğa gönderip panik ediyordu;
+    örümcekte aynı kontrol-sonra-gönder yarışı. Kanal artık kilit altında kapanıyor.
+  - Motor izleyici: "Şimdi kontrol et" ile zamanlayıcı turu `downStreak` üzerinde yarışıyordu (veri yarışı).
+  - Örümcek: son sayfa çekilirken iptal edilen iş "completed" yazılıyordu; parçadan önceki boşluk
+    yüzünden aynı sayfa iki kez geziliyordu.
+  - Bağlantı çıkarımı: `<script>` içindeki `<a href>` dizgileri hayalet bağlantı üretip gerçek bağlantıyı
+    yutuyordu; `href`'teki `&amp;` çözülmüyordu (sorgu parametreleri bozuluyordu); başlıktaki varlıklar
+    çözülmüyordu; `JavaScript:`/`data:`/`ftp:`/`file:`, host'suz `http:0` ve geri ayrıştırılamayan
+    `//::` bağlantıları graf/örümceğe sızıyordu.
+  - Etiketleme: CTI anahtar kelimeleri alt dizgi olarak aranıyordu ("administrator" → `rat`, `tor`);
+    tam kelime eşleşmesine geçildi; arama sorgusu ayrıca dışlansa da CTI listesinden geri ekleniyordu.
+  - IOC bağlamı (50 bayt pencere), artifact bağlamı (300 bayt) ve etiketleme metni (200 KB) çok baytlı
+    karakteri ortadan bölüp geçersiz UTF-8 saklıyordu (Türkçe sayfalar); `shared.TruncateBytes` eklendi.
+  - `ReplaceArtifacts` yok sayılan yinelenen IOC'leri de sayıyordu; analitikte ortalama hit tam sayı
+    olmayan ortalamada her zaman 0 görünüyordu (`AVG` REAL → int taraması hatası yutuluyordu).
+  - `ExtractDomain` `#` parçasını alan adına katıyordu (`x.onion#top`): iç bağlantı dış sayılıyordu.
+  - Motor sonuçlarında URL'den türeyen başlık ve URL sınırsızdı (saldırgan motor sayfası): başlık 150
+    rune, URL 2048 bayt. Etiket ayrıştırması (`splitTags`) karesel dize birleştirmeden kurtarıldı.
+
 ## v0.16.0 — 2026-10-17 · "Sentinel"
 
 Ekip ve entegrasyon sürümü: denetim kaydı, kişisel API token'ları, iki adımlı

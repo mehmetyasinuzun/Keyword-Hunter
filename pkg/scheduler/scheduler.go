@@ -19,10 +19,16 @@ import (
 // searchTimeout tek bir zamanlanmış taramanın üst sınırı (kaynak koruması).
 const searchTimeout = 4 * time.Minute
 
+// searchRunner zamanlanmış taramanın kullandığı arama yüzeyi (*search.Searcher;
+// testler Tor'suz sahte sonuç verir).
+type searchRunner interface {
+	SearchAll(ctx context.Context, query string) []search.Result
+}
+
 // Scheduler zamanlanmış taramaları yönetir
 type Scheduler struct {
 	db       *storage.DB
-	searcher *search.Searcher
+	searcher searchRunner
 	stopChan chan struct{}
 	once     sync.Once
 	// Aynı anda sadece 1 tarama — kaynak kısıtlaması için

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -43,13 +44,21 @@ type Request struct {
 	Query      string // bulgulara yazılacak sorgu etiketi (boşsa "crawl:<host>")
 }
 
+// linkFetcher sayfayı çekip bağlantılarını döndüren yüzey (*scraper.Scraper;
+// testler Tor'suz bellek içi site grafı verir).
+type linkFetcher interface {
+	ExtractLinksFromURL(ctx context.Context, targetURL string) ([]scraper.ExtractedLink, error)
+}
+
 // Runner tek işçili örümcek kuyruğu.
 type Runner struct {
 	db      *storage.DB
-	scraper *scraper.Scraper
-	queue   chan string
-	wg      sync.WaitGroup
-	once    sync.Once
+	scraper linkFetcher
+	// delay sayfalar arası nazik bekleme (testlerde sıfırlanır).
+	delay func(ctx context.Context)
+	queue chan string
+	wg    sync.WaitGroup
+	once  sync.Once
 
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
@@ -58,7 +67,11 @@ type Runner struct {
 
 // New kuyruğu oluşturur ve işçiyi başlatır.
 func New(db *storage.DB, sc *scraper.Scraper) *Runner {
-	r := &Runner{db: db, scraper: sc, queue: make(chan string, queueSize), cancels: map[string]context.CancelFunc{}}
+	return newRunner(db, sc)
+}
+
+func newRunner(db *storage.DB, sc linkFetcher) *Runner {
+	r := &Runner{db: db, scraper: sc, delay: politeDelay, queue: make(chan string, queueSize), cancels: map[string]context.CancelFunc{}}
 	_ = db.ResetRunningCrawlJobs()
 	r.wg.Add(1)
 	go r.loop()
@@ -73,8 +86,10 @@ func (r *Runner) Stop() {
 		for _, c := range r.cancels {
 			c()
 		}
-		r.mu.Unlock()
+		// Kanal kilit altında kapanır: Submit "durdu mu" kontrolü ile kuyruğa
+		// gönderimi aynı kilitte yapar, kapalı kanala gönderim (panik) olamaz.
 		close(r.queue)
+		r.mu.Unlock()
 	})
 	r.wg.Wait()
 }
@@ -109,14 +124,15 @@ func (r *Runner) Submit(req Request) (*storage.CrawlJob, error) {
 		return nil, err
 	}
 	r.mu.Lock()
-	stopped := r.stopped
-	r.mu.Unlock()
-	if stopped {
+	if r.stopped {
+		r.mu.Unlock()
 		return nil, ErrBusy
 	}
 	select {
 	case r.queue <- job.ID:
+		r.mu.Unlock()
 	default:
+		r.mu.Unlock()
 		_ = r.db.MarkCrawlFinished(job.ID, "failed", "Kuyruk dolu")
 		return nil, ErrBusy
 	}
@@ -213,7 +229,7 @@ func (r *Runner) run(id string) {
 		if err != nil {
 			shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("✗ %s: %v", shared.Truncate(f.url, 50), err), "Crawler")
 			r.db.UpdateCrawlProgress(id, pages, found, saved)
-			r.politeDelay(ctx)
+			r.delay(ctx)
 			continue
 		}
 
@@ -242,7 +258,14 @@ func (r *Runner) run(id string) {
 
 		shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("✓ sayfa %d/%d · %d link · derinlik %d", pages, job.MaxPages, len(links), f.depth), "Crawler")
 		r.db.UpdateCrawlProgress(id, pages, found, saved)
-		r.politeDelay(ctx)
+		r.delay(ctx)
+	}
+
+	// Son sayfanın çekimi sırasında iptal edilirse kuyruk boşalıp döngü biter;
+	// iş "completed" değil "cancelled" yazılmalı.
+	if ctx.Err() != nil {
+		r.finish(id, "cancelled", "İptal edildi", pages, found, saved, start)
+		return
 	}
 
 	elapsed := time.Since(start).Round(time.Second)
@@ -270,7 +293,7 @@ func (r *Runner) finish(id, status, msg string, pages, found, saved int, start t
 	}
 }
 
-func (r *Runner) politeDelay(ctx context.Context) {
+func politeDelay(ctx context.Context) {
 	d := minDelay + time.Duration(rand.Int63n(int64(jitterDelay)))
 	select {
 	case <-time.After(d):
@@ -280,11 +303,14 @@ func (r *Runner) politeDelay(ctx context.Context) {
 
 // normalizeURL fragment ve sondaki / kaldırılmış karşılaştırma anahtarı.
 func normalizeURL(u string) string {
-	u = strings.TrimSpace(u)
 	if i := strings.Index(u, "#"); i >= 0 {
 		u = u[:i]
 	}
-	u = strings.TrimRight(u, "/")
+	// Sondaki / ve boşluklar birlikte kırpılır: "…/a #x" ile "…/a/ " aynı
+	// sayfadır (önce TrimSpace yapıldığında parçadan önceki boşluk kalıyor ve
+	// aynı sayfa iki kez geziliyordu).
+	u = strings.TrimLeftFunc(u, unicode.IsSpace)
+	u = strings.TrimRightFunc(u, func(r rune) bool { return r == '/' || unicode.IsSpace(r) })
 	return strings.ToLower(u)
 }
 
