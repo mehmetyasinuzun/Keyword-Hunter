@@ -97,6 +97,7 @@
       <button type="button" class="kh-btn sm ghost" data-action="batch-tag" data-scope="selected" data-write>{{icon "tag"}} {{t .Lang "results.tagSelected"}}</button>
       <button type="button" class="kh-btn sm subtle" data-action="bulk-sev" data-write>{{icon "fire"}} {{t .Lang "results.setSev"}}</button>
       <button type="button" class="kh-btn sm subtle" data-action="bulk-copy">{{icon "copy"}} {{t .Lang "results.copyUrls"}}</button>
+      {{if .mispReady}}<button type="button" class="kh-btn sm subtle" id="misp-push" data-action="misp-push" data-max="{{.mispMaxPush}}" title="{{t .Lang "results.mispPushHint"}}" data-write>{{icon "webhook"}} {{t .Lang "results.mispPush"}}</button>{{end}}
       <button type="button" class="kh-btn sm danger" data-action="bulk-delete" data-write>{{icon "trash"}} {{t .Lang "common.delete"}}</button>
       <span class="spacer"></span>
       <button type="button" class="kh-btn sm subtle" data-action="clear-selection">{{icon "close"}} {{t .Lang "results.clearSel"}}</button>

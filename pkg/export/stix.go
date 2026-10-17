@@ -141,41 +141,101 @@ func artifactPattern(a storage.ResultArtifact) (pattern string, types []string) 
 	}
 }
 
+// IdentityID KeywordHunter üretici kimliğinin sabit STIX kimliği.
+var IdentityID = deterministicID("identity", producerNS)
+
+// identityEpoch kimlik nesnesinin sabit oluşturulma/değişiklik zamanı: nesne
+// her dışa aktarmada ve her TAXII isteğinde birebir aynı kalmalı ki tüketiciler
+// (OpenCTI, Sentinel) her çekişte "yeni sürüm" görmesin.
+var identityEpoch = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func producerIdentity() identity {
+	return identity{
+		Type: "identity", SpecVersion: specVersion, ID: IdentityID,
+		Created: ts(identityEpoch), Modified: ts(identityEpoch), Name: "KeywordHunter", IdentityClass: "system",
+		Description: "Dark web CTI platform — Tor search engine findings and extracted IOCs",
+	}
+}
+
+// URLIndicatorID bir bulgu URL'sinin göstergesinin deterministik kimliği.
+func URLIndicatorID(u string) string { return deterministicID("indicator", "url:"+u) }
+
+// ArtifactIndicatorID bir IOC göstergesinin deterministik kimliği.
+func ArtifactIndicatorID(typ, value string) string {
+	return deterministicID("indicator", typ+":"+value)
+}
+
+// relationshipID IOC → bulgu ilişkisinin deterministik kimliği.
+func relationshipID(src, dst string) string { return deterministicID("relationship", src+">"+dst) }
+
+// findingLabels bulgunun STIX etiketleri (kategori + otomatik etiketler).
+func findingLabels(r storage.SearchResult) []string {
+	labels := []string{"dark-web", "tor"}
+	if r.Category != "" && r.Category != "Genel" {
+		labels = append(labels, strings.ToLower(strings.ReplaceAll(r.Category, " ", "-")))
+	}
+	for _, t := range strings.Split(r.AutoTags, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			labels = append(labels, t)
+		}
+	}
+	return labels
+}
+
+// findingIndicator bulgunun URL göstergesini üretir.
+func findingIndicator(r storage.SearchResult, created, modified time.Time) indicator {
+	return indicator{
+		Type: "indicator", SpecVersion: specVersion, ID: URLIndicatorID(r.URL), CreatedByRef: IdentityID,
+		Created: ts(created), Modified: ts(modified),
+		Name:           fmt.Sprintf("[%s] %s", r.Category, truncate(r.Title, 120)),
+		Description:    fmt.Sprintf("Query: %q · Engine: %s · Criticality: %d/5 · Keyword hits: %d", r.Query, r.Source, r.Criticality, r.KeywordCount),
+		IndicatorTypes: []string{"malicious-activity"},
+		Pattern:        fmt.Sprintf("[url:value = '%s']", escape(r.URL)),
+		PatternType:    "stix", ValidFrom: ts(created),
+		Confidence: confidenceFromCriticality(r.Criticality), Labels: findingLabels(r),
+		ExternalRefs: []extRef{{SourceName: "keywordhunter", ExtID: fmt.Sprintf("result-%d", r.ID)}},
+	}
+}
+
+// artifactIndicator IOC göstergesini üretir; desteklenmeyen tür → false.
+func artifactIndicator(a storage.ResultArtifact, created, modified time.Time) (indicator, bool) {
+	pattern, types := artifactPattern(a)
+	if pattern == "" {
+		return indicator{}, false
+	}
+	return indicator{
+		Type: "indicator", SpecVersion: specVersion, ID: ArtifactIndicatorID(a.Type, a.Value), CreatedByRef: IdentityID,
+		Created: ts(created), Modified: ts(modified),
+		Name: fmt.Sprintf("%s: %s", a.Type, truncate(a.Value, 80)), Description: truncate(a.Context, 300),
+		IndicatorTypes: types, Pattern: pattern, PatternType: "stix", ValidFrom: ts(created),
+		Confidence: confidenceFromArtifact(a.Confidence), Labels: []string{"dark-web", "ioc", a.Type},
+	}, true
+}
+
+// confidenceFromArtifact 0–1 güven skorunu STIX'in 0–100 aralığına sabitler.
+func confidenceFromArtifact(c float64) int {
+	v := int(c * 100)
+	return max(0, min(100, v))
+}
+
+func relatedTo(aid, urlID string, created, modified time.Time) relationship {
+	return relationship{
+		Type: "relationship", SpecVersion: specVersion, ID: relationshipID(aid, urlID), Created: ts(created), Modified: ts(modified),
+		RelationshipType: "related-to", SourceRef: aid, TargetRef: urlID,
+	}
+}
+
 // BuildBundle bulgular ve IOC'lerinden STIX 2.1 paketi üretir.
 func BuildBundle(results []storage.SearchResult, src ArtifactSource, includeArtifacts bool) *Bundle {
 	now := time.Now()
-	ident := identity{
-		Type: "identity", SpecVersion: specVersion, ID: deterministicID("identity", producerNS),
-		Created: ts(now), Modified: ts(now), Name: "KeywordHunter", IdentityClass: "system",
-		Description: "Dark web CTI platform — Tor search engine findings and extracted IOCs",
-	}
-	b := &Bundle{Type: "bundle", ID: "bundle--" + uuid.NewString(), Objects: []interface{}{ident}}
+	b := &Bundle{Type: "bundle", ID: "bundle--" + uuid.NewString(), Objects: []interface{}{producerIdentity()}}
 	seen := map[string]bool{}
 
 	for _, r := range results {
-		urlID := deterministicID("indicator", "url:"+r.URL)
-		labels := []string{"dark-web", "tor"}
-		if r.Category != "" && r.Category != "Genel" {
-			labels = append(labels, strings.ToLower(strings.ReplaceAll(r.Category, " ", "-")))
-		}
-		for _, t := range strings.Split(r.AutoTags, ",") {
-			if t = strings.TrimSpace(t); t != "" {
-				labels = append(labels, t)
-			}
-		}
+		urlID := URLIndicatorID(r.URL)
 		if !seen[urlID] {
 			seen[urlID] = true
-			b.Objects = append(b.Objects, indicator{
-				Type: "indicator", SpecVersion: specVersion, ID: urlID, CreatedByRef: ident.ID,
-				Created: ts(r.CreatedAt), Modified: ts(now),
-				Name:           fmt.Sprintf("[%s] %s", r.Category, truncate(r.Title, 120)),
-				Description:    fmt.Sprintf("Query: %q · Engine: %s · Criticality: %d/5 · Keyword hits: %d", r.Query, r.Source, r.Criticality, r.KeywordCount),
-				IndicatorTypes: []string{"malicious-activity"},
-				Pattern:        fmt.Sprintf("[url:value = '%s']", escape(r.URL)),
-				PatternType:    "stix", ValidFrom: ts(r.CreatedAt),
-				Confidence: confidenceFromCriticality(r.Criticality), Labels: labels,
-				ExternalRefs: []extRef{{SourceName: "keywordhunter", ExtID: fmt.Sprintf("result-%d", r.ID)}},
-			})
+			b.Objects = append(b.Objects, findingIndicator(r, r.CreatedAt, now))
 		}
 		if !includeArtifacts || src == nil {
 			continue
@@ -185,28 +245,18 @@ func BuildBundle(results []storage.SearchResult, src ArtifactSource, includeArti
 			continue
 		}
 		for _, a := range arts {
-			pattern, types := artifactPattern(a)
-			if pattern == "" {
+			ind, ok := artifactIndicator(a, a.CreatedAt, now)
+			if !ok {
 				continue
 			}
-			aid := deterministicID("indicator", a.Type+":"+a.Value)
-			if !seen[aid] {
-				seen[aid] = true
-				b.Objects = append(b.Objects, indicator{
-					Type: "indicator", SpecVersion: specVersion, ID: aid, CreatedByRef: ident.ID,
-					Created: ts(a.CreatedAt), Modified: ts(now),
-					Name: fmt.Sprintf("%s: %s", a.Type, truncate(a.Value, 80)), Description: truncate(a.Context, 300),
-					IndicatorTypes: types, Pattern: pattern, PatternType: "stix", ValidFrom: ts(a.CreatedAt),
-					Confidence: int(a.Confidence * 100), Labels: []string{"dark-web", "ioc", a.Type},
-				})
+			if !seen[ind.ID] {
+				seen[ind.ID] = true
+				b.Objects = append(b.Objects, ind)
 			}
-			relID := deterministicID("relationship", aid+">"+urlID)
-			if !seen[relID] {
-				seen[relID] = true
-				b.Objects = append(b.Objects, relationship{
-					Type: "relationship", SpecVersion: specVersion, ID: relID, Created: ts(now), Modified: ts(now),
-					RelationshipType: "related-to", SourceRef: aid, TargetRef: urlID,
-				})
+			rel := relatedTo(ind.ID, urlID, now, now)
+			if !seen[rel.ID] {
+				seen[rel.ID] = true
+				b.Objects = append(b.Objects, rel)
 			}
 		}
 	}

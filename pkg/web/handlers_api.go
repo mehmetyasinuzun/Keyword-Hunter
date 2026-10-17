@@ -117,14 +117,13 @@ func (s *Server) handleUpdateCriticality(c *gin.Context) {
 	if req.Category == "" {
 		req.Category = "Genel"
 	}
-	// Tablo sabittir (Type yalnız "result" olabilir); Sprintf ile kurulmuş SQL
-	// gereksiz bir enjeksiyon-görünümlü kalıptı, düz sabite indirgendi.
-	res, err := s.db.GetDBConn().Exec("UPDATE search_results SET criticality = ?, category = ? WHERE id = ?", req.Criticality, req.Category, req.ID)
+	// Kritiklik yükselirse bulgu TAXII akışına yeniden girer (bkz. storage.UpdateCriticality).
+	found, err := s.db.UpdateCriticality(req.ID, req.Criticality, req.Category)
 	if err != nil {
 		respondInternalError(c, "UpdateCriticality", err)
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Kayıt bulunamadı"})
 		return
 	}

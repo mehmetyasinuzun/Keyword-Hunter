@@ -243,6 +243,40 @@
             if (!urls.length) return;
             KH.copy(urls.join('\n'), urls.length + T(' URL kopyalandı', ' URLs copied'));
         },
+        'misp-push': async (btn) => {
+            const ids = selected();
+            if (!ids.length) return;
+            const n = ids.length;
+            const max = parseInt(btn.dataset.max, 10) || 250;
+            if (n > max) {
+                KH.toast(T('Tek gönderimde en fazla ' + max + ' bulgu gönderilebilir (' + n + ' seçili).', 'At most ' + max + ' findings can be sent in one push (' + n + ' selected).'), 'warn', 6000);
+                return;
+            }
+            const ok = await KH.confirm({
+                title: T('MISP\'e gönder', 'Send to MISP'),
+                message: T(n + ' bulgu ve IOC\'leri tek bir MISP olayı olarak gönderilecek. Çıkış Tor üzerinden değil, doğrudan MISP sunucusunadır.',
+                    (n === 1 ? '1 finding and its IOCs' : n + ' findings and their IOCs') + ' will be sent as a single MISP event. Egress goes directly to the MISP server, not through Tor.'),
+                okText: T('Gönder', 'Send')
+            });
+            if (!ok) return;
+            KH.busy(btn, true, T('Gönderiliyor…', 'Sending…'));
+            try {
+                const d = await KH.api('/api/integrations/misp/push', { method: 'POST', body: { resultIds: ids } });
+                const attrs = d.attributes + T(' öznitelik', d.attributes === 1 ? ' attribute' : ' attributes');
+                const t = KH.toast(T('MISP olayı oluşturuldu', 'MISP event created') + ' #' + d.eventId + ' · ' + attrs, 'ok', 9000);
+                if (t && d.eventUrl && /^https?:\/\//i.test(d.eventUrl)) {
+                    const a = document.createElement('a');
+                    a.href = d.eventUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
+                    a.className = 'kh-toast-link';
+                    a.textContent = T('Olayı aç', 'Open event');
+                    const msg = t.querySelector('.msg') || t;
+                    msg.appendChild(document.createTextNode(' '));
+                    msg.appendChild(a);
+                }
+            } catch (e) {
+                KH.toast(T('MISP gönderimi başarısız: ', 'MISP push failed: ') + e.message, 'err', 8000);
+            } finally { KH.busy(btn, false); }
+        },
         'bulk-delete': async () => {
             const ids = selected();
             if (!ids.length) return;

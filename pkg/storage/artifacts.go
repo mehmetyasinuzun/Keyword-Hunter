@@ -55,6 +55,27 @@ func (db *DB) ReplaceArtifacts(resultID int64, items []ResultArtifact) (int, err
 	}
 	defer tx.Rollback()
 
+	// Önceki IOC kümesi: yeni bir IOC eklenirse bulgu TAXII akışına yeniden
+	// girer (feed_at), artımlı çeken istemciler sonradan çıkarılan IOC'yi kaçırmaz.
+	prev := map[string]bool{}
+	prows, err := tx.Query(`SELECT type, value FROM result_artifacts WHERE result_id = ?`, resultID)
+	if err != nil {
+		return 0, err
+	}
+	for prows.Next() {
+		var t, v string
+		if err := prows.Scan(&t, &v); err != nil {
+			prows.Close()
+			return 0, err
+		}
+		prev[t+"\x00"+v] = true
+	}
+	if err := prows.Err(); err != nil {
+		prows.Close()
+		return 0, err
+	}
+	prows.Close()
+
 	if _, err := tx.Exec(`DELETE FROM result_artifacts WHERE result_id = ?`, resultID); err != nil {
 		return 0, err
 	}
@@ -64,7 +85,7 @@ func (db *DB) ReplaceArtifacts(resultID int64, items []ResultArtifact) (int, err
 	}
 	defer stmt.Close()
 
-	n := 0
+	n, added := 0, false
 	for _, a := range items {
 		v := strings.TrimSpace(a.Value)
 		if v == "" || len(v) > 512 {
@@ -76,6 +97,14 @@ func (db *DB) ReplaceArtifacts(resultID int64, items []ResultArtifact) (int, err
 		}
 		if _, err := stmt.Exec(resultID, a.Type, v, ctx, a.Confidence); err == nil {
 			n++
+			if !prev[a.Type+"\x00"+v] {
+				added = true
+			}
+		}
+	}
+	if added {
+		if _, err := tx.Exec(`UPDATE search_results SET feed_at = `+feedNow+` WHERE id = ?`, resultID); err != nil {
+			return 0, err
 		}
 	}
 	return n, tx.Commit()

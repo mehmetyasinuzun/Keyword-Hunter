@@ -52,8 +52,8 @@ var auditCategories = []struct {
 }{
 	{"auth", []string{"auth.", "access."}},
 	{"user", []string{"user.", "me.", "token.", "2fa."}},
-	{"export", []string{"export."}},
-	{"system", []string{"settings.", "alert.", "engine.", "tor.", "site_profile.", "audit."}},
+	{"export", []string{"export.", "taxii.", "misp.push"}},
+	{"system", []string{"settings.", "alert.", "engine.", "tor.", "site_profile.", "audit.", "misp."}},
 	{"data", []string{"results.", "result.", "search.", "tagging.", "watchlist.", "scheduled.", "crawl.", "screenshot.", "graph."}},
 }
 

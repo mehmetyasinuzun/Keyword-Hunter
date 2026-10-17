@@ -654,6 +654,9 @@ func (s *Server) handleResults(c *gin.Context) {
 		"rangeTo":      min(f.Offset+len(results), total),
 		"sources":      sources,
 		"categories":   categories,
+		// MISP yapılandırılmamışsa "MISP'e gönder" düğmesi hiç basılmaz.
+		"mispReady":   s.mispReady(),
+		"mispMaxPush": mispMaxPush,
 	})
 }
 
@@ -682,6 +685,7 @@ func (s *Server) handleSettingsPage(c *gin.Context) {
 	}
 	s.render(c, http.StatusOK, "settings.html", gin.H{
 		"ActivePage": "settings",
+		"taxii":      s.taxiiInfo(c),
 	})
 }
 

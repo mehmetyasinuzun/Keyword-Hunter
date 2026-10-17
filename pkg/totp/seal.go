@@ -23,6 +23,10 @@ const sealPrefix = "v1:"
 // aynı ana sır ileride başka bir amaçla kullanılırsa anahtarlar çakışmaz.
 const hkdfInfo = "keywordhunter/totp-secret/aes-256-gcm/v1"
 
+// PurposeIntegrationSecret entegrasyon sırlarını (ör. MISP API anahtarı)
+// şifreleyen alt anahtarın amaç etiketi; TOTP anahtarından bağımsızdır.
+const PurposeIntegrationSecret = "keywordhunter/integration-secret/aes-256-gcm/v1"
+
 var (
 	// ErrInvalidAppSecret APP_SECRET 64 onaltılık karakter değil.
 	ErrInvalidAppSecret = errors.New("APP_SECRET 64 onaltılık (hex) karakter olmalı")
@@ -59,12 +63,22 @@ type Sealer struct {
 // NewSealer APP_SECRET'tan (64 hex) HKDF-SHA256 ile türetilen anahtarla bir
 // mühürleyici kurar.
 func NewSealer(appSecretHex string) (*Sealer, error) {
+	return NewSealerFor(appSecretHex, hkdfInfo)
+}
+
+// NewSealerFor aynı APP_SECRET'tan farklı bir amaç etiketiyle (HKDF info)
+// türetilmiş, birbirinden bağımsız bir mühürleyici kurar: bir amacın şifreli
+// değeri başka bir amacın anahtarıyla çözülemez.
+func NewSealerFor(appSecretHex, purpose string) (*Sealer, error) {
+	if strings.TrimSpace(purpose) == "" {
+		return nil, errors.New("totp: mühürleyici amacı boş olamaz")
+	}
 	appSecretHex = strings.TrimSpace(appSecretHex)
 	if !ValidAppSecret(appSecretHex) {
 		return nil, ErrInvalidAppSecret
 	}
 	master, _ := hex.DecodeString(appSecretHex)
-	key, err := hkdf.Key(sha256.New, master, nil, hkdfInfo, 32)
+	key, err := hkdf.Key(sha256.New, master, nil, purpose, 32)
 	if err != nil {
 		return nil, err
 	}

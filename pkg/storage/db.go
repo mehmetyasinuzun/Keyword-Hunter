@@ -260,6 +260,14 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("audit_events şeması başarısız: %w", err)
 	}
 
+	// Entegrasyonlar: MISP ayarları (şifreli anahtar) + TAXII akışı (feed_at)
+	if err := db.EnsureMISPSchema(); err != nil {
+		return fmt.Errorf("misp şeması başarısız: %w", err)
+	}
+	if err := db.EnsureFeedSchema(); err != nil {
+		return fmt.Errorf("taxii akış şeması başarısız: %w", err)
+	}
+
 	// Eski sürümlerin yazdığı, SQL tarafında parse edilemeyen zaman damgalarını normalize et
 	if err := db.normalizeLegacyTimestamps(); err != nil {
 		return fmt.Errorf("zaman damgası migrasyonu başarısız: %w", err)

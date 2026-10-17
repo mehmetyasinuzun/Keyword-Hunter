@@ -47,6 +47,7 @@ classifies findings automatically, extracts IOCs, monitors sites and alerts on n
 | 🛰️ **Engines** | Live health, latency, success rate, enable/disable (actually affects search), automatic Tor circuit renewal (NEWNYM) |
 | 🕷️ **Crawler** | Polite, depth/page-bounded BFS from a seed .onion; discovered pages become findings |
 | 🍪 **Site profiles** | Per-host Cookie + User-Agent + JS rendering (behind login walls / captchas) |
+| 🔗 **Integrations** | Read-only **TAXII 2.1 server** for OpenCTI / Microsoft Sentinel (fixed collections, stable STIX objects, token via Basic/Bearer); push selected findings to **MISP** as a single event (encrypted key, SSRF-guarded, optional auto-push) — [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
 
 ## 🚀 Quick start
 
@@ -95,13 +96,21 @@ The tool visits hostile sites and displays their text, so the UI assumes **untru
 - Personal API tokens: `kh_` + 256 random bits, stored only as a SHA-256 hash and shown once; read/write scope can never exceed the owner's current role; account and security management endpoints refuse tokens (see [API](#-api)).
 - SSRF guards: expand / analyze / watch / render are `.onion`-only; webhook and screenshot targets cannot resolve to internal addresses; redirects are not followed.
 - Secrets masked in logs, API and HTML; CSV export protected against formula injection.
+- Integrations: the MISP API key is stored AES-256-GCM-encrypted with a purpose-separated key derived from `APP_SECRET`, never appears in any response, page or audit row, and must be re-entered when the URL moves to another server; MISP egress is direct clearnet/intranet, not Tor (public targets only unless "allow private networks" is on, no redirects, 1 MB / 15 s caps). TAXII accepts API tokens only (no cookies, no writes); card and phone numbers are shared neither over TAXII nor to MISP; plain-http MISP is allowed only to internal IPs. Details: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 - All assets embedded (no CDN), `govulncheck` on every push, Dependabot, SHA256 sums on releases; Docker runs as non-root with `no-new-privileges`.
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
 ## 🔌 API
 
-Every `/api/` endpoint accepts either a browser session (cookie + `X-CSRF-Token` header on writes) or a **personal API token** — e.g. `GET /api/results?q=&minCriticality=&tag=&limit=&page=`, `GET /api/export/results?format=csv|json`, `GET /api/export/stix`, `GET /api/artifacts?type=&value=`, `POST /api/results/:id/case`, `GET|POST /api/watchlist`, `GET|POST /api/scheduled`, `GET /api/engines`, `GET /api/whoami`. `GET /healthz` is public.
+Every `/api/` endpoint accepts either a browser session (cookie + `X-CSRF-Token` header on writes) or a **personal API token** — e.g. `GET /api/results?q=&minCriticality=&tag=&limit=&page=`, `GET /api/export/results?format=csv|json`, `GET /api/export/stix`, `GET /api/artifacts?type=&value=`, `POST /api/results/:id/case`, `GET|POST /api/watchlist`, `GET|POST /api/scheduled`, `GET /api/engines`, `GET /api/whoami`, `POST /api/integrations/misp/push`. `GET /healthz` is public.
+
+**TAXII 2.1** (read-only, API token only — Bearer or as the Basic password): `GET /taxii2/` (discovery), `GET /taxii2/kh/collections/`, `GET /taxii2/kh/collections/{id}/objects/?added_after=&limit=&next=&match[type]=&match[id]=`, `GET …/objects/{object-id}/`, `GET …/manifest/`. Collections: `findings-all`, `findings-high` (severity 4–5), `indicators`. OpenCTI / Sentinel setup, curl examples and the MISP mapping: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+
+```bash
+curl -sS -H 'Accept: application/taxii+json;version=2.1' -u ":$KH_TOKEN" \
+  'https://keywordhunter.example/taxii2/kh/collections/findings-high/objects/?limit=500'
+```
 
 ### Personal API tokens (SOAR / SIEM / scripts)
 
@@ -123,7 +132,7 @@ curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/
 - **Lifetime:** 7 / 30 / 90 / 180 / 365 days or no expiry; revocable at any time. Revoked, expired or unknown tokens, and tokens of disabled/deleted users, get `401 {"error": …}` with `WWW-Authenticate: Bearer`.
 - **`/api/` only, header only:** HTML pages, `/events` (SSE) and screenshot files ignore tokens; query-string values such as `?token=` are never read.
 - **CSRF rule:** only requests authenticated by a Bearer token *without* a session cookie skip CSRF. If a session cookie is also present, the session path is used and CSRF is required.
-- **Endpoints tokens cannot call** (`403 "this endpoint requires an interactive session"`): `/api/tokens*` (token management), `/api/me/*` (password, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook integrations). A leaked token cannot mint tokens, change passwords or manage accounts and integrations.
+- **Endpoints tokens cannot call** (`403 "this endpoint requires an interactive session"`): `/api/tokens*` (token management), `/api/me/*` (password, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook integrations), `/api/integrations/misp/config` and `/api/integrations/misp/test` (MISP settings). A leaked token cannot mint tokens, change passwords or manage accounts and integrations.
 - **Password changes and incident response:** when an admin resets a user's password, that user's sessions are signed out **and all of their API tokens are revoked** (`tokensRevoked` in the `user.password.reset` event). A user's own password change does not revoke tokens by default (so integrations keep working); if you suspect a compromise, tick "Also revoke all my API tokens" under **My Account → Password** (`"revokeTokens": true` in the `POST /api/me/password` body). Disabling a user also invalidates their tokens immediately.
 - **Audit:** token creation/revocation (`token.create`, `token.revoke`), rejected token attempts (`auth.token.failure`) and **every audited action** performed with a token (writes, exports, access denials) are recorded with `auth_method=token` and the token prefix (`kh_XXXXXXX`). Read-only requests (e.g. `GET /api/results`) do not produce their own audit rows; they only update the token's last-used time and IP (at most once a minute), shown in the token list.
 
@@ -146,7 +155,7 @@ Enable it under **My Account → Two-factor authentication** (`/account#security
 go build ./... && go vet ./... && go test -race ./...
 ```
 
-Frontend contract: [docs/FRONTEND.md](docs/FRONTEND.md) · Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) · Changelog: [CHANGELOG.md](CHANGELOG.md).
+Frontend contract: [docs/FRONTEND.md](docs/FRONTEND.md) · Integrations (TAXII 2.1, MISP): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) · Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) · Changelog: [CHANGELOG.md](CHANGELOG.md).
 
 ## ⚖️ Legal
 

@@ -51,6 +51,7 @@ CTI platformu.**
 | 🕷️ **Örümcek** | Tohum .onion'dan derinlik/sayfa sınırlı, nazik BFS site taraması; keşfedilen sayfalar bulgu olur |
 | 🍪 **Site Profilleri** | Host bazlı Cookie + User-Agent + JS render (giriş duvarı / captcha arkası) |
 | 👥 **Ekip** | Çok kullanıcılı, rol tabanlı erişim (admin / analist / izleyici), parola sıfırlama, oturum iptali, SOAR/SIEM için kişisel **API token'ları** (okuma/yazma kapsamı, süre sonu, iptal) |
+| 🔗 **Entegrasyonlar** | OpenCTI / Microsoft Sentinel için salt okunur **TAXII 2.1 sunucusu** (sabit koleksiyonlar, kararlı STIX nesneleri, token ile Basic/Bearer); seçili bulguları tek **MISP olayı** olarak gönderme (şifreli anahtar, SSRF korumalı, isteğe bağlı otomatik gönderim) — [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
 
 ### Arayüz
 
@@ -157,6 +158,7 @@ Bu araç saldırgan içerik barındıran siteleri ziyaret eder ve oradan gelen m
 - **API token'ları:** `kh_` + 256 bit rastgele değer, yalnız SHA-256 özeti saklanır, bir kez gösterilir; okuma/yazma kapsamı sahibinin güncel rolünü aşamaz; hesap/güvenlik yönetimi uçları token'a kapalıdır (bkz. [API](#-api)).
 - **SSRF:** derinleştirme / analiz / izleme / render yalnızca `.onion`; webhook ve ekran görüntüsü hedefleri DNS sonrası iç adreslere çözümlenemez, yönlendirme takip edilmez.
 - **Sızıntı önleme:** webhook sırları log, API ve HTML'de maskelenir; CSV export formül enjeksiyonuna karşı korumalı.
+- **Entegrasyonlar:** MISP API anahtarı `APP_SECRET`'tan ayrı amaçla türetilen anahtarla AES-256-GCM şifreli saklanır, hiçbir yanıtta/sayfada/denetim kaydında görünmez ve adres başka sunucuya taşınırken yeniden istenir; MISP çıkışı Tor değil doğrudan clearnet/intranet'tir (yalnız genel hedef — "özel ağa izin ver" açılmadıkça —, yönlendirme yok, 1 MB / 15 sn). TAXII yalnız API token kabul eder (çerez yok, yazma yok); kart ve telefon numaraları ne TAXII'de ne MISP'te paylaşılır; düz http ile MISP yalnız kurum içi IP'lere. Ayrıntı: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 - **Denetim kaydı:** giriş/çıkış, reddedilen erişimler, kullanıcı ve ayar değişiklikleri, silme, dışa aktarma gibi tüm durum değiştiren işlemler "kim, ne zaman, nereden, ne yaptı" olarak SHA-256 **hash zincirli**, yalnız eklenebilir bir tabloya yazılır; tek bir satırın değiştirilmesi, silinmesi ya da sondan kırpılması `/audit` ekranında (yalnız admin) kırılma noktasıyla gösterilir. Ayrıntılarda parola, çerez, token ve webhook yolu asla tutulmaz; `AUDIT_RETENTION_DAYS` ile budanır (zincir çapayla doğrulanabilir kalır), CSV/JSON dışa aktarılabilir.
 - **Tedarik zinciri:** tüm varlıklar gömülü (CDN yok), her push'ta `govulncheck`, Dependabot, sürümlerde SHA256 özetleri.
 - **Docker:** root olmayan kullanıcı, `no-new-privileges`, Tor portu host'a kapalı.
@@ -188,7 +190,7 @@ flowchart LR
     BG --> NTF -->|"Slack · Discord · Teams · SIEM"| EXT(["Webhook alıcıları"])
 ```
 
-Ön yüz sözleşmesi (bileşenler, olay delegasyonu, tema, i18n): [docs/FRONTEND.md](docs/FRONTEND.md).
+Ön yüz sözleşmesi (bileşenler, olay delegasyonu, tema, i18n): [docs/FRONTEND.md](docs/FRONTEND.md) · TAXII 2.1 ve MISP entegrasyonları: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 ## 🔌 API
 
@@ -202,7 +204,17 @@ Tarayıcı oturumuyla (çerez + `X-CSRF-Token`) ya da **kişisel API token'ı** 
 `POST /api/scheduled/:id/run-now` · `GET|POST /api/alert-config` · `POST /api/alert-config/test` ·
 `GET|POST /api/watchlist` · `POST /api/watchlist/:id/check` · `POST /api/screenshot` ·
 `GET /api/screenshots` · `GET /api/analytics` · `GET /api/graph/*` · `GET /events` (SSE) ·
-`GET /healthz` (açık).
+`POST /api/integrations/misp/push` · `GET /healthz` (açık).
+
+**TAXII 2.1** (salt okunur, yalnız API token — Bearer ya da Basic parolası): `GET /taxii2/` (keşif) ·
+`GET /taxii2/kh/collections/` · `GET /taxii2/kh/collections/{id}/objects/?added_after=&limit=&next=&match[type]=&match[id]=` ·
+`GET …/objects/{object-id}/` · `GET …/manifest/`. Koleksiyonlar: `findings-all`, `findings-high` (SEV 4–5),
+`indicators`. OpenCTI / Sentinel kurulumu, curl örnekleri ve MISP eşlemesi: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+
+```bash
+curl -sS -H 'Accept: application/taxii+json;version=2.1' -u ":$KH_TOKEN" \
+  'https://keywordhunter.example/taxii2/kh/collections/findings-high/objects/?limit=500'
+```
 
 ### Kişisel API token'ları (SOAR / SIEM / betikler)
 
@@ -224,7 +236,7 @@ curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/
 - **Geçerlilik:** 7 / 30 / 90 / 180 / 365 gün ya da süresiz; dilediğiniz an iptal edilir. İptal edilmiş, süresi dolmuş, bilinmeyen token ya da pasif/silinmiş kullanıcı → `401 {"error": …}` + `WWW-Authenticate: Bearer`.
 - **Yalnız `/api/` ve yalnız başlık:** HTML sayfaları, `/events` (SSE) ve ekran görüntüsü dosyaları token kabul etmez; `?token=` gibi sorgu dizgisi değerleri asla okunmaz.
 - **CSRF kuralı:** yalnız Bearer ile gelen (oturum çerezi taşımayan) istekler CSRF'ten muaftır. Aynı istekte oturum çerezi de varsa oturum yolu kullanılır ve CSRF zorunludur.
-- **Token ile çağrılamayan uçlar** (`403 "this endpoint requires an interactive session"`): `/api/tokens*` (token yönetimi), `/api/me/*` (parola, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook entegrasyonları). Sızmış bir token yeni token basamaz, parola değiştiremez, hesap ya da entegrasyon yönetemez.
+- **Token ile çağrılamayan uçlar** (`403 "this endpoint requires an interactive session"`): `/api/tokens*` (token yönetimi), `/api/me/*` (parola, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook entegrasyonları), `/api/integrations/misp/config` ve `/api/integrations/misp/test` (MISP ayarları). Sızmış bir token yeni token basamaz, parola değiştiremez, hesap ya da entegrasyon yönetemez.
 - **Parola değişikliği ve olay müdahalesi:** admin bir kullanıcının parolasını sıfırladığında o kullanıcının oturumları kapanır **ve tüm API token'ları iptal edilir** (`user.password.reset` olayında `tokensRevoked`). Kullanıcının kendi parola değişikliği token'ları varsayılan olarak iptal etmez (entegrasyonlar bozulmasın); ele geçirme şüphesinde **Hesabım → Parola** altındaki "Tüm API token'larımı da iptal et" seçeneğini işaretleyin (`POST /api/me/password` gövdesinde `"revokeTokens": true`). Kullanıcıyı pasifleştirmek de token'larını anında geçersiz kılar.
 - **Denetim:** token oluşturma/iptal (`token.create`, `token.revoke`), reddedilen token denemeleri (`auth.token.failure`) ve token ile yapılan **denetlenen her işlem** (yazmalar, dışa aktarmalar, yetki retleri) `auth_method=token` ve token öneki (`kh_XXXXXXX`) ile denetim kaydına yazılır. Salt okuma istekleri (ör. `GET /api/results`) ayrı denetim satırı üretmez; yalnız token'ın son kullanım zamanı ve IP'si (en fazla dakikada bir) güncellenir ve listede görünür.
 

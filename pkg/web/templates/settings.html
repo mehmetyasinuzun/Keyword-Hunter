@@ -30,6 +30,7 @@
       <a href="#sec-infra">{{t .Lang "set.infra.title"}}</a>
       <a href="#sec-profiles">{{t .Lang "set.sp.title"}}</a>
       <a href="#sec-tor">{{t .Lang "set.tor.title"}}</a>
+      <a href="#sec-integrations">{{t .Lang "int.nav"}}</a>
     </nav>
   </div>
 
@@ -175,6 +176,122 @@
       <button type="button" class="kh-btn ghost" id="newnym-btn" data-action="tor-newnym" data-busy-text="{{t .Lang "set.tor.requesting"}}" disabled>{{icon "refresh"}} {{t .Lang "set.tor.newnym"}}</button>
     </div>
     <p class="kh-hint mt-3">{{t .Lang "set.tor.hint"}} <code>TOR_CONTROL=127.0.0.1:9051</code> · <code>TOR_CONTROL_PASSWORD=…</code> {{t .Lang "set.tor.hint2"}}</p>
+  </section>
+
+  <div class="int-head kh-section" id="sec-integrations">
+    <h2 class="int-h">{{icon "layers"}} {{t .Lang "int.title"}}</h2>
+    <p class="kh-hint">{{t .Lang "int.desc"}}</p>
+  </div>
+
+  <section class="kh-card st-sec kh-section" id="sec-misp" aria-labelledby="sec-misp-t">
+    <div class="st-sec-head">
+      <span class="st-ic tone-primary">{{icon "webhook"}}</span>
+      <div class="min-w-0"><h2 id="sec-misp-t">{{t .Lang "int.misp.title"}}</h2><p>{{t .Lang "int.misp.desc"}}</p></div>
+      <span class="kh-badge neutral st-apply" id="misp-state">{{t .Lang "common.loading"}}</span>
+    </div>
+    <div class="kh-alert info mb-4">{{icon "info"}}<span><strong>{{t .Lang "int.misp.egress"}}</strong> {{t .Lang "int.misp.egressBody"}}</span></div>
+    <div class="kh-alert warn mb-4" id="misp-nosecret" role="alert" hidden>{{icon "warn"}}<span><strong>{{t .Lang "int.misp.noSecret"}}</strong> <span id="misp-nosecret-r"></span></span></div>
+    <form class="st-grid cols-2" id="misp-form" data-submit="misp-save" novalidate>
+      <div class="kh-field">
+        <label class="kh-label" for="misp-url">{{t .Lang "int.misp.url"}}</label>
+        <div class="kh-input-icon">{{icon "globe"}}<input id="misp-url" class="kh-input mono" type="url" maxlength="2048" placeholder="https://misp.example.org" autocomplete="off" spellcheck="false"></div>
+        <span class="kh-hint">{{t .Lang "int.misp.urlHint"}}</span>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="misp-key">{{t .Lang "int.misp.key"}}</label>
+        <div class="kh-input-icon st-pw">{{icon "key"}}<input id="misp-key" class="kh-input mono" type="password" maxlength="256" autocomplete="new-password" spellcheck="false" placeholder="{{t .Lang "int.misp.keyPh"}}" data-ph-set="{{t .Lang "int.misp.keySetPh"}}" data-ph-empty="{{t .Lang "int.misp.keyPh"}}">
+          <button type="button" class="kh-iconbtn st-eye" data-action="pw-eye" data-target="misp-key" aria-label="{{t .Lang "int.misp.keyShow"}}" aria-pressed="false">{{icon "eye"}}</button>
+        </div>
+        <span class="kh-hint">{{t .Lang "int.misp.keyHint"}}</span>
+        <button type="button" class="kh-btn xs subtle int-clear" id="misp-key-clear" data-action="misp-clear-key" hidden>{{icon "trash"}} {{t .Lang "int.misp.keyClear"}}</button>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="misp-dist">{{t .Lang "int.misp.dist"}}</label>
+        <select id="misp-dist" class="kh-select">
+          <option value="0">{{t .Lang "int.misp.dist0"}}</option>
+          <option value="1">{{t .Lang "int.misp.dist1"}}</option>
+          <option value="2">{{t .Lang "int.misp.dist2"}}</option>
+          <option value="3">{{t .Lang "int.misp.dist3"}}</option>
+        </select>
+      </div>
+      <div class="kh-field">
+        <label class="kh-label" for="misp-tags">{{t .Lang "int.misp.tags"}}</label>
+        <div class="kh-input-icon">{{icon "tag"}}<input id="misp-tags" class="kh-input mono" maxlength="2000" placeholder="tlp:amber, source:keywordhunter" autocomplete="off" spellcheck="false"></div>
+        <span class="kh-hint">{{t .Lang "int.misp.tagsHint"}}</span>
+      </div>
+      <p class="kh-hint st-span int-note">{{icon "info"}} <span>{{t .Lang "int.misp.threat"}}</span></p>
+      <div class="st-span int-switches">
+        <div class="st-row">
+          <button type="button" class="kh-switch" role="switch" id="misp-tls" aria-checked="true" aria-labelledby="misp-tls-l" aria-describedby="misp-tls-d" data-action="toggle-switch"></button>
+          <div class="min-w-0"><div class="st-row-t" id="misp-tls-l">{{icon "lock"}} {{t .Lang "int.misp.tls"}}</div><p class="kh-hint" id="misp-tls-d">{{t .Lang "int.misp.tlsHint"}}</p></div>
+        </div>
+        <div class="st-row">
+          <button type="button" class="kh-switch" role="switch" id="misp-private" aria-checked="false" aria-labelledby="misp-private-l" aria-describedby="misp-private-d" data-action="toggle-switch"></button>
+          <div class="min-w-0"><div class="st-row-t" id="misp-private-l">{{icon "shield"}} {{t .Lang "int.misp.private"}}</div><p class="kh-hint" id="misp-private-d">{{t .Lang "int.misp.privateHint"}}</p></div>
+        </div>
+        <div class="st-row int-row-auto">
+          <button type="button" class="kh-switch" role="switch" id="misp-auto" aria-checked="false" aria-labelledby="misp-auto-l" aria-describedby="misp-auto-d" data-action="toggle-switch"></button>
+          <div class="min-w-0 flex-1"><div class="st-row-t" id="misp-auto-l">{{icon "lightning"}} {{t .Lang "int.misp.auto"}}</div><p class="kh-hint" id="misp-auto-d">{{t .Lang "int.misp.autoHint"}}</p></div>
+          <div class="kh-field int-auto-min">
+            <label class="kh-label" for="misp-auto-min">{{t .Lang "int.misp.autoMin"}}</label>
+            <select id="misp-auto-min" class="kh-select sm">{{range $v := (seq 1 5)}}<option value="{{$v}}">SEV {{$v}}+</option>{{end}}</select>
+          </div>
+        </div>
+      </div>
+      <div class="st-span int-foot">
+        <div class="int-result" id="misp-result" role="status" aria-live="polite"></div>
+        <div class="kh-inline">
+          <button type="button" class="kh-btn ghost sm" id="misp-test" data-action="misp-test" data-busy-text="{{t .Lang "int.misp.testing"}}">{{icon "pulse"}} {{t .Lang "int.misp.test"}}</button>
+          <button type="submit" class="kh-btn primary sm" id="misp-save" data-busy-text="{{t .Lang "int.misp.saving"}}">{{icon "check"}} {{t .Lang "int.misp.save"}}</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="kh-card st-sec kh-section" id="sec-taxii" aria-labelledby="sec-taxii-t">
+    <div class="st-sec-head">
+      <span class="st-ic tone-ok">{{icon "layers"}}</span>
+      <div class="min-w-0"><h2 id="sec-taxii-t">{{t .Lang "int.taxii.title"}}</h2><p>{{t .Lang "int.taxii.desc"}}</p></div>
+      <span class="kh-badge ok st-apply">{{icon "eye"}} {{t .Lang "int.taxii.readonly"}}</span>
+    </div>
+    <div class="int-urls">
+      <div class="int-url">
+        <span class="int-url-l">{{t .Lang "int.taxii.discovery"}}</span>
+        <code class="int-url-v">{{.taxii.discovery}}</code>
+        <button type="button" class="kh-btn xs subtle icon" data-action="copy" data-copy="{{.taxii.discovery}}" data-copy-label="{{t .Lang "int.taxii.copied"}}" aria-label="{{t .Lang "int.taxii.copy"}}: {{t .Lang "int.taxii.discovery"}}" data-tip="{{t .Lang "int.taxii.copy"}}">{{icon "copy"}}</button>
+      </div>
+      <div class="int-url">
+        <span class="int-url-l">{{t .Lang "int.taxii.apiRoot"}}</span>
+        <code class="int-url-v">{{.taxii.apiRoot}}</code>
+        <button type="button" class="kh-btn xs subtle icon" data-action="copy" data-copy="{{.taxii.apiRoot}}" data-copy-label="{{t .Lang "int.taxii.copied"}}" aria-label="{{t .Lang "int.taxii.copy"}}: {{t .Lang "int.taxii.apiRoot"}}" data-tip="{{t .Lang "int.taxii.copy"}}">{{icon "copy"}}</button>
+      </div>
+    </div>
+    <h3 class="int-sub">{{t .Lang "int.taxii.collections"}}</h3>
+    <ul class="int-cols">
+      {{range .taxii.collections}}
+      <li class="int-col">
+        <div class="int-col-head">
+          <span class="kh-badge neutral mono">{{.Alias}}</span>
+          <span class="int-col-t">{{t $.Lang .LabelKey}}</span>
+          {{if gt .MinCriticality 1}}<span class="kh-badge sev-4">SEV {{.MinCriticality}}+</span>{{end}}
+        </div>
+        <div class="int-url">
+          <code class="int-url-v" title="{{t $.Lang "int.taxii.colUrl"}}: {{.URL}}">{{.URL}}</code>
+          <button type="button" class="kh-btn xs subtle icon" data-action="copy" data-copy="{{.ID}}" data-copy-label="{{t $.Lang "int.taxii.idCopied"}}" aria-label="{{t $.Lang "int.taxii.copyId"}}: {{.Alias}}" data-tip="{{t $.Lang "int.taxii.copyId"}}">{{icon "hash"}}</button>
+          <button type="button" class="kh-btn xs subtle icon" data-action="copy" data-copy="{{.URL}}" data-copy-label="{{t $.Lang "int.taxii.copied"}}" aria-label="{{t $.Lang "int.taxii.copy"}}: {{.Alias}}" data-tip="{{t $.Lang "int.taxii.copy"}}">{{icon "copy"}}</button>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    <div class="int-howto">
+      <div class="int-step"><h4>{{icon "key"}} {{t .Lang "int.taxii.auth"}}</h4><p>{{t .Lang "int.taxii.authBody"}}</p><a class="kh-btn xs ghost mt-2" href="/account#tokens">{{icon "plus"}} {{t .Lang "int.taxii.newToken"}}</a></div>
+      <div class="int-step"><h4>{{icon "layers"}} {{t .Lang "int.taxii.opencti"}}</h4><p>{{t .Lang "int.taxii.openctiBody"}}</p></div>
+      <div class="int-step"><h4>{{icon "shield"}} {{t .Lang "int.taxii.sentinel"}}</h4><p>{{t .Lang "int.taxii.sentinelBody"}}</p></div>
+    </div>
+    <pre class="int-curl"><code>curl -H "Accept: application/taxii+json;version=2.1" \
+     -u ":kh_…" \
+     "{{.taxii.apiRoot}}collections/"</code></pre>
+    <p class="kh-hint mt-2">{{icon "file"}} {{t .Lang "int.taxii.docs"}}</p>
   </section>
 </main>
 {{template "shell_end" .}}

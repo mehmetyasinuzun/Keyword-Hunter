@@ -283,3 +283,28 @@ func TestQRDataURI(t *testing.T) {
 		t.Fatal("aşırı uzun içerik reddedilmeli")
 	}
 }
+
+func TestSealerFor_PurposeSeparation(t *testing.T) {
+	key, err := GenerateAppSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	totpS, _ := NewSealer(key)
+	intS, err := NewSealerFor(key, PurposeIntegrationSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := intS.Seal("misp-api-key", "misp:api_key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := intS.Open(sealed, "misp:api_key"); err != nil || got != "misp-api-key" {
+		t.Fatalf("aynı amaç: %q %v", got, err)
+	}
+	if _, err := totpS.Open(sealed, "misp:api_key"); err == nil {
+		t.Fatal("başka amaçla türetilmiş anahtar çözememeli")
+	}
+	if _, err := NewSealerFor(key, " "); err == nil {
+		t.Fatal("boş amaç reddedilmeli")
+	}
+}

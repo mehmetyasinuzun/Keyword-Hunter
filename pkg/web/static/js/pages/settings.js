@@ -1,4 +1,4 @@
-/** Ayarlar: kimlik, web/oturum, altyapı (.env), site profilleri, Tor devresi. Yalnız admin. */
+/** Ayarlar: kimlik, web/oturum, altyapı (.env), site profilleri, Tor devresi, entegrasyonlar (MISP). Yalnız admin. */
 (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
@@ -157,6 +157,83 @@
         }
     }
 
+
+    // ── MISP entegrasyonu ───────────────────────────────────────────────
+    // API anahtarı sunucudan hiç gelmez; yalnız "kayıtlı mı" bilgisi gelir.
+    // Boş anahtar alanı = kayıtlı anahtarı koru.
+    let mispState = null;
+    const sw = (id) => $(id).getAttribute('aria-checked') === 'true';
+    // Anahtarın durumu hem aria-checked hem .on sınıfıyla tutulur (bkz. app.js
+    // toggle-switch); sunucudan gelen değer ikisini birlikte günceller.
+    const setSw = (id, on) => { const el = $(id); el.setAttribute('aria-checked', String(on)); el.classList.toggle('on', on); };
+    const mispControls = ['misp-save', 'misp-test'];
+    function mispPayload() {
+        return {
+            baseUrl: $('misp-url').value.trim(),
+            apiKey: $('misp-key').value.trim(),
+            verifyTls: sw('misp-tls'),
+            allowPrivate: sw('misp-private'),
+            distribution: Number($('misp-dist').value),
+            tags: $('misp-tags').value,
+            autoPush: sw('misp-auto'),
+            autoMinCriticality: Number($('misp-auto-min').value)
+        };
+    }
+    function mispResult(type, html) {
+        const r = $('misp-result');
+        if (!type) { r.textContent = ''; return; }
+        KH.render(r, KH.html`<div class="kh-alert ${type}">${KH.raw(KH.icon(type === 'err' ? 'warn' : type === 'ok' ? 'check' : 'info'))}<span>${html}</span></div>`);
+    }
+    function fillMisp(m) {
+        mispState = m;
+        $('misp-url').value = m.baseUrl || '';
+        const key = $('misp-key');
+        key.value = '';
+        key.type = 'password';
+        key.placeholder = m.hasApiKey ? key.dataset.phSet : key.dataset.phEmpty;
+        $('misp-key-clear').hidden = !m.hasApiKey;
+        setSw('misp-tls', m.verifyTls !== false);
+        setSw('misp-private', !!m.allowPrivate);
+        setSw('misp-auto', !!m.autoPush);
+        $('misp-dist').value = String(m.distribution || 0);
+        $('misp-tags').value = (m.tags || '').split(',').filter(Boolean).join(', ');
+        $('misp-auto-min').value = String(m.autoMinCriticality || 4);
+        const st = $('misp-state');
+        st.className = 'kh-badge st-apply ' + (m.configured ? 'ok' : 'neutral');
+        KH.render(st, KH.html`${KH.raw(KH.icon(m.configured ? 'check' : 'info'))} ${KH.t(m.configured ? 'int.misp.on' : 'int.misp.off')}`);
+        st.title = m.updatedAt ? KH.t('int.misp.lastUpdate') + ': ' + KH.fmtTime(m.updatedAt) + (m.updatedBy ? ' · ' + m.updatedBy : '') : '';
+        mispControls.forEach(id => { $(id).disabled = false; });
+        $('misp-nosecret').hidden = !!m.secretStorage;
+        $('misp-nosecret-r').textContent = m.secretStorageReason || '';
+    }
+    async function loadMisp() {
+        try {
+            const d = await KH.api('/api/integrations/misp/config');
+            fillMisp(d.misp || {});
+        } catch (e) {
+            // Gerçek ayarlar bilinmiyor: şablon varsayılanlarıyla kaydetmek
+            // kayıtlı ayarların üzerine yazardı → kaydet/test kapalı kalır.
+            const st = $('misp-state');
+            st.className = 'kh-badge st-apply err';
+            KH.render(st, KH.html`${KH.raw(KH.icon('warn'))} ${T('Yüklenemedi', 'Could not load')}`);
+            mispControls.forEach(id => { $(id).disabled = true; });
+            mispResult('err', KH.html`${T('MISP ayarları yüklenemedi: ', 'Could not load MISP settings: ')}${e.message}`);
+        }
+    }
+    function mispValid(p) {
+        if (p.baseUrl && !/^https?:\/\/[^\s/]+/i.test(p.baseUrl)) {
+            $('misp-url').focus();
+            KH.toast(T('MISP adresi http(s):// ile başlamalı', 'MISP URL must start with http(s)://'), 'warn');
+            return false;
+        }
+        if (p.apiKey && /\s/.test(p.apiKey)) {
+            $('misp-key').focus();
+            KH.toast(T('API anahtarı boşluk içeremez', 'API key cannot contain spaces'), 'warn');
+            return false;
+        }
+        return true;
+    }
+
     KH.act({
         'st-dirty': () => setTimeout(paintDirty, 0), // toggle-switch önce çalışsın
         'st-strength': paintMeter,
@@ -220,6 +297,53 @@
             catch (e) { KH.toast(e.message, 'err'); }
         },
 
+        'misp-save': async () => {
+            const p = mispPayload();
+            if (!mispValid(p)) return;
+            const btn = $('misp-save');
+            KH.busy(btn, true, btn.dataset.busyText);
+            try {
+                const d = await KH.api('/api/integrations/misp/config', { method: 'POST', body: p });
+                fillMisp(d.misp || {});
+                mispResult('ok', T('MISP ayarları kaydedildi.', 'MISP settings saved.'));
+                KH.toast(T('MISP ayarları kaydedildi', 'MISP settings saved'), 'ok');
+            } catch (e) {
+                // Hata formun altında gösterilir (ayrıca toast yok).
+                mispResult('err', KH.html`${T('Kaydedilemedi: ', 'Could not save: ')}${e.message}`);
+            } finally { KH.busy(btn, false); }
+        },
+        'misp-test': async (btn) => {
+            const p = mispPayload();
+            if (!mispValid(p)) return;
+            if (!p.baseUrl || (!p.apiKey && !(mispState && mispState.hasApiKey))) {
+                KH.toast(T('Test için MISP adresi ve API anahtarı gerekli', 'MISP URL and API key are required to test'), 'warn');
+                return;
+            }
+            delete p.autoPush;
+            KH.busy(btn, true, btn.dataset.busyText);
+            mispResult('info', T('MISP\'e bağlanılıyor…', 'Connecting to MISP…'));
+            try {
+                const d = await KH.api('/api/integrations/misp/test', { method: 'POST', body: p });
+                mispResult('ok', KH.html`${T('Bağlantı başarılı · MISP sürümü ', 'Connection OK · MISP version ')}<b class="kh-mono">${d.version}</b>`);
+            } catch (e) {
+                mispResult('err', KH.html`${T('Bağlantı başarısız: ', 'Connection failed: ')}${e.message}`);
+            } finally { KH.busy(btn, false); }
+        },
+        'misp-clear-key': async () => {
+            const ok = await KH.confirm({
+                title: T('Kayıtlı anahtarı sil', 'Delete stored key'),
+                message: T('MISP API anahtarı silinecek; gönderim ve otomatik gönderim durur.', 'The MISP API key will be deleted; pushing and auto-push stop.'),
+                okText: T('Sil', 'Delete'), danger: true
+            });
+            if (!ok) return;
+            try {
+                const d = await KH.api('/api/integrations/misp/config', { method: 'POST', body: { clearApiKey: true, autoPush: false } });
+                fillMisp(d.misp || {});
+                mispResult(null);
+                KH.toast(T('Anahtar silindi', 'Key deleted'), 'ok', 2000);
+            } catch (e) { KH.toast(e.message, 'err'); }
+        },
+
         'tor-newnym': async (btn) => {
             KH.busy(btn, true, btn.dataset.busyText);
             try { await KH.api('/api/tor/newnym', { method: 'POST', body: { force: false } }); KH.toast(T('Yeni Tor devresi istendi', 'New Tor circuit requested'), 'ok'); }
@@ -232,6 +356,7 @@
         load().catch(e => showAlert('err', T('Ayarlar yüklenemedi', 'Could not load settings'), [e.message]));
         loadProfiles();
         loadTor();
+        loadMisp();
         window.addEventListener('beforeunload', (e) => {
             if ($('st-savebar').classList.contains('is-dirty')) { e.preventDefault(); e.returnValue = ''; }
         });

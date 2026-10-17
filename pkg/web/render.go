@@ -2,6 +2,7 @@ package web
 
 import (
 	"html/template"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -201,6 +202,11 @@ func templateFuncs() template.FuncMap {
 
 // renderError markaya uygun hata sayfası basar; /api/ altında JSON döner.
 func (s *Server) renderError(c *gin.Context, status int) {
+	if c.Request.URL.Path == "/taxii2" || strings.HasPrefix(c.Request.URL.Path, "/taxii2/") {
+		// TAXII istemcileri HTML değil TAXII hata nesnesi bekler.
+		taxiiError(c, status, http.StatusText(status), "")
+		return
+	}
 	if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 		msg := "Bulunamadı"
 		if status == 403 {

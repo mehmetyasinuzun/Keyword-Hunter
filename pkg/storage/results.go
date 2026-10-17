@@ -156,9 +156,9 @@ func (db *DB) ApplyTagging(id int64, tags string, keywordCount int, criticality 
 
 	_, err = tx.Exec(`
 		UPDATE search_results
-		SET auto_tags = ?, keyword_count = ?, criticality = ?, category = ?
+		SET `+feedBumpOnCriticalityRaise+`, auto_tags = ?, keyword_count = ?, criticality = ?, category = ?
 		WHERE id = ?
-	`, tags, keywordCount, criticality, category, id)
+	`, criticality, tags, keywordCount, criticality, category, id)
 	if err != nil {
 		return err
 	}

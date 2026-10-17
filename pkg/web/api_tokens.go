@@ -52,6 +52,11 @@ var tokenForbiddenRoutes = []string{
 	"/api/settings",
 	"/api/site-profiles",
 	"/api/alert-config",
+	// MISP ayarları (şifreli API anahtarı) ve bağlantı testi yalnız etkileşimli
+	// admin oturumuyla; gönderim (/api/integrations/misp/push) "write" kapsamlı
+	// token ile otomasyona açıktır.
+	"/api/integrations/misp/config",
+	"/api/integrations/misp/test",
 }
 
 // tokenForbiddenRoute rota kalıbının token ile çağrılamayacağını söyler.
@@ -82,29 +87,24 @@ func bearerToken(c *gin.Context) (string, bool) {
 	return tok, tok != ""
 }
 
-// authenticateToken Bearer token'ı doğrular, bağlamı kurar ve zinciri sürdürür
-// ya da 401/403 ile keser. Yalnız çerezsiz /api/ isteklerinde çağrılır.
-func (s *Server) authenticateToken(c *gin.Context, raw string) {
-	fail := func(reason, msg string, t *storage.APIToken) {
-		// Geçersiz token denemeleri IP + neden başına dakikada bir kaydedilir:
-		// rastgele token yağmuru denetim tablosunu şişiremez.
-		if s.auditNoise.allow("token-fail:"+c.ClientIP()+":"+reason, time.Minute) {
-			details := map[string]any{"reason": reason, "method": c.Request.Method}
-			target := c.FullPath()
-			if t != nil {
-				details["prefix"] = t.Prefix
-				details["tokenId"] = t.ID
-				target = "user:" + t.Username
-			}
-			s.recordAudit(c, storage.AuditEvent{Action: "auth.token.failure", Target: target, AuthMethod: storage.AuthMethodAnonymous}, details)
-		}
-		c.Header("WWW-Authenticate", `Bearer realm="KeywordHunter", error="invalid_token"`)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": msg})
+// tokenAuthFailure geçersiz token denemesinin nedeni (denetim) ve istemciye
+// dönen ileti.
+type tokenAuthFailure struct {
+	Reason, Message string
+}
+
+// verifyAPIToken düz metin token'ı doğrular ve sahibini (güncel, etkin hesap)
+// döndürür. Başarısız denemeler IP + neden başına dakikada bir denetlenir.
+// Yanıt yazmaz: /api/ (Bearer, JSON) ve /taxii2/ (Basic|Bearer, TAXII hata
+// nesnesi) kendi biçimleriyle yanıtlar.
+func (s *Server) verifyAPIToken(c *gin.Context, raw string) (*storage.APIToken, *storage.User, *tokenAuthFailure) {
+	fail := func(reason, msg string, t *storage.APIToken) (*storage.APIToken, *storage.User, *tokenAuthFailure) {
+		s.auditTokenFailure(c, reason, t)
+		return nil, nil, &tokenAuthFailure{Reason: reason, Message: msg}
 	}
 
 	if !storage.LooksLikeAPIToken(raw) {
-		fail("malformed", "Geçersiz API token", nil)
-		return
+		return fail("malformed", "Geçersiz API token", nil)
 	}
 	hash := storage.HashAPIToken(raw)
 	t, err := s.db.GetAPITokenByHash(hash)
@@ -112,53 +112,85 @@ func (s *Server) authenticateToken(c *gin.Context, raw string) {
 		if !errors.Is(err, storage.ErrTokenNotFound) {
 			logger.Warn("API token okunamadı: %v", err)
 		}
-		fail("unknown", "Geçersiz API token", nil)
-		return
+		return fail("unknown", "Geçersiz API token", nil)
 	}
 	// Arama özetle yapıldı; sabit-zamanlı karşılaştırma ikinci savunma hattıdır.
 	if subtle.ConstantTimeCompare([]byte(t.TokenHash), []byte(hash)) != 1 {
-		fail("unknown", "Geçersiz API token", nil)
-		return
+		return fail("unknown", "Geçersiz API token", nil)
 	}
-	now := time.Now()
-	switch t.Status(now) {
+	switch t.Status(time.Now()) {
 	case storage.TokenStatusRevoked:
-		fail("revoked", "API token iptal edilmiş", t)
-		return
+		return fail("revoked", "API token iptal edilmiş", t)
 	case storage.TokenStatusExpired:
-		fail("expired", "API token süresi dolmuş", t)
-		return
+		return fail("expired", "API token süresi dolmuş", t)
 	}
 	// Sahip hâlâ var, etkin ve AYNI hesap olmalı (silinip aynı adla yeniden
 	// açılan hesap eski token'ı devralmaz). Rol her istekte tazelenir.
 	u, err := s.db.GetUserByUsername(t.Username)
 	if err != nil || u == nil || u.ID != t.UserID || !u.Enabled {
-		fail("user_unavailable", "Geçersiz API token", t)
+		return fail("user_unavailable", "Geçersiz API token", t)
+	}
+	return t, u, nil
+}
+
+// auditTokenFailure geçersiz token denemesini IP + neden başına dakikada bir
+// kaydeder: rastgele token yağmuru denetim tablosunu şişiremez.
+func (s *Server) auditTokenFailure(c *gin.Context, reason string, t *storage.APIToken) {
+	if !s.auditNoise.allow("token-fail:"+c.ClientIP()+":"+reason, time.Minute) {
 		return
 	}
+	details := map[string]any{"reason": reason, "method": c.Request.Method}
+	target := c.FullPath()
+	if t != nil {
+		details["prefix"] = t.Prefix
+		details["tokenId"] = t.ID
+		target = "user:" + t.Username
+	}
+	s.recordAudit(c, storage.AuditEvent{Action: "auth.token.failure", Target: target, AuthMethod: storage.AuthMethodAnonymous}, details)
+}
+
+// setTokenContext doğrulanmış token'ın kimliğini istek bağlamına yazar.
+// "read" kapsamı rol ne olursa olsun viewer'a indirgenir (yazma yok).
+func setTokenContext(c *gin.Context, t *storage.APIToken, u *storage.User) {
 	role := u.Role
 	if t.Scope != storage.TokenScopeWrite {
-		role = storage.RoleViewer // okuma kapsamı: rol ne olursa olsun yazma yok
+		role = storage.RoleViewer
 	}
-
 	c.Set("username", u.Username)
 	c.Set("role", role)
 	c.Set("authMethod", storage.AuthMethodToken)
 	c.Set("tokenID", t.ID)
 	c.Set("tokenPrefix", t.Prefix)
 	c.Set("tokenScope", t.Scope)
+}
+
+// touchAPIToken son kullanım bilgisini (en fazla dakikada bir) günceller.
+func (s *Server) touchAPIToken(c *gin.Context, t *storage.APIToken) {
+	now := time.Now()
+	if t.LastUsedAt == nil || now.Sub(*t.LastUsedAt) >= tokenTouchInterval {
+		if err := s.db.TouchAPIToken(t.ID, c.ClientIP(), now); err != nil {
+			logger.Warn("API token touch hatası: %v", err)
+		}
+	}
+}
+
+// authenticateToken Bearer token'ı doğrular, bağlamı kurar ve zinciri sürdürür
+// ya da 401/403 ile keser. Yalnız çerezsiz /api/ isteklerinde çağrılır.
+func (s *Server) authenticateToken(c *gin.Context, raw string) {
+	t, u, failure := s.verifyAPIToken(c, raw)
+	if failure != nil {
+		c.Header("WWW-Authenticate", `Bearer realm="KeywordHunter", error="invalid_token"`)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": failure.Message})
+		return
+	}
+	setTokenContext(c, t, u)
 
 	if tokenForbiddenRoute(c.FullPath()) {
 		s.auditDenied(c, "token_session_required", "")
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Bu uç nokta etkileşimli oturum gerektirir; API token ile çağrılamaz (this endpoint requires an interactive session)"})
 		return
 	}
-
-	if t.LastUsedAt == nil || now.Sub(*t.LastUsedAt) >= tokenTouchInterval {
-		if err := s.db.TouchAPIToken(t.ID, c.ClientIP(), now); err != nil {
-			logger.Warn("API token touch hatası: %v", err)
-		}
-	}
+	s.touchAPIToken(c, t)
 	c.Next()
 }
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +54,11 @@ func (rl *IPRateLimiter) Middleware() gin.HandlerFunc {
 		limiter := rl.getLimiter(ip)
 		if !limiter.Allow() {
 			c.Header("Retry-After", "1")
+			if path == "/taxii2" || strings.HasPrefix(path, "/taxii2/") {
+				// TAXII istemcileri TAXII hata nesnesi bekler.
+				taxiiError(c, http.StatusTooManyRequests, "Too Many Requests", "Rate limit exceeded; retry later")
+				return
+			}
 			c.AbortWithStatusJSON(429, gin.H{
 				"error": "Cok fazla istek gonderildi. Lutfen kisa sure sonra tekrar deneyin",
 			})

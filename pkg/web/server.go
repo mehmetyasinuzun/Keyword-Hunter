@@ -104,6 +104,16 @@ type Server struct {
 	appSecretEphemeral bool
 	require2FA         string
 	pendingLogins      *pendingLogins
+
+	// Entegrasyon sırları (MISP API anahtarı) için APP_SECRET'tan ayrı amaçla
+	// türetilmiş mühürleyici (nil → anahtar kaydı kapalı) ve eşzamanlı MISP
+	// çağrısı sınırı.
+	secretSealer *totp.Sealer
+	mispSem      chan struct{}
+
+	// TAXII taramalarının eşzamanlılık sınırı (tek SQLite bağlantısı
+	// paylaşılır; bir token sahibi arayüzü yavaşlatamasın).
+	taxiiScans *scanLimiter
 }
 
 // Config sunucu yapılandırması
@@ -204,6 +214,9 @@ func New(cfg Config) (*Server, error) {
 		} else {
 			s.totpSealer = sealer
 		}
+		if sealer, err := totp.NewSealerFor(cfg.AppSecret, totp.PurposeIntegrationSecret); err == nil {
+			s.secretSealer = sealer
+		}
 	} else {
 		logger.Warn("APP_SECRET tanımlı değil; 2FA kaydı ve TOTP doğrulaması kapalı (yalnız kurtarma kodları çalışır)")
 	}
@@ -264,6 +277,7 @@ func New(cfg Config) (*Server, error) {
 	s.startWatchlistMonitor()
 	s.startScheduler()
 	s.startAuditMaintenance()
+	s.startMISPAutoPush()
 	return s, nil
 }
 
@@ -521,6 +535,12 @@ func (s *Server) setupRoutes() {
 	if s.pendingLogins == nil {
 		s.pendingLogins = newPendingLogins()
 	}
+	if s.mispSem == nil {
+		s.mispSem = make(chan struct{}, mispConcurrent)
+	}
+	if s.taxiiScans == nil {
+		s.taxiiScans = newScanLimiter(taxiiMaxScans, taxiiMaxScansPerUser)
+	}
 
 	// Template'leri yükle (ana sayfalar + partials)
 	tmpl := template.Must(template.New("").Funcs(templateFuncs()).ParseFS(templateFS, "templates/*.html", "templates/partials/*.html"))
@@ -555,6 +575,22 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/favicon.svg", s.handleFavicon)
 	s.router.GET("/api/i18n", s.handleI18nCatalog)
 	s.router.POST("/api/lang", s.handleSetLang)
+
+	// TAXII 2.1 (salt okunur): yalnız API token (Bearer ya da Basic parolası);
+	// oturum çerezi okunmaz, CSRF yüzeyi yok (bkz. taxii.go).
+	taxii := s.router.Group("/taxii2", s.taxiiAuth())
+	{
+		taxii.GET("/", s.handleTAXIIDiscovery)
+		root := taxii.Group("/" + taxiiAPIRoot)
+		root.GET("/", s.handleTAXIIAPIRoot)
+		root.GET("/collections/", s.handleTAXIICollections)
+		root.GET("/collections/:id/", s.handleTAXIICollection)
+		root.GET("/collections/:id/objects/", s.handleTAXIIObjects)
+		root.POST("/collections/:id/objects/", s.handleTAXIIReadOnly)
+		root.GET("/collections/:id/objects/:oid/", s.handleTAXIIObject)
+		root.DELETE("/collections/:id/objects/:oid/", s.handleTAXIIReadOnly)
+		root.GET("/collections/:id/manifest/", s.handleTAXIIManifest)
+	}
 
 	// Protected routes
 	protected := s.router.Group("/")
@@ -679,6 +715,11 @@ func (s *Server) setupRoutes() {
 			admin.GET("/site-profiles", s.handleSiteProfilesList)
 			admin.POST("/site-profiles", s.handleSiteProfileSave)
 			admin.POST("/site-profiles/delete", s.handleSiteProfileDelete)
+			// Entegrasyonlar: MISP ayarları/testi yalnız admin oturumu; gönderim analyst+
+			admin.GET("/integrations/misp/config", s.handleMISPConfigGet)
+			admin.POST("/integrations/misp/config", s.handleMISPConfigSave)
+			admin.POST("/integrations/misp/test", s.handleMISPTest)
+			api.POST("/integrations/misp/push", s.handleMISPPush)
 			admin.GET("/tor/status", s.handleTorStatus)
 			admin.POST("/tor/newnym", s.handleTorNewNym)
 			api.GET("/watchlist", s.handleWatchlistList)

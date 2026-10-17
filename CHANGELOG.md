@@ -2,6 +2,29 @@
 
 ## Yayımlanmamış
 
+### Entegrasyonlar: TAXII 2.1 sunucusu + MISP gönderimi
+- **TAXII 2.1 (salt okunur, `/taxii2/`):** keşif, API kökü (`/taxii2/kh/`), koleksiyon listesi/tekil,
+  `objects/` (zarf; `added_after`, `limit` 100/1000, opak `next`, `match[id|type|version|spec_version]`),
+  `objects/{id}/` ve `manifest/`; `application/taxii+json;version=2.1` (nesne uçlarında
+  `application/stix+json;version=2.1` da), `Accept` anlaşması + `406`, `X-TAXII-Date-Added-First/Last`,
+  TAXII hata nesneleri (404/429 dahil). Sabit UUID'li koleksiyonlar: `findings-all`, `findings-high`
+  (SEV ≥ 4), `indicators`. Nesneler `pkg/export` STIX kurucularından; veriye bağlı zaman damgalarıyla
+  istekler arası kararlı, koleksiyon içinde tekilleştirilmiş (SQL'de ilk-geçiş), `date_added` = bulgunun
+  akışa giriş anı (`feed_at`: eklenince `created_at`, sonradan yeni IOC çıkarılınca ya da kritiklik
+  yükselince ilerler — artımlı çeken istemciler geç IOC'leri kaçırmaz); kart ve telefon numaraları
+  yayımlanmaz. İstek başına en fazla 5000 bulgu taranır (tek nesne araması dahil), eşzamanlı taramalar
+  sınırlıdır (4, hesap başına 2) ve istemci giderse tarama durur. Kimlik: API token (Bearer ya da Basic parolası; kullanıcı
+  adı boş ya da sahibi), `read` kapsamı yeterli, çerez yok sayılır, iptal/süresi dolmuş token ve 2FA
+  politikası uygulanır; `taxii.read` token + koleksiyon başına dakikada bir denetlenir.
+- **MISP gönderimi:** Ayarlar → Entegrasyonlar (admin): adres, API anahtarı (`APP_SECRET`'tan ayrı amaçla
+  türetilmiş AES-256-GCM; asla geri dönmez; adres başka sunucuya taşınırken yeniden istenir), TLS
+  doğrulama, dağıtım 0–3, varsayılan etiketler, özel ağ izni (SSRF koruması; düz http yalnız kurum içi IP'lere), otomatik gönderim (eşik,
+  varsayılan kapalı). Bulgular → toplu işlem "MISP'e gönder": tek olay (`url`, `email-src`, `btc`,
+  `xmr`, `ip-dst`, `md5`/`sha1`/`sha256`, `domain`; kart ve sırlar gönderilmez; tehdit düzeyi en yüksek
+  kritiklikten). Çıkış doğrudan clearnet/intranet (Tor değil), yönlendirme yok, 15 sn, 1 MB.
+  `misp.config.update`, `misp.test`, `misp.push` denetlenir (anahtarsız).
+- Belge: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) (uçlar, curl, OpenCTI/Sentinel/MISP kurulumu, güvenlik notları).
+
 ### İki adımlı doğrulama (TOTP, RFC 6238)
 - **Kayıt (Hesabım → İki adımlı doğrulama):** 3 adımlı sihirbaz — sunucuda üretilen
   QR (PNG data URI, `github.com/skip2/go-qrcode`: saf Go, bağımlılıksız, ISO 18004

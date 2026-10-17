@@ -157,3 +157,6 @@ a.kh-tag:hover { background: color-mix(in srgb, var(--violet) 22%, transparent);
   .ioc-row { grid-template-columns: minmax(0, 1fr) auto auto; }
   .ioc-type { grid-column: 1 / -1; }
 }
+
+/* MISP gönderim bildirimindeki olay bağlantısı */
+.kh-toast .kh-toast-link { margin-left: 4px; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
