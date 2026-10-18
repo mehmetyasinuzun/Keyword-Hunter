@@ -1,4 +1,4 @@
-/** Ayarlar: kimlik, web/oturum, altyapı (.env), site profilleri, Tor devresi, entegrasyonlar (MISP). Yalnız admin. */
+/** Ayarlar: kimlik, web/oturum, altyapı (.env), site profilleri, Tor devresi, yedekleme, entegrasyonlar (MISP). Yalnız admin. */
 (function () {
     'use strict';
     const $ = (id) => document.getElementById(id);
@@ -342,6 +342,33 @@
                 mispResult(null);
                 KH.toast(T('Anahtar silindi', 'Key deleted'), 'ok', 2000);
             } catch (e) { KH.toast(e.message, 'err'); }
+        },
+
+        // Anlık yedek: sunucu tutarlı bir kopya üretip doğrular, dosya olarak döner.
+        'bk-download': async (btn) => {
+            KH.busy(btn, true, btn.dataset.busyText);
+            try {
+                const res = await fetch('/api/admin/backup', { method: 'POST', credentials: 'same-origin' });
+                if (res.status === 401) { location.href = '/login'; return; }
+                if (!res.ok) {
+                    let msg = 'HTTP ' + res.status;
+                    try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (_) { }
+                    throw new Error(msg);
+                }
+                const blob = await res.blob();
+                const m = /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') || '');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = m ? m[1] : 'keywordhunter-backup.db';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                KH.toast(KH.t('set.bk.done'), 'ok');
+            } catch (e) {
+                KH.toast(KH.t('set.bk.failed') + ': ' + e.message, 'err');
+            } finally { KH.busy(btn, false); }
         },
 
         'tor-newnym': async (btn) => {

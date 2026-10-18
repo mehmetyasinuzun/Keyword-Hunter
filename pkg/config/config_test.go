@@ -11,7 +11,8 @@ import (
 // değişkenler testi etkilemesin diye boşaltılır.
 func loadWith(t *testing.T, content string) (AppConfig, *EnvStore, error) {
 	t.Helper()
-	for _, k := range []string{"ADMIN_USER", "ADMIN_PASS", "ADMIN_PASS_HASH", "APP_SECRET", "REQUIRE_2FA"} {
+	for _, k := range []string{"ADMIN_USER", "ADMIN_PASS", "ADMIN_PASS_HASH", "APP_SECRET", "REQUIRE_2FA",
+		"BACKUP_DIR", "BACKUP_INTERVAL_HOURS", "BACKUP_KEEP", "RESULT_RETENTION_DAYS", "SCREENSHOT_RETENTION_DAYS"} {
 		t.Setenv(k, "")
 	}
 	path := filepath.Join(t.TempDir(), ".env")
@@ -134,6 +135,57 @@ func TestCheckRequire2FAStartup(t *testing.T) {
 	for _, c := range cases {
 		if err := CheckRequire2FAStartup(c.policy, c.persisted); (err != nil) != c.wantErr {
 			t.Errorf("%s persisted=%v: %v", c.policy, c.persisted, err)
+		}
+	}
+}
+
+func TestLoad_BackupSettings(t *testing.T) {
+	cfg, _, err := loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\n")
+	if err != nil || cfg.BackupDir != "" || cfg.BackupIntervalHours != 24 || cfg.BackupKeep != 7 {
+		t.Fatalf("varsayılanlar (kapalı, 24 saat, 7): %+v %v", cfg, err)
+	}
+	cfg, _, err = loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\nBACKUP_DIR=/data/backups\nBACKUP_INTERVAL_HOURS=6\nBACKUP_KEEP=30\n")
+	if err != nil || cfg.BackupDir != "/data/backups" || cfg.BackupIntervalHours != 6 || cfg.BackupKeep != 30 {
+		t.Fatalf("özel değerler: %+v %v", cfg, err)
+	}
+	for _, bad := range []string{"BACKUP_INTERVAL_HOURS=0", "BACKUP_INTERVAL_HOURS=x", "BACKUP_KEEP=0", "BACKUP_KEEP=1001"} {
+		if _, _, err := loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\n"+bad+"\n"); err == nil {
+			t.Errorf("%s reddedilmeli", bad)
+		}
+	}
+}
+
+func TestResolveDBPath(t *testing.T) {
+	dir := t.TempDir()
+	env := filepath.Join(dir, ".env")
+	t.Setenv("DB_PATH", "")
+	if p, err := ResolveDBPath(filepath.Join(dir, "missing.env")); err != nil || p != "keywordhunter.db" {
+		t.Fatalf("varsayılan: %q %v", p, err)
+	}
+	if err := os.WriteFile(env, []byte("DB_PATH=/data/kh.db\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := ResolveDBPath(env); err != nil || p != "/data/kh.db" {
+		t.Fatalf(".env: %q %v", p, err)
+	}
+	t.Setenv("DB_PATH", "/env/kh.db")
+	if p, err := ResolveDBPath(env); err != nil || p != "/env/kh.db" {
+		t.Fatalf("ortam önceliği: %q %v", p, err)
+	}
+}
+
+func TestLoad_RetentionSettings(t *testing.T) {
+	cfg, _, err := loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\n")
+	if err != nil || cfg.ResultRetentionDays != 0 || cfg.ScreenshotRetentionDays != 0 {
+		t.Fatalf("varsayılan 0 (süresiz): %+v %v", cfg, err)
+	}
+	cfg, _, err = loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\nRESULT_RETENTION_DAYS=180\nSCREENSHOT_RETENTION_DAYS=30\n")
+	if err != nil || cfg.ResultRetentionDays != 180 || cfg.ScreenshotRetentionDays != 30 {
+		t.Fatalf("özel değerler: %+v %v", cfg, err)
+	}
+	for _, bad := range []string{"RESULT_RETENTION_DAYS=-1", "SCREENSHOT_RETENTION_DAYS=abc", "RESULT_RETENTION_DAYS=36501"} {
+		if _, _, err := loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\n"+bad+"\n"); err == nil {
+			t.Errorf("%s reddedilmeli", bad)
 		}
 	}
 }

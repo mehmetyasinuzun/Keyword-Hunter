@@ -21,29 +21,6 @@ type ScheduledSearch struct {
 	CreatedAt       time.Time
 }
 
-// EnsureScheduledSchema scheduled_searches tablosunu oluşturur
-func (db *DB) EnsureScheduledSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS scheduled_searches (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			query TEXT NOT NULL,
-			interval_minutes INTEGER NOT NULL DEFAULT 60,
-			enabled INTEGER NOT NULL DEFAULT 1,
-			webhook_url TEXT DEFAULT '',
-			alert_threshold INTEGER DEFAULT 3,
-			last_run_at DATETIME,
-			next_run_at DATETIME,
-			last_result_count INTEGER DEFAULT 0,
-			last_new_count INTEGER DEFAULT 0,
-			total_runs INTEGER DEFAULT 0,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_scheduled_due ON scheduled_searches(enabled, next_run_at);
-	`)
-	return err
-}
-
 // CreateScheduledSearch yeni zamanlanmış tarama oluşturur
 func (db *DB) CreateScheduledSearch(query string, intervalMinutes int, webhookURL string, threshold int) (*ScheduledSearch, error) {
 	now := time.Now().UTC()

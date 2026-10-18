@@ -38,6 +38,10 @@ case "$ENV_FILE_PATH" in
     cur="$(read_key TOR_PROXY "$ENV_FILE_PATH")"; [ -z "$cur" ] || [ "$cur" = "127.0.0.1:9150" ] && set_key TOR_PROXY "tor:9050" "$ENV_FILE_PATH"
     cur="$(read_key DB_PATH "$ENV_FILE_PATH")";   [ -z "$cur" ] || [ "$cur" = "keywordhunter.db" ] && set_key DB_PATH "/data/keywordhunter.db" "$ENV_FILE_PATH"
     cur="$(read_key LOG_DIR "$ENV_FILE_PATH")";   [ -z "$cur" ] || [ "$cur" = "logs" ] && set_key LOG_DIR "/data/logs" "$ENV_FILE_PATH"
+    # Şablondaki göreli örnek (BACKUP_DIR=backups) kapsayıcıda /app/backups'a,
+    # yani yeniden oluşturulunca silinen katmana yazardı: kalıcı birime taşı.
+    # Boş değer (kapalı) ve kullanıcının seçtiği başka yollar olduğu gibi kalır.
+    cur="$(read_key BACKUP_DIR "$ENV_FILE_PATH")"; case "$cur" in backups|./backups|backups/|./backups/) set_key BACKUP_DIR "/data/backups" "$ENV_FILE_PATH" ;; esac
     ;;
 esac
 

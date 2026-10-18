@@ -117,3 +117,14 @@
 .int-step p { font-size: .8rem; color: var(--text-2); line-height: 1.5; }
 .int-curl { margin-top: 14px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border); overflow-x: auto; font-family: var(--font-mono); font-size: .76rem; line-height: 1.55; color: var(--text-2); }
 .st-sec .int-curl code { padding: 0; border: 0; background: none; font-size: inherit; }
+
+/* Yedekleme ve saklama */
+.st-kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.st-kv > div { min-width: 0; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-hover); border: 1px solid var(--border); }
+.st-kv dt { font-size: .64rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); overflow-wrap: anywhere; }
+.st-kv dd { margin: 4px 0 0; font-size: .86rem; font-weight: 650; color: var(--text); overflow-wrap: anywhere; }
+.st-kv > .st-kv-wide { grid-column: span 2; }
+.st-kv .kh-badge { margin: 2px 4px 0 0; }
+@media (max-width: 720px) { .st-kv { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.st-maint-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.st-maint-foot .kh-hint { flex: 1 1 280px; min-width: 0; }

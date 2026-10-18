@@ -37,23 +37,6 @@ type User struct {
 	LastLoginAt  *time.Time `json:"lastLoginAt"`
 }
 
-// EnsureUserSchema users tablosunu oluşturur.
-func (db *DB) EnsureUserSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-			password_hash TEXT NOT NULL,
-			role TEXT NOT NULL DEFAULT 'analyst',
-			enabled INTEGER NOT NULL DEFAULT 1,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_login_at DATETIME
-		);
-		CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-	`)
-	return err
-}
-
 // CountUsers toplam kullanıcı sayısı (bootstrap kararı için).
 func (db *DB) CountUsers() (int, error) {
 	var n int

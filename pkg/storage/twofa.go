@@ -37,32 +37,6 @@ type TwoFactorStatus struct {
 	RecoveryRemaining int        `json:"recoveryRemaining"`
 }
 
-// EnsureTwoFactorSchema 2FA tablolarını oluşturur (idempotent).
-func (db *DB) EnsureTwoFactorSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS user_2fa (
-			user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-			enabled INTEGER NOT NULL DEFAULT 0,
-			secret_enc TEXT NOT NULL DEFAULT '',
-			pending_enc TEXT NOT NULL DEFAULT '',
-			pending_at DATETIME,
-			last_step INTEGER NOT NULL DEFAULT 0,
-			enabled_at DATETIME,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS user_recovery_codes (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			code_hash TEXT NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			used_at DATETIME,
-			UNIQUE(user_id, code_hash)
-		);
-		CREATE INDEX IF NOT EXISTS idx_recovery_codes_user ON user_recovery_codes(user_id);
-	`)
-	return err
-}
-
 // GetTwoFactor kullanıcının 2FA kaydını döndürür; kayıt yoksa etkin olmayan
 // boş bir değer (hata değil).
 func (db *DB) GetTwoFactor(userID int64) (*TwoFactor, error) {

@@ -24,7 +24,7 @@ func TestTwoFactorLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Yeniden kurulum bekleyeni değiştirir (idempotent migrasyon da sorun çıkarmaz)
-	if err := db.EnsureTwoFactorSchema(); err != nil {
+	if err := migrateBaseline(db.conn); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.SetTwoFactorPending(u.ID, "v1:pending-b", now); err != nil {

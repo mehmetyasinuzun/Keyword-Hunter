@@ -131,10 +131,10 @@ func TestAPITokens_LifecycleAndStatus(t *testing.T) {
 	}
 }
 
-func TestEnsureAPITokenSchema_Idempotent(t *testing.T) {
+func TestAPITokenSchema_IdempotentBaseline(t *testing.T) {
 	db := newTestDB(t)
 	for i := 0; i < 2; i++ {
-		if err := db.EnsureAPITokenSchema(); err != nil {
+		if err := migrateBaseline(db.conn); err != nil {
 			t.Fatal(err)
 		}
 	}

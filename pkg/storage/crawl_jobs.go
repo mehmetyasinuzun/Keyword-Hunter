@@ -23,31 +23,6 @@ type CrawlJob struct {
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
 }
 
-// EnsureCrawlSchema crawl_jobs tablosunu oluşturur.
-func (db *DB) EnsureCrawlSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS crawl_jobs (
-			id TEXT PRIMARY KEY,
-			seed_url TEXT NOT NULL,
-			query TEXT DEFAULT '',
-			depth INTEGER DEFAULT 1,
-			max_pages INTEGER DEFAULT 50,
-			same_domain INTEGER DEFAULT 1,
-			status TEXT NOT NULL DEFAULT 'pending',
-			pages_done INTEGER DEFAULT 0,
-			found_count INTEGER DEFAULT 0,
-			saved_count INTEGER DEFAULT 0,
-			message TEXT DEFAULT '',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			started_at DATETIME,
-			finished_at DATETIME
-		);
-		CREATE INDEX IF NOT EXISTS idx_crawl_jobs_status ON crawl_jobs(status);
-		CREATE INDEX IF NOT EXISTS idx_crawl_jobs_created ON crawl_jobs(created_at);
-	`)
-	return err
-}
-
 func (db *DB) CreateCrawlJob(j CrawlJob) error {
 	sd := 0
 	if j.SameDomain {

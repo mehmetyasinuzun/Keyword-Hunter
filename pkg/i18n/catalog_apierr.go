@@ -11,6 +11,8 @@ func init() {
 	register("tr", map[string]string{
 		// ── Genel ──
 		"apierr.internal":          "Sunucu hatası, lütfen tekrar deneyin",
+		"apierr.backup_failed":     "Yedek alınamadı; ayrıntı sunucu logunda",
+		"apierr.backup_busy":       "Başka bir yedek alınıyor; biraz sonra tekrar deneyin",
 		"apierr.invalid_request":   "Geçersiz istek",
 		"apierr.invalid_id":        "Geçersiz kimlik (ID)",
 		"apierr.invalid_type":      "Geçersiz type değeri",
@@ -195,6 +197,8 @@ func init() {
 	register("en", map[string]string{
 		// ── General ──
 		"apierr.internal":          "Server error, please try again",
+		"apierr.backup_failed":     "Backup failed; see the server log for details",
+		"apierr.backup_busy":       "Another backup is in progress; try again shortly",
 		"apierr.invalid_request":   "Invalid request",
 		"apierr.invalid_id":        "Invalid ID",
 		"apierr.invalid_type":      "Invalid type value",

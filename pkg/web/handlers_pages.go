@@ -686,6 +686,8 @@ func (s *Server) handleSettingsPage(c *gin.Context) {
 	s.render(c, http.StatusOK, "settings.html", gin.H{
 		"ActivePage": "settings",
 		"taxii":      s.taxiiInfo(c),
+		"backup":     s.backupStatus(),
+		"retention":  s.retentionStatus(),
 	})
 }
 

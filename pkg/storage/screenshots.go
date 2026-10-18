@@ -24,44 +24,6 @@ type Screenshot struct {
 	TakenAt       time.Time `json:"takenAt"`
 }
 
-// EnsureScreenshotSchema screenshots tablosunu oluşturur
-func (db *DB) EnsureScreenshotSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS screenshots (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			target_url TEXT NOT NULL,
-			source TEXT NOT NULL DEFAULT 'manual',
-			ref_id INTEGER NOT NULL DEFAULT 0,
-			file_path TEXT NOT NULL DEFAULT '',
-			sha256 TEXT NOT NULL DEFAULT '',
-			width INTEGER DEFAULT 0,
-			height INTEGER DEFAULT 0,
-			bytes INTEGER DEFAULT 0,
-			status TEXT NOT NULL DEFAULT 'ok',
-			error_msg TEXT DEFAULT '',
-			title TEXT DEFAULT '',
-			challenge INTEGER DEFAULT 0,
-			challenge_kind TEXT DEFAULT '',
-			taken_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_screenshots_target ON screenshots(target_url, taken_at);
-		CREATE INDEX IF NOT EXISTS idx_screenshots_taken ON screenshots(taken_at);
-	`)
-	if err != nil {
-		return err
-	}
-	// Mevcut tablolar için sütun ekleme (idempotent — "duplicate column" yutulur)
-	for _, col := range []string{
-		"ALTER TABLE screenshots ADD COLUMN title TEXT DEFAULT ''",
-		"ALTER TABLE screenshots ADD COLUMN challenge INTEGER DEFAULT 0",
-		"ALTER TABLE screenshots ADD COLUMN challenge_kind TEXT DEFAULT ''",
-	} {
-		_, _ = db.conn.Exec(col)
-	}
-	return nil
-}
-
 // SaveScreenshot yeni ekran görüntüsü kaydı ekler, ID döndürür
 func (db *DB) SaveScreenshot(s Screenshot) (int64, error) {
 	if s.Status == "" {

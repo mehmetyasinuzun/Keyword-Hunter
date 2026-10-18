@@ -21,6 +21,9 @@ const (
 	defaultRateLimitBurst = 80
 	// defaultAuditRetentionDays denetim kaydı saklama süresi (0 = süresiz).
 	defaultAuditRetentionDays = 365
+	// Zamanlanmış yedekleme: BACKUP_DIR boşsa kapalı.
+	defaultBackupIntervalHours = 24
+	defaultBackupKeep          = 7
 )
 
 // AppConfig uygulama genel ayarlari.
@@ -43,6 +46,17 @@ type AppConfig struct {
 	RateLimitBurst  int
 	// AuditRetentionDays denetim kaydının saklanacağı gün; 0 = süresiz sakla.
 	AuditRetentionDays int
+	// BackupDir zamanlanmış yedeklerin yazıldığı dizin; boş = zamanlanmış yedek kapalı.
+	BackupDir string
+	// BackupIntervalHours zamanlanmış yedek aralığı (saat).
+	BackupIntervalHours int
+	// BackupKeep tutulacak en yeni yedek sayısı (eskiler silinir).
+	BackupKeep int
+	// ResultRetentionDays bulguların saklanacağı gün (0 = süresiz). İnceleniyor /
+	// Doğrulandı vakaları süresiz tutulur.
+	ResultRetentionDays int
+	// ScreenshotRetentionDays ekran görüntülerinin saklanacağı gün (0 = süresiz).
+	ScreenshotRetentionDays int
 	// AppSecret uygulama ana sırrı (64 hex = 32 bayt). TOTP sırlarını
 	// şifreleyen anahtar bundan türetilir. Boşsa EnsureAppSecret üretir.
 	AppSecret string
@@ -114,6 +128,24 @@ func Load(envFilePath string) (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
+	backupInterval, err := parseInt(get("BACKUP_INTERVAL_HOURS", strconv.Itoa(defaultBackupIntervalHours)), 1, 8760, "BACKUP_INTERVAL_HOURS")
+	if err != nil {
+		return AppConfig{}, err
+	}
+	backupKeep, err := parseInt(get("BACKUP_KEEP", strconv.Itoa(defaultBackupKeep)), 1, 1000, "BACKUP_KEEP")
+	if err != nil {
+		return AppConfig{}, err
+	}
+
+	resultRetention, err := parseInt(get("RESULT_RETENTION_DAYS", "0"), 0, 36500, "RESULT_RETENTION_DAYS")
+	if err != nil {
+		return AppConfig{}, err
+	}
+	screenshotRetention, err := parseInt(get("SCREENSHOT_RETENTION_DAYS", "0"), 0, 36500, "SCREENSHOT_RETENTION_DAYS")
+	if err != nil {
+		return AppConfig{}, err
+	}
+
 	appSecret := get("APP_SECRET", "")
 	if appSecret != "" && !validAppSecret(appSecret) {
 		return AppConfig{}, fmt.Errorf("APP_SECRET 64 onaltilik (hex) karakter olmalidir (32 bayt); uretmek icin: openssl rand -hex 32")
@@ -153,12 +185,35 @@ func Load(envFilePath string) (AppConfig, error) {
 		RateLimitRPS:    rateLimitRPS,
 		RateLimitBurst:  rateLimitBurst,
 
-		AuditRetentionDays: auditRetention,
-		AppSecret:          strings.ToLower(appSecret),
-		Require2FA:         require2FA,
+		AuditRetentionDays:  auditRetention,
+		BackupDir:           get("BACKUP_DIR", ""),
+		BackupIntervalHours: backupInterval,
+		BackupKeep:          backupKeep,
+
+		ResultRetentionDays:     resultRetention,
+		ScreenshotRetentionDays: screenshotRetention,
+		AppSecret:               strings.ToLower(appSecret),
+		Require2FA:              require2FA,
 	}
 
 	return cfg, nil
+}
+
+// ResolveDBPath DB_PATH'i Load ile aynı öncelikle çözer (ortam → .env →
+// varsayılan) ama kimlik alanlarını (ADMIN_*) istemez: komut satırı araçları
+// (keywordhunter backup) için. .env yoksa hata değildir.
+func ResolveDBPath(envFilePath string) (string, error) {
+	if v := strings.TrimSpace(os.Getenv("DB_PATH")); v != "" {
+		return v, nil
+	}
+	values, err := NewEnvStore(envFilePath).Read()
+	if err != nil {
+		return "", fmt.Errorf("env dosyasi okunamadi: %w", err)
+	}
+	if v := strings.TrimSpace(values["DB_PATH"]); v != "" {
+		return v, nil
+	}
+	return defaultDBPath, nil
 }
 
 // EnsureAppSecret APP_SECRET yoksa crypto/rand ile üretir ve etkin .env

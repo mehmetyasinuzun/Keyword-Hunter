@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -23,30 +22,6 @@ type ResultArtifact struct {
 type ArtifactStat struct {
 	Type  string `json:"type"`
 	Count int    `json:"count"`
-}
-
-// EnsureArtifactSchema result_artifacts tablosunu oluşturur.
-func (db *DB) EnsureArtifactSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS result_artifacts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			result_id INTEGER NOT NULL,
-			type TEXT NOT NULL,
-			value TEXT NOT NULL,
-			context TEXT DEFAULT '',
-			confidence REAL DEFAULT 0.5,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(result_id, type, value),
-			FOREIGN KEY (result_id) REFERENCES search_results(id) ON DELETE CASCADE
-		);
-		CREATE INDEX IF NOT EXISTS idx_result_artifacts_result ON result_artifacts(result_id);
-		CREATE INDEX IF NOT EXISTS idx_result_artifacts_type ON result_artifacts(type);
-		CREATE INDEX IF NOT EXISTS idx_result_artifacts_value ON result_artifacts(value);
-	`)
-	if err != nil {
-		return fmt.Errorf("result_artifacts tablosu oluşturulamadı: %w", err)
-	}
-	return nil
 }
 
 // ReplaceArtifacts bir bulgunun artifact'larını yeniden yazar.

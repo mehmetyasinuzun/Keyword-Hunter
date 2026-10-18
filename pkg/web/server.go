@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"keywordhunter-mvp/pkg/backup"
 	"keywordhunter-mvp/pkg/capture"
 	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/crawler"
@@ -114,6 +115,33 @@ type Server struct {
 	// TAXII taramalarının eşzamanlılık sınırı (tek SQLite bağlantısı
 	// paylaşılır; bir token sahibi arayüzü yavaşlatamasın).
 	taxiiScans *scanLimiter
+
+	// Zamanlanmış yedekleme (BACKUP_DIR boşsa kapalı); aynı anda tek yedek.
+	backupDir      string
+	backupInterval time.Duration
+	backupKeep     int
+	backupMu       sync.Mutex
+	// backupSrc yedek kaynağı (nil → açık veritabanı; test dikişi).
+	backupSrc backup.Source
+
+	// Saklama süresi temizliği (gün; 0 = süresiz); aynı anda tek temizlik.
+	resultRetentionDays     int
+	screenshotRetentionDays int
+	retentionMu             sync.Mutex
+
+	// İlk bakım çalışmasına kadar en az bekleme (0 → backupStartupDelay /
+	// retentionStartupDelay; testlerde kısaltılır).
+	backupStartDelay    time.Duration
+	retentionStartDelay time.Duration
+
+	// bgCtx sunucu ömrü: Shutdown iptal eder; süren yedek/temizlik yarıda
+	// kesilir ve geçici dosyalarını siler. bgWG bakım işçilerini bekler.
+	bgCtx    context.Context
+	bgCancel context.CancelFunc
+	bgWG     sync.WaitGroup
+
+	// now bakım işleri için saat (nil → time.Now; testlerde sahte saat).
+	now func() time.Time
 }
 
 // Config sunucu yapılandırması
@@ -141,6 +169,14 @@ type Config struct {
 	AppSecretEphemeral bool
 	// Require2FA none | admins | all.
 	Require2FA string
+	// BackupDir zamanlanmış yedek dizini (boş = kapalı); BackupIntervalHours
+	// aralık (saat); BackupKeep tutulacak en yeni yedek sayısı.
+	BackupDir           string
+	BackupIntervalHours int
+	BackupKeep          int
+	// ResultRetentionDays / ScreenshotRetentionDays saklama süresi (gün; 0 = süresiz).
+	ResultRetentionDays     int
+	ScreenshotRetentionDays int
 }
 
 // New yeni web sunucusu oluşturur
@@ -206,7 +242,15 @@ func New(cfg Config) (*Server, error) {
 		appSecretEphemeral: cfg.AppSecretEphemeral,
 		require2FA:         cfg.Require2FA,
 		pendingLogins:      newPendingLogins(),
+
+		backupDir:      strings.TrimSpace(cfg.BackupDir),
+		backupInterval: time.Duration(cfg.BackupIntervalHours) * time.Hour,
+		backupKeep:     cfg.BackupKeep,
+
+		resultRetentionDays:     cfg.ResultRetentionDays,
+		screenshotRetentionDays: cfg.ScreenshotRetentionDays,
 	}
+	s.bgCtx, s.bgCancel = context.WithCancel(context.Background())
 	if cfg.AppSecret != "" {
 		sealer, err := totp.NewSealer(cfg.AppSecret)
 		if err != nil {
@@ -277,6 +321,9 @@ func New(cfg Config) (*Server, error) {
 	s.startWatchlistMonitor()
 	s.startScheduler()
 	s.startAuditMaintenance()
+	s.sweepBackupTemps()
+	s.startBackupScheduler()
+	s.startRetention()
 	s.startMISPAutoPush()
 	return s, nil
 }
@@ -726,6 +773,8 @@ func (s *Server) setupRoutes() {
 			admin.POST("/integrations/misp/config", s.handleMISPConfigSave)
 			admin.POST("/integrations/misp/test", s.handleMISPTest)
 			api.POST("/integrations/misp/push", s.handleMISPPush)
+			// Yedekleme: anlık indirme (yalnız admin oturumu; bkz. maintenance.go)
+			admin.POST("/admin/backup", s.handleBackupDownload)
 			admin.GET("/tor/status", s.handleTorStatus)
 			admin.POST("/tor/newnym", s.handleTorNewNym)
 			api.GET("/watchlist", s.handleWatchlistList)
@@ -792,6 +841,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	default:
 		close(s.watchlistStop)
 	}
+
+	// Süren yedek/saklama temizliği iptal edilir ve (sınırlı süre) beklenir:
+	// yarım yedeğin geçici dosyası silinsin, durum kaydı veritabanı kapanmadan yazılsın.
+	s.stopMaintenance(ctx)
 
 	if s.scheduler != nil {
 		s.scheduler.Stop()

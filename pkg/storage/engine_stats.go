@@ -21,33 +21,6 @@ type EngineStatDB struct {
 	AddedAt          time.Time  `json:"addedAt"`
 }
 
-// EnsureEngineStatsSchema engine_stats tablosunu oluşturur
-func (db *DB) EnsureEngineStatsSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS engine_stats (
-			name TEXT PRIMARY KEY,
-			url TEXT NOT NULL,
-			is_active INTEGER DEFAULT 1,
-			last_checked_at DATETIME,
-			last_status TEXT DEFAULT 'unknown',
-			last_response_ms INTEGER DEFAULT 0,
-			success_count INTEGER DEFAULT 0,
-			fail_count INTEGER DEFAULT 0,
-			total_results INTEGER DEFAULT 0,
-			consecutive_fails INTEGER DEFAULT 0,
-			added_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	if err != nil {
-		return err
-	}
-	// default_active: koddaki varsayılanın son bilinen değeri. Kullanıcı motoru
-	// hiç özelleştirmediyse (is_active == default_active) koddaki yeni varsayılan
-	// uygulanır; özelleştirdiyse seçimi korunur.
-	_, _ = db.conn.Exec(`ALTER TABLE engine_stats ADD COLUMN default_active INTEGER DEFAULT 1`)
-	return nil
-}
-
 // UpsertEngineStat motor kaydını oluşturur veya URL'sini günceller. is_active
 // yalnızca ilk eklemede defaultActive ile ayarlanır; kullanıcının /monitor'dan
 // yaptığı seçim yeniden başlatmada korunur.

@@ -119,6 +119,7 @@ mobil taşma ve axe kontrolleri otomatik kapsar.
 | HTTP, şablonlar, statik | `pkg/web` (Gin, `html/template`, gömülü `static/`) |
 | Ön yüz sözleşmesi | [`docs/FRONTEND.md`](docs/FRONTEND.md) |
 | Depolama | `pkg/storage` (SQLite, saf Go) |
+| Şema migrasyonları | `pkg/storage/migrate.go` — yeni adım ekleme: [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md) |
 | Arama / kazıma / sınıflandırma | `pkg/search`, `pkg/scraper`, `pkg/cti`, `pkg/artifact`, `pkg/tagging` |
 | Arka plan işçileri | `pkg/scheduler`, `pkg/monitor`, `pkg/crawler`, `pkg/capture` |
 | i18n | `pkg/i18n/catalog_*.go` (TR birincil, EN tam) |

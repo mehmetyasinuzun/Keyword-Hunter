@@ -3,7 +3,6 @@ package storage
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -39,49 +38,6 @@ type WatchlistStatus struct {
 }
 
 const uptimeSampleSize = 20
-
-// EnsureWatchlistSchema watchlist tablolarını oluşturur
-func (db *DB) EnsureWatchlistSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS watchlist (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			url TEXT NOT NULL UNIQUE,
-			category TEXT DEFAULT 'Genel',
-			notes TEXT DEFAULT '',
-			enabled INTEGER DEFAULT 1,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_watchlist_enabled ON watchlist(enabled);
-	`)
-	if err != nil {
-		return fmt.Errorf("watchlist tablosu oluşturulamadı: %w", err)
-	}
-
-	_, err = db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS watchlist_checks (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			watchlist_id INTEGER NOT NULL,
-			checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			status TEXT NOT NULL,
-			http_code INTEGER DEFAULT 0,
-			response_ms INTEGER DEFAULT 0,
-			content_hash TEXT DEFAULT '',
-			title TEXT DEFAULT '',
-			changed INTEGER DEFAULT 0,
-			FOREIGN KEY (watchlist_id) REFERENCES watchlist(id) ON DELETE CASCADE
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_watchlist_checks_item ON watchlist_checks(watchlist_id);
-		CREATE INDEX IF NOT EXISTS idx_watchlist_checks_time ON watchlist_checks(checked_at);
-	`)
-	if err != nil {
-		return fmt.Errorf("watchlist_checks tablosu oluşturulamadı: %w", err)
-	}
-
-	return nil
-}
 
 // normalizeWatchlistURL URL'yi normalize eder
 func normalizeWatchlistURL(url string) string {

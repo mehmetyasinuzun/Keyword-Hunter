@@ -37,7 +37,7 @@ func TestSaveResults_DoesNotDuplicateRootGraphNodes(t *testing.T) {
 
 // Eski veritabanlarındaki mevcut duplikasyon açılışta birleştirilmeli ve
 // çocuk düğümler korunan satıra bağlanmalı.
-func TestEnsureGraphNodeUniqueness_MergesLegacyDuplicates(t *testing.T) {
+func TestMergeDuplicateGraphNodes_MergesLegacyDuplicates(t *testing.T) {
 	db := newTestDB(t)
 	// Indeksi kaldırıp eski davranışı taklit et
 	if _, err := db.conn.Exec("DROP INDEX idx_graph_nodes_url_parentkey"); err != nil {
@@ -57,7 +57,7 @@ func TestEnsureGraphNodeUniqueness_MergesLegacyDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := db.EnsureGraphNodeUniqueness(); err != nil {
+	if err := mergeDuplicateGraphNodes(db.conn); err != nil {
 		t.Fatalf("migration hatası: %v", err)
 	}
 
@@ -143,7 +143,7 @@ func TestNormalizeLegacyTimestamps(t *testing.T) {
 	if parsed != nil {
 		t.Skip("bu sürücü eski biçimi zaten parse ediyor")
 	}
-	if err := db.normalizeLegacyTimestamps(); err != nil {
+	if err := normalizeLegacyTimestamps(db.conn); err != nil {
 		t.Fatal(err)
 	}
 	db.conn.QueryRow("SELECT datetime(next_run_at) FROM scheduled_searches").Scan(&parsed)

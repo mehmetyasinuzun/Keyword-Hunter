@@ -42,12 +42,22 @@ type QueryInfo struct {
 	Count int    `json:"count"`
 }
 
+// touchLastSeenSQL zaten kayıtlı bir bulgunun yeniden görüldüğünü işler
+// (saklama süresi son görülmeden sayılır; bkz. retention.go).
+const touchLastSeenSQL = `UPDATE search_results SET last_seen_at = CURRENT_TIMESTAMP WHERE url = ? AND source = ? AND query = ?`
+
 // SaveResult tek bir sonucu kaydeder
 func (db *DB) SaveResult(title, url, source, query string) error {
-	_, err := db.conn.Exec(`
+	res, err := db.conn.Exec(`
 		INSERT OR IGNORE INTO search_results (title, url, source, query, criticality, category)
 		VALUES (?, ?, ?, ?, 1, 'Genel')
 	`, title, url, source, query)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_, err = db.conn.Exec(touchLastSeenSQL, url, source, query)
+	}
 	return err
 }
 
@@ -72,6 +82,11 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 		return 0, err
 	}
 	defer stmt.Close()
+	touch, err := tx.Prepare(touchLastSeenSQL)
+	if err != nil {
+		return 0, err
+	}
+	defer touch.Close()
 
 	saved := 0
 	for _, r := range results {
@@ -102,6 +117,9 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 					*savedIDs = append(*savedIDs, lastID)
 				}
 			}
+		} else if _, err := touch.Exec(r.URL, r.Source, r.Query); err != nil {
+			// Zaten kayıtlı: yeniden görüldü (saklama süresi buradan sayılır).
+			logger.Debug("last_seen_at güncellenemedi (URL: %s): %v", r.URL, err)
 		}
 
 		// Graph nodes tablosuna da kaydet (derinleştirme için altyapı).
@@ -720,15 +738,6 @@ func escapeLike(s string) string {
 	s = strings.ReplaceAll(s, "%", "\\%")
 	s = strings.ReplaceAll(s, "_", "\\_")
 	return s
-}
-
-// EnsureCaseColumns search_results tablosuna vaka yönetimi sütunlarını ekler (idempotent).
-func (db *DB) EnsureCaseColumns() error {
-	// "duplicate column" hatası yutulur
-	_, _ = db.conn.Exec(`ALTER TABLE search_results ADD COLUMN note TEXT DEFAULT ''`)
-	_, _ = db.conn.Exec(`ALTER TABLE search_results ADD COLUMN case_status TEXT DEFAULT ''`)
-	_, _ = db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_search_results_case ON search_results(case_status)`)
-	return nil
 }
 
 // UpdateResultCase bir bulgunun vaka durumunu ve/veya notunu günceller.

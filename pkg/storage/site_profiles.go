@@ -18,21 +18,6 @@ type SiteProfile struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// EnsureSiteProfileSchema site_profiles tablosunu oluşturur.
-func (db *DB) EnsureSiteProfileSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS site_profiles (
-			host TEXT PRIMARY KEY,
-			cookies TEXT DEFAULT '',
-			user_agent TEXT DEFAULT '',
-			render_js INTEGER DEFAULT 0,
-			notes TEXT DEFAULT '',
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	return err
-}
-
 // NormalizeHost host adını küçük harfe çevirir, şema/yol/port kırpar.
 func NormalizeHost(h string) string {
 	h = strings.ToLower(strings.TrimSpace(h))

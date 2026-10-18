@@ -124,6 +124,9 @@ func init() {
 		"audit.act.screenshot.capture":        "Ekran görüntüsü alma",
 		"audit.act.audit.verify":              "Zincir doğrulaması",
 		"audit.act.audit.prune":               "Eski olay budaması",
+		"audit.act.backup.download":           "Veritabanı yedeği indirme",
+		"audit.act.backup.scheduled":          "Zamanlanmış yedek",
+		"audit.act.retention.purge":           "Saklama süresi temizliği",
 	})
 	register("en", map[string]string{
 		"nav.audit": "Audit Log",
@@ -246,5 +249,8 @@ func init() {
 		"audit.act.screenshot.capture":        "Screenshot capture",
 		"audit.act.audit.verify":              "Chain verification",
 		"audit.act.audit.prune":               "Old event pruning",
+		"audit.act.backup.download":           "Database backup download",
+		"audit.act.backup.scheduled":          "Scheduled backup",
+		"audit.act.retention.purge":           "Retention purge",
 	})
 }

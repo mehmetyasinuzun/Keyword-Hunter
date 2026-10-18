@@ -134,28 +134,6 @@ func generateAPIToken() (string, error) {
 	return b.String(), nil
 }
 
-// EnsureAPITokenSchema api_tokens tablosunu oluşturur (idempotent).
-func (db *DB) EnsureAPITokenSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS api_tokens (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL DEFAULT 0,
-			username TEXT NOT NULL COLLATE NOCASE,
-			name TEXT NOT NULL,
-			prefix TEXT NOT NULL,
-			token_hash TEXT NOT NULL UNIQUE,
-			scope TEXT NOT NULL DEFAULT 'read' CHECK (scope IN ('read', 'write')),
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			last_used_at DATETIME,
-			last_used_ip TEXT NOT NULL DEFAULT '',
-			expires_at DATETIME,
-			revoked_at DATETIME
-		);
-		CREATE INDEX IF NOT EXISTS idx_api_tokens_username ON api_tokens(username);
-	`)
-	return err
-}
-
 // ErrTokenLimit kullanıcının etkin token sınırına ulaşıldı.
 var ErrTokenLimit = errors.New("etkin token sınırına ulaşıldı")
 

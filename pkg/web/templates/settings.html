@@ -30,6 +30,8 @@
       <a href="#sec-infra">{{t .Lang "set.infra.title"}}</a>
       <a href="#sec-profiles">{{t .Lang "set.sp.title"}}</a>
       <a href="#sec-tor">{{t .Lang "set.tor.title"}}</a>
+      <a href="#sec-backup">{{t .Lang "set.bk.title"}}</a>
+      <a href="#sec-retention">{{t .Lang "set.ret.title"}}</a>
       <a href="#sec-integrations">{{t .Lang "int.nav"}}</a>
     </nav>
   </div>
@@ -177,6 +179,73 @@
       <button type="button" class="kh-btn ghost" id="newnym-btn" data-action="tor-newnym" data-busy-text="{{t .Lang "set.tor.requesting"}}" disabled>{{icon "refresh"}} {{t .Lang "set.tor.newnym"}}</button>
     </div>
     <p class="kh-hint mt-3">{{t .Lang "set.tor.hint"}} <code>TOR_CONTROL=127.0.0.1:9051</code> · <code>TOR_CONTROL_PASSWORD=…</code> {{t .Lang "set.tor.hint2"}}</p>
+  </section>
+
+  <section class="kh-card st-sec kh-section" id="sec-backup" aria-labelledby="sec-backup-t">
+    <div class="st-sec-head">
+      <span class="st-ic tone-ok">{{icon "database"}}</span>
+      <div class="min-w-0"><h2 id="sec-backup-t">{{t .Lang "set.bk.title"}}</h2><p>{{t .Lang "set.bk.desc"}}</p></div>
+      {{if .backup.Enabled}}<span class="kh-badge ok st-apply">{{icon "clock"}} {{t .Lang "set.bk.on"}}</span>{{else}}<span class="kh-badge neutral st-apply">{{t .Lang "set.bk.off"}}</span>{{end}}
+    </div>
+    <dl class="st-kv">
+      <div><dt>BACKUP_DIR</dt><dd class="kh-mono">{{if .backup.Enabled}}{{.backup.Dir}}{{else}}—{{end}}</dd></div>
+      <div><dt>BACKUP_INTERVAL_HOURS</dt><dd>{{.backup.IntervalHours}} {{t .Lang "set.u.hours"}}</dd></div>
+      <div><dt>BACKUP_KEEP</dt><dd>{{.backup.Keep}}</dd></div>
+      <div><dt>{{t .Lang "set.bk.files"}}</dt><dd>{{if .backup.Enabled}}{{if .backup.ListError}}{{t .Lang "set.bk.filesErr"}}{{else}}{{.backup.Count}}{{end}}{{else}}—{{end}}</dd></div>
+    </dl>
+    {{if .backup.Enabled}}
+    {{with .backup.Last}}
+    <div class="kh-alert {{if .OK}}ok{{else}}err{{end}}" id="bk-last" role="status">{{if .OK}}{{icon "check"}}{{else}}{{icon "warn"}}{{end}}
+      <div class="min-w-0">
+        <strong>{{if .OK}}{{t $.Lang "set.bk.lastOk"}}{{else}}{{t $.Lang "set.bk.lastFail"}}{{end}}</strong> <time datetime="{{isoTime .At}}">{{formatTime .At}}</time>
+        {{if .OK}}{{if .File}}<div class="st-alert-line">{{.File}}{{if .Size}} · {{.Size}}{{end}}</div>{{end}}{{end}}
+        {{if not .OK}}{{if .Message}}<div class="st-alert-line">{{.Message}}</div>{{end}}
+        <div>{{t $.Lang "set.bk.lastSuccess"}}: {{if .LastSuccess.IsZero}}{{t $.Lang "set.bk.never"}}{{else}}<time datetime="{{isoTime .LastSuccess}}">{{formatTime .LastSuccess}}</time>{{end}}</div>{{end}}
+      </div>
+    </div>
+    {{else}}
+    <p class="kh-hint" id="bk-last">{{t .Lang "set.bk.pending"}}</p>
+    {{end}}
+    {{else}}
+    <p class="kh-hint" id="bk-last">{{t .Lang "set.bk.offHint"}} <code>BACKUP_DIR=/data/backups</code></p>
+    {{with .backup.Last}}<p class="kh-hint" id="bk-history">{{t $.Lang "set.bk.history"}}: <time datetime="{{isoTime .At}}">{{formatTime .At}}</time> — {{if .OK}}{{t $.Lang "set.bk.histOk"}}{{else}}{{t $.Lang "set.bk.histFail"}}{{end}}</p>{{end}}
+    {{end}}
+    <div class="st-maint-foot">
+      <p class="kh-hint int-note">{{icon "key"}} <span>{{t .Lang "set.bk.secret"}}</span></p>
+      <button type="button" class="kh-btn primary sm" id="bk-download" data-action="bk-download" data-busy-text="{{t .Lang "set.bk.preparing"}}">{{icon "download"}} {{t .Lang "set.bk.download"}}</button>
+    </div>
+  </section>
+
+  <section class="kh-card st-sec kh-section" id="sec-retention" aria-labelledby="sec-retention-t">
+    <div class="st-sec-head">
+      <span class="st-ic tone-warn">{{icon "clock"}}</span>
+      <div class="min-w-0"><h2 id="sec-retention-t">{{t .Lang "set.ret.title"}}</h2><p>{{t .Lang "set.ret.desc"}}</p></div>
+      {{if .retention.Enabled}}<span class="kh-badge warn st-apply">{{icon "trash"}} {{t .Lang "set.ret.on"}}</span>{{else}}<span class="kh-badge neutral st-apply">{{t .Lang "set.ret.off"}}</span>{{end}}
+    </div>
+    <dl class="st-kv">
+      <div><dt>RESULT_RETENTION_DAYS</dt><dd>{{if gt .retention.ResultDays 0}}{{.retention.ResultDays}} {{t .Lang "set.ret.days"}} <span class="kh-hint">{{t .Lang "set.ret.sinceSeen"}}</span>{{else}}{{t .Lang "set.ret.forever"}}{{end}}</dd></div>
+      <div><dt>SCREENSHOT_RETENTION_DAYS</dt><dd>{{if gt .retention.ScreenshotDays 0}}{{.retention.ScreenshotDays}} {{t .Lang "set.ret.days"}}{{else}}{{t .Lang "set.ret.forever"}}{{end}}</dd></div>
+      <div><dt>AUDIT_RETENTION_DAYS</dt><dd>{{if gt .retention.AuditDays 0}}{{.retention.AuditDays}} {{t .Lang "set.ret.days"}}{{else}}{{t .Lang "set.ret.forever"}}{{end}}</dd></div>
+      <div><dt>{{t .Lang "set.ret.kept"}}</dt><dd><span class="kh-badge info">{{t .Lang "results.case.inv"}}</span> <span class="kh-badge ok">{{t .Lang "results.case.ok"}}</span></dd></div>
+    </dl>
+    {{if .retention.Enabled}}
+    {{with .retention.Last}}
+    <div class="kh-alert {{if not .OK}}err{{else if .Warn}}warn{{else}}ok{{end}}" id="ret-last" role="status">{{if and .OK (not .Warn)}}{{icon "check"}}{{else}}{{icon "warn"}}{{end}}
+      <div class="min-w-0">
+        <strong>{{if not .OK}}{{t $.Lang "set.ret.lastFail"}}{{else if .Warn}}{{t $.Lang "set.ret.lastWarn"}}{{else}}{{t $.Lang "set.ret.lastOk"}}{{end}}</strong> <time datetime="{{isoTime .At}}">{{formatTime .At}}</time>
+        <div class="st-alert-line">{{t $.Lang "set.ret.cResults"}}: {{index $.retention.Counts "results"}} · {{t $.Lang "set.ret.cShots"}}: {{index $.retention.Counts "screenshots"}} · {{t $.Lang "set.ret.cFiles"}}: {{index $.retention.Counts "files"}} · {{t $.Lang "set.ret.cGraph"}}: {{index $.retention.Counts "graphNodes"}} · {{t $.Lang "set.ret.cKept"}}: {{index $.retention.Counts "keptCases"}}</div>
+        {{if .Warn}}<div class="st-alert-line">{{t $.Lang "set.ret.cFileErrors"}}: {{index $.retention.Counts "fileErrors"}} — {{t $.Lang "set.ret.fileErrHint"}}</div>{{end}}
+        {{if not .OK}}{{if .Message}}<div class="st-alert-line">{{.Message}}</div>{{end}}
+        <div>{{t $.Lang "set.ret.lastSuccess"}}: {{if .LastSuccess.IsZero}}{{t $.Lang "set.bk.never"}}{{else}}<time datetime="{{isoTime .LastSuccess}}">{{formatTime .LastSuccess}}</time>{{end}}</div>{{end}}
+      </div>
+    </div>
+    {{else}}
+    <p class="kh-hint" id="ret-last">{{t .Lang "set.ret.pending"}}</p>
+    {{end}}
+    {{else}}
+    <p class="kh-hint" id="ret-last">{{t .Lang "set.ret.offHint"}} <code>RESULT_RETENTION_DAYS=180</code> · <code>SCREENSHOT_RETENTION_DAYS=90</code></p>
+    {{with .retention.Last}}<p class="kh-hint" id="ret-history">{{t $.Lang "set.ret.history"}}: <time datetime="{{isoTime .At}}">{{formatTime .At}}</time> — {{if .OK}}{{t $.Lang "set.bk.histOk"}}{{else}}{{t $.Lang "set.bk.histFail"}}{{end}}</p>{{end}}
+    {{end}}
   </section>
 
   <div class="int-head kh-section" id="sec-integrations">

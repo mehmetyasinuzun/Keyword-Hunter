@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"keywordhunter-mvp/pkg/backup"
 	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/logger"
 	"keywordhunter-mvp/pkg/scraper"
@@ -20,6 +21,16 @@ import (
 
 func main() {
 	envFilePath := resolveEnvFilePath()
+
+	// Alt komutlar: keywordhunter backup [-out f.db] | verify-db f.db
+	// (sunucuyu başlatmadan çalışıp çıkar; bkz. pkg/backup/cli.go).
+	if len(os.Args) > 1 && backup.Commands[os.Args[1]] {
+		if err := backup.RunCommand(os.Args[1], os.Args[2:], web.Version, envFilePath, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "keywordhunter %s: %v\n", os.Args[1], err)
+			os.Exit(1)
+		}
+		return
+	}
 	appConfig, err := config.Load(envFilePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Konfigürasyon hatası (%s): %v\n", envFilePath, err)
@@ -126,6 +137,13 @@ func main() {
 		AppSecret:          appConfig.AppSecret,
 		AppSecretEphemeral: appSecretEphemeral,
 		Require2FA:         appConfig.Require2FA,
+
+		BackupDir:           appConfig.BackupDir,
+		BackupIntervalHours: appConfig.BackupIntervalHours,
+		BackupKeep:          appConfig.BackupKeep,
+
+		ResultRetentionDays:     appConfig.ResultRetentionDays,
+		ScreenshotRetentionDays: appConfig.ScreenshotRetentionDays,
 	})
 	if err != nil {
 		logger.Error("Web server could not be initialized: %v", err)

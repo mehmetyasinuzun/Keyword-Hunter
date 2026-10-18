@@ -220,6 +220,10 @@ func TestBroadcaster_DeliversAndDropsSlowClients(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("mesaj gelmedi")
 	}
+	// Eşitleme: yayıncı tek döngüdür; bu kayıt ancak yayın turu bittikten sonra
+	// alınır. Aksi hâlde aşağıdaki alıcı, yayıncının engellemeyen gönderimine
+	// yetişip mesajı alabiliyordu (yarış; test ara sıra düşüyordu).
+	b.Register(make(chan string, 1))
 	select {
 	case _, ok := <-slow:
 		if ok {

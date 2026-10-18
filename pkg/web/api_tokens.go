@@ -57,6 +57,9 @@ var tokenForbiddenRoutes = []string{
 	// token ile otomasyona açıktır.
 	"/api/integrations/misp/config",
 	"/api/integrations/misp/test",
+	// Yönetim uçları (veritabanı yedeği: parola özetleri ve şifreli sırlar
+	// içerir) yalnız etkileşimli admin oturumuyla.
+	"/api/admin",
 }
 
 // tokenForbiddenRoute rota kalıbının token ile çağrılamayacağını söyler.

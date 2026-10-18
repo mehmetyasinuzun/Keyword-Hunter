@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"time"
-
-	"keywordhunter-mvp/pkg/logger"
 )
 
 // ─────────────────────────── TAXII akışı (salt okunur) ───────────────────────────
@@ -60,49 +58,6 @@ const feedNow = `strftime('%Y-%m-%d %H:%M:%f', 'now')`
 // (ilk "?") eskisinden yüksekse feed_at şimdiye ilerler. SET ifadeleri satırın
 // ESKİ değerlerini görür; bu yüzden "criticality" güncelleme öncesidir.
 const feedBumpOnCriticalityRaise = `feed_at = CASE WHEN ? > criticality THEN ` + feedNow + ` ELSE feed_at END`
-
-// EnsureFeedSchema TAXII akışının feed_at sütununu, ekleme tetikleyicisini ve
-// sıralama indeksini kurar (idempotent). Eski kayıtlar created_at ile doldurulur.
-func (db *DB) EnsureFeedSchema() error {
-	if !db.columnExists("search_results", "feed_at") {
-		if _, err := db.conn.Exec(`ALTER TABLE search_results ADD COLUMN feed_at DATETIME`); err != nil {
-			return err
-		}
-	}
-	if _, err := db.conn.Exec(`UPDATE search_results SET feed_at = COALESCE(created_at, CURRENT_TIMESTAMP) WHERE feed_at IS NULL`); err != nil {
-		return err
-	}
-	// Yeni bulgu: feed_at = created_at (INSERT'ler bu sütunu bilmek zorunda değil).
-	if _, err := db.conn.Exec(`
-		CREATE TRIGGER IF NOT EXISTS trg_search_results_feed_at AFTER INSERT ON search_results
-		FOR EACH ROW WHEN NEW.feed_at IS NULL
-		BEGIN
-			UPDATE search_results SET feed_at = COALESCE(NEW.created_at, CURRENT_TIMESTAMP) WHERE id = NEW.id;
-		END`); err != nil {
-		return err
-	}
-	_, _ = db.conn.Exec(`DROP INDEX IF EXISTS idx_search_results_feed`)
-	if _, err := db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_search_results_feed_at ON search_results(julianday(feed_at), id)`); err != nil {
-		logger.Warn("TAXII akış indeksi oluşturulamadı (akış indekssiz çalışır): %v", err)
-	}
-	return nil
-}
-
-// columnExists tabloda sütunun olup olmadığı (PRAGMA table_info).
-func (db *DB) columnExists(table, column string) bool {
-	rows, err := db.conn.Query(`SELECT name FROM pragma_table_info(?)`, table)
-	if err != nil {
-		return false
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if rows.Scan(&name) == nil && strings.EqualFold(name, column) {
-			return true
-		}
-	}
-	return false
-}
 
 // UpdateCriticality analistin elle verdiği kritiklik ve kategoriyi yazar;
 // kritiklik yükseldiyse bulgu TAXII akışına yeniden girer (feed_at). Kayıt

@@ -41,32 +41,6 @@ func DefaultMISPConfig() MISPConfig {
 	return MISPConfig{VerifyTLS: true, Tags: DefaultMISPTags, AutoMinCriticality: DefaultMISPAutoMinCrit}
 }
 
-// EnsureMISPSchema MISP tablolarını oluşturur (idempotent).
-func (db *DB) EnsureMISPSchema() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS misp_config (
-			id INTEGER PRIMARY KEY CHECK (id = 1),
-			base_url TEXT NOT NULL DEFAULT '',
-			api_key_enc TEXT NOT NULL DEFAULT '',
-			verify_tls INTEGER NOT NULL DEFAULT 1,
-			distribution INTEGER NOT NULL DEFAULT 0,
-			tags TEXT NOT NULL DEFAULT '` + DefaultMISPTags + `',
-			allow_private INTEGER NOT NULL DEFAULT 0,
-			auto_push INTEGER NOT NULL DEFAULT 0,
-			auto_min_criticality INTEGER NOT NULL DEFAULT 4,
-			auto_since DATETIME,
-			updated_at DATETIME,
-			updated_by TEXT NOT NULL DEFAULT ''
-		);
-		CREATE TABLE IF NOT EXISTS misp_pushed (
-			result_id INTEGER PRIMARY KEY REFERENCES search_results(id) ON DELETE CASCADE,
-			event_id TEXT NOT NULL DEFAULT '',
-			pushed_at DATETIME NOT NULL
-		);
-	`)
-	return err
-}
-
 // GetMISPConfig kayıtlı ayarları döndürür; kayıt yoksa varsayılanlar (hata değil).
 func (db *DB) GetMISPConfig() (MISPConfig, error) {
 	cfg := DefaultMISPConfig()

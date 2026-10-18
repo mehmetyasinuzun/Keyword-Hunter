@@ -178,7 +178,7 @@ func TestFeedAt_AdvancesOnNewIOCsAndCriticalityRaise(t *testing.T) {
 	if _, err := db.conn.Exec(`UPDATE search_results SET feed_at = NULL WHERE id = ?`, ids[0]); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.EnsureFeedSchema(); err != nil {
+	if err := migrateBaseline(db.conn); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.conn.QueryRow(`SELECT feed_at = created_at FROM search_results WHERE id = ?`, ids[0]).Scan(&same); err != nil || !same {

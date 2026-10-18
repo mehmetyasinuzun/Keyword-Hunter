@@ -48,6 +48,102 @@
   - Motor sonuçlarında URL'den türeyen başlık ve URL sınırsızdı (saldırgan motor sayfası): başlık 150
     rune, URL 2048 bayt. Etiket ayrıştırması (`splitTags`) karesel dize birleştirmeden kurtarıldı.
 
+### Sürümlü şema migrasyonları
+- Şema artık `PRAGMA user_version` ile sürümlenir: `pkg/storage/migrate.go`'da sıralı, yalnız-ekleme
+  migrasyon listesi. Her adım kendi işleminde (`BEGIN IMMEDIATE`) çalışır ve sürüm aynı işlemde artar;
+  başarısız adım tümüyle geri alınır. Aynı dosyayı aynı anda açan iki süreç adımı bir kez uygular.
+- Migrasyon 1 (`baseline`): v0.16'nın boş veritabanında ürettiği şemanın birebir aynısı (tablolar,
+  indeksler, denetim ve TAXII tetikleyicileri). Dağınık `CREATE … IF NOT EXISTS` + hatası yutulan
+  `ALTER TABLE … ADD COLUMN` çağrıları (`db.go`, `engine_stats.go`, `results.go`, `screenshots.go`,
+  `taxii.go`, kullanıcı/2FA/token/denetim/MISP şemaları) kaldırıldı.
+- Sürümsüz eski veritabanları (v0.17 öncesi) açılışta **benimsenir**: eksik sütunlar yalnız yoksa
+  eklenir, eksik indeks/tetikleyiciler kurulur, graf kök düğümü yinelenenleri birleştirilir (tek satırda
+  toplanır, çocukları korunan satıra bağlanır — silinen tek satırlar bunlardır), `feed_at` geri
+  doldurulur, eski zaman damgaları normalize edilir. v0.3/v0.4'te oluşturulmuş veritabanlarında
+  `search_results` taban sütun sırasıyla yeniden kurulur (`auto_tags` orada `created_at`'in arkasındaydı);
+  id'ler ve AUTOINCREMENT sayacı korunur, böylece her benimsenen veritabanı yeni veritabanıyla birebir aynı
+  şemaya ulaşır. `audit_events`'e dokunulmaz, hash zinciri geçerli kalır.
+- Başka tabloların başvurduğu bir tabloyu yeniden kuran adım için `foreignKeysOff` bayrağı: yabancı
+  anahtarlar `BEGIN`'den önce kapatılır (açıkken `DROP TABLE` etiket, IOC, MISP, 2FA ve kurtarma kodu
+  satırlarını `ON DELETE CASCADE` ile sessizce silerdi), `COMMIT`'ten önce `foreign_key_check` yeni ihlal
+  ararsa adım geri alınır, sonra anahtarlar yeniden açılır. Taban adım bu bayrakla çalışır;
+  `docs/MIGRATIONS.md` buna göre düzeltildi.
+- Migrasyon 3 (`search_results.last_seen_at`) ve 4 (`screenshots(file_path)` indeksi) saklama süresi için.
+- Aynı yeni dosyayı aynı anda ilk kez açan iki süreç WAL'a geçişte `SQLITE_BUSY` alabiliyordu (meşgul
+  işleyici bu kilitlenmede beklemez); ilk bağlantı yalnız bu hata için kısa aralıklarla yeniden denenir.
+- **Sürüm düşürme koruması:** bu ikilinin bildiğinden yeni bir şema sürümüne sahip veritabanı açılmaz
+  (`storage.ErrSchemaTooNew`, açık hata iletisi); dosyaya dokunulmaz.
+- Testler: taban şema ile v0.16 şemasının birebir eşitliği; v0.4, v0.9 ve v0.16 şemalarından (git
+  geçmişinden dökülmüş `testdata/legacy_v*.sql` fikstürleri) ve v0.4'te doğup v0.16'ya yükseltilmiş bir
+  veritabanından benimsenen veritabanının yeni veritabanıyla aynı şemaya (normalize `sqlite_master` +
+  sütun listeleri) ulaşması, satırların (çocuk satırlar dahil) ve denetim zinciri doğrulamasının
+  korunması; `foreignKeysOff` adımında üst tablo yeniden kurulurken çocukların korunması ve yeni ihlalin
+  geri alınması; yeni sürümün reddi; başarısız adımın geri alınması; idempotent yeniden açılış; eşzamanlı
+  açılış. Yeni migrasyon ekleme rehberi: `docs/MIGRATIONS.md`.
+- **Yükseltme notu (v0.16 → v0.17):** ilk açılış veritabanını tek yönlü benimser (eski ikiliye dönüş
+  yoktur). Yeni ikiliyi ilk kez başlatmadan önce onunla migrasyonsuz bir yedek alın:
+  `keywordhunter backup -out v0.17-oncesi.db` (Docker: `docker compose run --rm --no-deps app
+  /app/keywordhunter backup -out /data/v0.17-oncesi.db`).
+
+### Yedekleme ve geri yükleme
+- Çevrimiçi, tutarlı yedek: SQLite `VACUUM INTO` ayrı ve kısa ömürlü bir bağlantıyla (uygulamanın tek bağlantılı
+  havuzu ve yazarlar beklemez); her yedek `PRAGMA integrity_check` ile doğrulanır. Yedekten oturumlar
+  `secure_delete` ile silinir (oturum kimlikleri taşıyıcı kimlik bilgisidir); temizlik `file:` URI ve `mode=rw`
+  ile tam olarak yedek dosyasına uygulanır (yolda `?` olsa da), son dosyada yeniden sayılarak doğrulanır ve
+  doğrulanamazsa yedek başarısız sayılır. Site profili çerezleri ve webhook adresleri yedekte açık metindir;
+  README bunu açıkça belirtir.
+- Ayarlar → **Yedekleme** (yalnız admin): zamanlanmış yedeğin durumu (dizin, aralık, tutulan sayı, dizindeki yedek
+  sayısı, son çalışma/son başarı ve hata) ve **Şimdi yedek indir** düğmesi (`data-action`, CSP uyumlu, TR/EN).
+  `POST /api/admin/backup` veritabanının yanında (aynı birim) geçici bir kopya üretir, adını siler ve
+  `keywordhunter-<sürüm>-<UTC zaman>.db` olarak akıtır; CSRF + Fetch Metadata korumalı, yalnız etkileşimli admin
+  oturumu (`/api/admin` API token'a kapalı). Sunucunun 5 dk yazma süresi bu uç için üretimde 30 dk'ya, aktarımda
+  boyuta göre uzatılır. `backup.download` aktarımdan sonra denetlenir (dosya adı, boyut, gönderilen bayt,
+  tamamlandı mı; yarıda kesilen indirme başarısız). Aynı anda tek yedek üretilir (`409 backup_busy`).
+- Zamanlanmış yedek: `BACKUP_DIR` (boş = kapalı), `BACKUP_INTERVAL_HOURS` (24), `BACKUP_KEEP` (7). Atomik yazım
+  (0600 geçici dosya → doğrulama → fsync → yeniden adlandırma), en eskiden döndürme (yalnız bu adlandırmadaki
+  dosyalar; az önce yazılan yedek saat geri alınmış olsa bile silinmez, ileri tarihli yedekler loglanır), son
+  çalışma `maintenance_runs` tablosunda (şema migrasyonu 2), sonuç loglanır ve `backup.scheduled` olarak
+  denetlenir; başarısızlıkta 1 saat sonra yeniden dener, yeniden başlatma aralığı sıfırlamaz (gelecekte görünen son
+  başarı en çok bir aralık erteler). Kapanış süren yedeği iptal edip bekler (geçici dosya silinir); öldürülen
+  süreçlerin `.keywordhunter-backup-*.tmp` artıkları açılışta, indirmede ve her zamanlanmış yedekte süpürülür.
+  Ayarlar ve log mutlak dizini gösterir; Docker giriş betiği şablondaki göreli `BACKUP_DIR=backups`'ı kalıcı
+  `/data/backups`'a taşır (aksi hâlde kapsayıcı yeniden oluşturulunca silinen katmana yazılırdı).
+- Ayarlar durumu yanıltmaz: başarısız yedekte yazılmamış dosya adı gösterilmez; zamanlanmış yedek kapatılınca
+  açma ipucu görünür, önceki çalışma geçmiş olarak etiketlenir.
+- Komut satırı: `keywordhunter backup [-out f.db] [-db kaynak.db]` (migrasyonsuz, var olan dosyanın üzerine yazmaz,
+  kaynağı salt okunur açar: günlük kipini değiştirmez, arşivlenmiş bir yedeğin kopyasını alırken dosyaya yazmaz)
+  ve `keywordhunter verify-db [-json] f.db` (integrity_check + denetim zinciri + şema sürümü; sorun → çıkış kodu 1).
+- README (TR/EN): Yedekleme ve geri yükleme adımları (Docker'da durmuş uygulama için `docker compose run`
+  komutları, eski veritabanının WAL'ıyla birlikte kenara alınması, CLI çıktısının Türkçe olduğu), v0.16'dan
+  yükseltme notu, `APP_SECRET`'ın yedekten ayrı saklanması ve farklı `APP_SECRET` ile geri yüklemede 2FA/MISP
+  sırlarının durumu (kurtarma kodu / admin sıfırlaması).
+
+### Saklama süresi: bulgular ve ekran görüntüleri
+- `RESULT_RETENTION_DAYS` (varsayılan `0` = süresiz): günlük temizlik, bir aramanın **son döndürdüğü** andan bu
+  yana süresi dolan bulguları siler (`last_seen_at`; aramalarda hâlâ çıkan bulgu silinip sonra "yeni" olarak geri
+  gelmez, uyarı/MISP/TAXII yinelenmez); vaka durumu **İnceleniyor** (`investigating`) ya da **Doğrulandı**
+  (`confirmed`) olanlar tutulur. Bağlı satırlar tutarlı gider: etiketler, IOC'ler ve MISP gönderim kayıtları
+  (yabancı anahtar, `ON DELETE CASCADE`), URL'nin graf kökü ve tüm derinleştirme alt ağacı, o URL'nin ekran
+  görüntüsü satırları ve PNG dosyaları — yalnız URL'yi kullanan başka bulgu kalmadıysa ve URL izleme listesinde
+  değilse. 500'lük işlemlerle (tek yazar uzun kilitlenmez; dosya yolu araması indeksli, karesel tarama yok).
+- Silme güvenli: temizlik `PRAGMA secure_delete` açık ayrı bir bağlantıda yapılır, uygulama bağlantısı
+  `secure_delete=FAST` kullanır ve çalışma sonunda WAL kesilir; silinen bulgu metni veritabanı dosyasında okunur
+  kalmaz. Önceki yedekler etkilenmez (README).
+- `SCREENSHOT_RETENTION_DAYS` (varsayılan `0`): daha eski ekran görüntüsü satırları ve dosyaları silinir;
+  İnceleniyor/Doğrulandı bir vakanın URL'sine ait görüntüler (kanıt) tutulur. Dosyalar yalnız ekran görüntüsü
+  dizininde, yalnız dosya adıyla ve her parti işlendikten hemen sonra silinir (yarıda kesilen çalışma sahipsiz PNG
+  bırakmaz); kapanış kalan partileri atlar.
+- Her çalışma loglanır, `retention.purge` olarak denetlenir (yalnız sayımlar: bulgu, etiket, IOC, graf düğümü, ekran
+  görüntüsü, dosya, tutulan vaka) ve son durumu `maintenance_runs`'a yazılır. Ayarlar → **Saklama süresi** (admin)
+  etkin politikayı (`AUDIT_RETENTION_DAYS` dahil), her zaman tutulan vaka durumlarını ve son temizliği gösterir;
+  silinemeyen dosyalar uyarı olarak, başarısızlıkta son başarılı temizlik görünür. Yeniden başlatma günlük aralığı
+  sıfırlamaz.
+- Testler sahte saatle: eski/yeni ayrımı, son görülmeye göre yaş (yeniden görülen bulgu kalır, bilinen URL ve MISP
+  kaydı korunur), korunan vaka durumları, diskten silinen dosyalar (parti başına), iptal, silinen metnin dosyada
+  kalmaması, indeksli sorgu planı, bağlı satırlar ve graf alt ağacı (yabancı anahtar ihlali yok), paylaşılan URL ve
+  izleme listesi istisnaları, sayımlar, `0` ile kapalı; bakım işçilerinin kısa gecikmeyle kendiliğinden çalışması ve
+  kapanışta durması.
+
 ## v0.16.0 — 2026-10-17 · "Sentinel"
 
 Ekip ve entegrasyon sürümü: denetim kaydı, kişisel API token'ları, iki adımlı

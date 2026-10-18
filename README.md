@@ -140,6 +140,11 @@ değiştiğinde kullanıcı özelleştirmeleri korunur.
 | `APP_SECRET` | otomatik | Uygulama ana sırrı (64 hex = 32 bayt, ör. `openssl rand -hex 32`). 2FA (TOTP) sırları bundan türetilen anahtarla **AES-256-GCM** ile şifreli saklanır. Yoksa ilk açılışta üretilip etkin `.env`'e yazılır (değer loglanmaz). **Yedekleyin:** kaybolur ya da değişirse kayıtlı 2FA sırları çözülemez; kullanıcılar kurtarma kodlarıyla girebilir, adminin `/users` ekranından 2FA'larını sıfırlaması gerekir |
 | `REQUIRE_2FA` | `none` | İki adımlı doğrulama zorunluluğu: `none` · `admins` (yalnız admin rolü) · `all`. Kayıtsız kullanıcı yalnız **Hesabım**'daki 2FA kurulumuna erişir; API token'ları 403 alır. Etkinken `users` dışı `.env` yönetici girişi reddedilir ve kalıcı `APP_SECRET` şarttır |
 | `AUDIT_RETENTION_DAYS` | `365` | Denetim kaydı (hash zincirli) saklama süresi, gün (`0` = süresiz). Budamada zincir bir çapayla doğrulanabilir kalır |
+| `BACKUP_DIR` | — (kapalı) | Zamanlanmış yedek dizini (Docker: `/data/backups`; giriş betiği şablondaki göreli `backups`'ı oraya taşır). Göreli yol çalışma dizinine göre çözülür; Ayarlar mutlak yolu gösterir. Boşsa zamanlanmış yedek kapalıdır; anlık indirme ve `keywordhunter backup` yine çalışır. Bkz. [Yedekleme](#-yedekleme-ve-geri-yükleme) |
+| `BACKUP_INTERVAL_HOURS` | `24` | Zamanlanmış yedek aralığı, saat (1–8760) |
+| `BACKUP_KEEP` | `7` | Dizinde tutulacak en yeni yedek sayısı (1–1000); eskiler silinir |
+| `RESULT_RETENTION_DAYS` | `0` (süresiz) | Bulguların saklanacağı gün; bir aramanın bulguyu **son döndürdüğü** andan sayılır (hiç yeniden görülmediyse ilk görülmeden). Günde bir, bu süreden uzun süredir görülmeyen bulgular etiket, IOC, MISP kaydı, graf düğümü (derinleştirme alt ağacı dahil) ve ekran görüntüleriyle (dosya dahil) silinir; vaka durumu **İnceleniyor** ya da **Doğrulandı** olanlar tutulur. Bkz. [Saklama süresi](#️-saklama-süresi) |
+| `SCREENSHOT_RETENTION_DAYS` | `0` (süresiz) | Ekran görüntülerinin (satır + PNG) saklanacağı gün; İnceleniyor/Doğrulandı bir vakanın URL'sine ait görüntüler (kanıt) tutulur |
 | `WATCHLIST_INTERVAL_MIN` | `15` | İzleme kontrol aralığı |
 | `WATCHLIST_SEED` | `none` | `turkey` = gömülü Türk onion listesi; dosya yolu = JSON seed |
 | `SCREENSHOT_DIR` | `/data/screenshots` (Docker) / `screenshots` | PNG çıktı dizini |
@@ -271,6 +276,100 @@ curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/
 - **`APP_SECRET`:** sırlar bu anahtardan HKDF-SHA256 ile türetilen AES-256-GCM anahtarıyla, kullanıcıya bağlı (AAD) şifrelenir. Kaybolursa TOTP kodları doğrulanamaz: kullanıcılar kurtarma kodlarıyla girip 2FA'yı kapatıp yeniden kurabilir; kodu olmayanlar için admin sıfırlaması gerekir. Üretilen sır `.env`'in sonuna tek satır olarak eklenir; dosyadaki yorumlar ve diğer satırlar korunur. `.env` yazılamıyorsa sır o çalıştırmayla sınırlı kalır ve 2FA kaydı kapatılır (loga yazılır).
 - **Uçlar** (yalnız etkileşimli oturum; API token ile çağrılamaz): `GET /api/me/2fa` · `POST /api/me/2fa/setup` → `{qrDataURI, secret, otpauthURI}` · `POST /api/me/2fa/enable {password, code}` → `{recoveryCodes}` · `POST /api/me/2fa/disable {password, code}` · `POST /api/me/2fa/recovery-codes {password, code}` · `POST /api/users/:id/2fa/reset` (admin).
 - **Denetim:** `2fa.enable`, `2fa.disable`, `2fa.recovery.regenerate`, `2fa.reset_by_admin`, `auth.2fa.challenge`, `auth.2fa.success`, `auth.2fa.failure` (neden: `bad_code`, `replay`…); `auth.login.success` olayı `mfa` yöntemini taşır. Sır ya da kod asla kayda girmez.
+
+## 💾 Yedekleme ve geri yükleme
+
+Yedek, SQLite `VACUUM INTO` ile **uygulama çalışırken** alınan tutarlı bir kopyadır (WAL içeriği dahil; yazarlar
+beklemez) ve her yedek `PRAGMA integrity_check` ile doğrulanır. Tek dosyadır, `-wal`/`-shm` gerektirmez.
+
+- **Anlık (arayüz):** Ayarlar → Yedekleme → **Şimdi yedek indir** (yalnız admin, etkileşimli oturum + CSRF; API
+  token ile çağrılamaz) → `POST /api/admin/backup` → `keywordhunter-<sürüm>-<UTC zaman>.db`. Kopya veritabanının yanında
+  (aynı birimde) hazırlanır ve akıtılmadan önce adı silinir. Denetim `backup.download` olarak aktarımdan **sonra**
+  yazılır: dosya adı, toplam boyut, gerçekten gönderilen bayt ve tamamlanıp tamamlanmadığı (yarıda kesilen indirme
+  başarısız kaydedilir). Tarayıcı dosyanın tamamını kaydetmeden önce bellekte tutar: çok GB'lık veritabanlarında komut
+  satırını ya da zamanlanmış yedeği kullanın.
+- **Zamanlanmış:** `BACKUP_DIR` tanımlıysa her `BACKUP_INTERVAL_HOURS` saatte bir dizine **atomik** yazılır (0600 izinli
+  geçici dosya → `VACUUM INTO` → `integrity_check` → fsync → yeniden adlandırma); en yeni `BACKUP_KEEP` yedek tutulur,
+  eskiler silinir (dizindeki başka dosyalara dokunulmaz; saat geri alınmış olsa bile az önce yazılan yedek asla
+  silinmez). İlk yedek açılıştan ~2 dk sonra ya da son başarılı yedekten en çok bir aralık sonra alınır; başarısızlıkta
+  1 saat sonra yeniden denenir. Kapanışta süren yedek iptal edilir ve geçici dosyası silinir; öldürülen bir sürecin
+  artıkları (`.keywordhunter-backup-*.tmp`, 1 saatten eski) sonraki çalışmada süpürülür. Sonuç loglanır, denetlenir
+  (`backup.scheduled`) ve Ayarlar → Yedekleme'de görünür.
+- **Komut satırı** (sunucuyu başlatmaz, migrasyon çalıştırmaz, kaynağı **salt okunur** açar — baytları ve günlük kipi
+  değişmez; durmuş ve WAL kipindeki bir veritabanında SQLite boş `-wal`/`-shm` yan dosyaları bırakabilir, bu yüzden
+  uygulamanın kullanıcısıyla çalıştırın). Rapor Türkçedir; betikler için `-json` kullanın:
+
+```bash
+keywordhunter backup -out /yedek/kh.db          # kaynak: DB_PATH (ortam → .env); -db ile değiştirilebilir
+keywordhunter verify-db /yedek/kh.db            # integrity_check + denetim zinciri + şema sürümü; sorun → çıkış kodu 1
+keywordhunter verify-db -json /yedek/kh.db
+# Docker, uygulama çalışırken:
+docker compose exec -u kh app /app/keywordhunter backup -out /data/elle-yedek.db
+# Docker, uygulama durmuşken (giriş betiği kh kullanıcısına geçer):
+docker compose run --rm --no-deps app /app/keywordhunter verify-db /data/backups/keywordhunter-0.17.0-20261017T030000Z.db
+```
+
+**Yedekte ne var, ne yok:** tüm tablolar (bulgular, IOC'ler, vakalar, kullanıcılar, denetim kaydı, ayarlar) var;
+**oturumlar yok** (oturum kimlikleri taşıyıcı kimlik bilgisidir; geri yüklemeden sonra herkes yeniden giriş yapar;
+silme son dosyada doğrulanır, oturum taşıyan yedek başarısız sayılır). Parolalar bcrypt, API token'ları SHA-256 özeti,
+2FA ve MISP sırları `APP_SECRET` ile şifrelidir. **Açık metin olanlar** (geri yüklemeden sonra çalışmaları için):
+**site profili çerezleri** (`site_profiles.cookies` — izlenen forum/marketlerdeki oturumlarınız) ve **webhook
+adresleri** (genel uyarı ve zamanlanmış aramalar; Slack/Discord/Teams yol belirteçleri). Sızan bir yedek bu oturumları
+ve webhook belirteçlerini `APP_SECRET` olmadan da açığa çıkarır: yedekleri erişimi kısıtlı ve şifreli saklayın, bir
+yedek sızarsa bu çerezleri/webhook'ları yenileyin. Ekran görüntüsü PNG'leri (`SCREENSHOT_DIR`) veritabanında değil
+diskte durur; onları dosya olarak ayrıca yedekleyin.
+
+> ⚠️ **`APP_SECRET` yedekte YOKTUR ve asla yedeğin içine/yanına konmamalıdır.** Aynı kurulumun `APP_SECRET`'ını
+> (`.env`'deki satır) ayrı ve güvenli bir yerde (ör. parola kasası) saklayın: yedeği ele geçiren biri sırrı da
+> bulursa şifreli 2FA/MISP sırlarını açabilirdi.
+
+### v0.16'dan yükseltme
+
+v0.17 şemayı sürümler (`PRAGMA user_version`) ve eski veritabanını ilk açılışta benimser; sonrasında eski ikiliye
+dönüş yoktur. İlk açılıştan **önce** **yeni** ikiliyle migrasyonsuz bir yedek alın: `keywordhunter backup -out
+v0.17-oncesi.db` (Docker'da yeni imajı çektikten sonra, `up -d`'den önce:
+`docker compose run --rm --no-deps app /app/keywordhunter backup -out /data/v0.17-oncesi.db`).
+
+### Geri yükleme
+
+1. Uygulamayı **durdurun** (`docker compose stop app` ya da Ctrl+C). Çalışan uygulamanın dosyasını değiştirmeyin.
+2. Yedeği doğrulayın: `keywordhunter verify-db yedek.db` → son satır `Sonuç: OK` (Docker'da uygulama durmuşken:
+   `docker compose run --rm --no-deps app /app/keywordhunter verify-db /data/yedek.db`).
+3. Mevcut veritabanını **WAL'ıyla birlikte** kenara alın (temiz olmayan bir kapanıştan sonra `-wal` eski veritabanının
+   işlenmiş işlemlerini taşır; ne kaybolmalı ne de geri yüklenen dosyaya uygulanmalı); `-shm` yeniden kurulabilen bir
+   dizindir: `mv keywordhunter.db keywordhunter.db.eski; [ ! -e keywordhunter.db-wal ] || mv keywordhunter.db-wal keywordhunter.db.eski-wal; rm -f keywordhunter.db-shm`
+4. Yedeği `DB_PATH` adıyla yerine kopyalayın (Docker: `/data/keywordhunter.db`; dosya sahipliğini giriş betiği düzeltir).
+5. `.env`'de **aynı kurulumun `APP_SECRET`'ı** olduğundan emin olun ve uygulamayı başlatın. Daha eski bir sürümün
+   yedeği açılışta otomatik yükseltilir; daha **yeni** bir sürümün yedeğini eski ikili açmayı reddeder (önce ikiliyi
+   güncelleyin).
+
+**`APP_SECRET` farklıysa ya da kaybolduysa:** bulgular, kullanıcılar, parolalar, denetim kaydı ve API token'ları normal
+çalışır; ancak **2FA sırları ve MISP API anahtarı çözülemez**. 2FA'lı kullanıcılar **kurtarma kodlarıyla** girip
+Hesabım'dan 2FA'yı kapatıp yeniden kurar; kodu olmayanlar için bir admin `/users` → 2FA sıfırla yapar. MISP anahtarını
+Ayarlar → MISP'ten yeniden girin. Tek admin kilitli kaldıysa (kurtarma kodu da yoksa) son çare, uygulama durmuşken
+(imajda `sqlite3` yoktur; bağlanan `./data/keywordhunter.db` üzerinde ana makinede çalıştırın):
+`sqlite3 keywordhunter.db "DELETE FROM user_recovery_codes WHERE user_id=(SELECT id FROM users WHERE username='admin'); DELETE FROM user_2fa WHERE user_id=(SELECT id FROM users WHERE username='admin');"`
+ve girişten sonra 2FA'yı yeniden kurun.
+
+## 🗑️ Saklama süresi
+
+`RESULT_RETENTION_DAYS` ve `SCREENSHOT_RETENTION_DAYS` (varsayılan `0` = süresiz; bkz. yapılandırma tablosu) günde bir
+uygulanır:
+
+- **Hâlâ çıkan bulgular silinmez:** bilinen bir bulguyu döndüren her arama onun son görülme zamanını yeniler; yayında
+  olan bir sayfa silinip sonra "yeni" olarak geri gelmez (webhook uyarısı, MISP gönderimi ya da TAXII yayını
+  yinelenmez). Süreden uzun süre görünmeyip yeniden çıkan bulgu yeniden yeni sayılır. Yalnız İnceleniyor/Doğrulandı
+  vakaları muaftır — artık görünmeyen *Elendi* (dismissed) bulgu da diğerleri gibi silinir.
+- Graf düğümü ve ekran görüntüsü bir bulguyla birlikte yalnız o URL'yi kullanan başka bulgu kalmadıysa silinir; izleme
+  listesindeki URL'lerin görüntülerine yalnız `SCREENSHOT_RETENTION_DAYS` uygulanır. Ekran görüntüsü dosyaları her 500
+  satırlık partiden hemen sonra silinir (yarıda kesilen çalışma sahipsiz PNG bırakmaz); silinemeyen dosyalar Ayarlar →
+  Saklama süresi'nde uyarı olarak görünür.
+- Silme **güvenlidir**: temizlik `PRAGMA secure_delete` ile çalışır (uygulama bağlantısı her zaman
+  `secure_delete=FAST`) ve ardından WAL kesilir; silinen metin veritabanı dosyasında okunur kalmaz. **Daha önce alınmış
+  yedekler etkilenmez**: veriler, döndürülüp silinene dek (`BACKUP_KEEP` × `BACKUP_INTERVAL_HOURS`; varsayılan 7 gün)
+  eski yedeklerde kalır — `BACKUP_KEEP`'i buna göre seçin.
+- Her çalışma loglanır ve `retention.purge` olarak (yalnız sayımlarla) denetlenir; etkin politika
+  (`AUDIT_RETENTION_DAYS` dahil) ve son çalışma Ayarlar → Saklama süresi'nde (admin) görünür.
 
 ## 🧑‍💻 Geliştirme
 

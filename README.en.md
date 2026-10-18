@@ -160,6 +160,106 @@ Enable it under **My Account → Two-factor authentication** (`/account#security
 - **Endpoints** (interactive session only, never with an API token): `GET /api/me/2fa`, `POST /api/me/2fa/setup` → `{qrDataURI, secret, otpauthURI}`, `POST /api/me/2fa/enable {password, code}` → `{recoveryCodes}`, `POST /api/me/2fa/disable {password, code}`, `POST /api/me/2fa/recovery-codes {password, code}`, `POST /api/users/:id/2fa/reset` (admin).
 - **Audit:** `2fa.enable`, `2fa.disable`, `2fa.recovery.regenerate`, `2fa.reset_by_admin`, `auth.2fa.challenge`, `auth.2fa.success`, `auth.2fa.failure` (reason `bad_code`, `replay`, …); `auth.login.success` records the `mfa` method. Secrets and codes are never logged.
 
+## 💾 Backup & restore
+
+A backup is a consistent copy taken with SQLite `VACUUM INTO` **while the app runs** (WAL content included, writers are
+not blocked) and every backup is verified with `PRAGMA integrity_check`. It is a single file (no `-wal`/`-shm`).
+
+| Variable | Default | Description |
+|---|---|---|
+| `BACKUP_DIR` | — (off) | Directory for scheduled backups (Docker: `/data/backups`; the entrypoint maps the template's relative `backups` there). A relative path is resolved against the working directory; Settings shows the absolute path. Empty = scheduled backups off; on-demand download and `keywordhunter backup` still work |
+| `BACKUP_INTERVAL_HOURS` | `24` | Scheduled backup interval in hours (1–8760) |
+| `BACKUP_KEEP` | `7` | Newest backups kept in the directory (1–1000); older ones are deleted |
+
+- **On demand (UI):** Settings → Backup → **Download backup now** (admin only, interactive session + CSRF; not callable
+  with an API token) → `POST /api/admin/backup` → `keywordhunter-<version>-<UTC timestamp>.db`. The copy is staged next to
+  the database (same volume) and its name is unlinked before streaming. Audited as `backup.download` **after** the
+  transfer: file name, total size, bytes actually sent and whether it completed (an interrupted download is recorded as
+  failed). The browser holds the whole file in memory before saving it: for multi-GB databases use the command line or
+  scheduled backups instead.
+- **Scheduled:** with `BACKUP_DIR` set, a backup is written **atomically** every `BACKUP_INTERVAL_HOURS` (0600 temp file →
+  `VACUUM INTO` → `integrity_check` → fsync → rename); the newest `BACKUP_KEEP` are kept, older ones deleted (other files
+  in the directory are never touched; the backup just written is never rotated away, even if the clock was set back).
+  The first run is ~2 min after startup, or at most one interval after the last successful backup; a failure is
+  retried after 1 hour. On shutdown a running backup is cancelled and its temp file removed; leftovers of a killed
+  process (`.keywordhunter-backup-*.tmp`, older than 1 hour) are swept on the next run. Results are logged, audited
+  (`backup.scheduled`) and shown under Settings → Backup.
+- **Command line** (does not start the server, runs no migrations, opens the source **read-only** — its bytes and
+  journal mode are not changed; for a stopped database in WAL mode SQLite may leave empty `-wal`/`-shm` side files, so
+  run it as the app's user). The report is printed in Turkish (`Sonuç: OK` = result OK); use `-json` for scripts:
+
+```bash
+keywordhunter backup -out /backups/kh.db        # source: DB_PATH (environment → .env); override with -db
+keywordhunter verify-db /backups/kh.db          # integrity_check + audit chain + schema version; problems → exit code 1
+keywordhunter verify-db -json /backups/kh.db
+# Docker, app running:
+docker compose exec -u kh app /app/keywordhunter backup -out /data/manual-backup.db
+# Docker, app stopped (the entrypoint drops to the kh user):
+docker compose run --rm --no-deps app /app/keywordhunter verify-db /data/backups/keywordhunter-0.17.0-20261017T030000Z.db
+```
+
+**What is (not) included:** every table (findings, IOCs, cases, users, audit log, settings); **sessions are removed**
+(session IDs are bearer credentials — everyone signs in again after a restore; the removal is verified on the final
+file and a backup that still holds a session is failed). Passwords are bcrypt hashes, API tokens SHA-256 digests, 2FA
+and MISP secrets are encrypted with `APP_SECRET`. **In plaintext** (needed to work after a restore): **site-profile
+cookies** (`site_profiles.cookies` — your sessions on monitored forums/markets) and **webhook URLs** (global alert and
+per scheduled search; Slack/Discord/Teams path tokens). A leaked backup therefore exposes those sessions and webhook
+tokens without `APP_SECRET`: keep backups access-restricted and encrypted, and rotate those cookies/webhooks if a backup
+leaks. Screenshot PNGs (`SCREENSHOT_DIR`) live on disk, not in the database; back them up as files.
+
+> ⚠️ **`APP_SECRET` is NOT in the backup and must never be stored inside or next to it.** Keep the deployment's
+> `APP_SECRET` (the `.env` line) separately in a safe place (e.g. a password vault): anyone holding both could decrypt
+> the 2FA/MISP secrets.
+
+### Upgrading from v0.16
+
+v0.17 versions the schema (`PRAGMA user_version`) and adopts an older database on its first start; there is no way
+back to an older binary afterwards. **Before** the first start, take a migration-free backup with the **new** binary:
+`keywordhunter backup -out pre-v0.17.db` (Docker, after pulling the new image and before `up -d`:
+`docker compose run --rm --no-deps app /app/keywordhunter backup -out /data/pre-v0.17.db`).
+
+### Restore
+
+1. **Stop** the app (`docker compose stop app` or Ctrl+C). Never replace the file under a running app.
+2. Verify the backup: `keywordhunter verify-db backup.db` → last line `Sonuç: OK` (Docker, with the app stopped:
+   `docker compose run --rm --no-deps app /app/keywordhunter verify-db /data/backup.db`).
+3. Move the current database aside **together with its WAL** (after an unclean stop the `-wal` holds committed
+   transactions of the old database; it must neither be lost nor applied to the restored file); the `-shm` is a
+   rebuildable index: `mv keywordhunter.db keywordhunter.db.old; [ ! -e keywordhunter.db-wal ] || mv keywordhunter.db-wal keywordhunter.db.old-wal; rm -f keywordhunter.db-shm`
+4. Copy the backup to the `DB_PATH` name (Docker: `/data/keywordhunter.db`; the entrypoint fixes ownership).
+5. Make sure `.env` holds **the same deployment's `APP_SECRET`**, then start the app. A backup from an older version is
+   upgraded automatically on startup; a backup from a **newer** version is refused by an older binary (upgrade first).
+
+**If `APP_SECRET` differs or is lost:** findings, users, passwords, the audit log and API tokens work normally, but
+**2FA secrets and the MISP API key cannot be decrypted**. 2FA users sign in with a **recovery code** and re-enrol from
+My Account; for users without codes an admin uses `/users` → reset 2FA. Re-enter the MISP key under Settings → MISP. If
+the only admin is locked out (no recovery code either), as a last resort with the app stopped (the image ships no
+`sqlite3`; run it on the host against the mounted `./data/keywordhunter.db`):
+`sqlite3 keywordhunter.db "DELETE FROM user_recovery_codes WHERE user_id=(SELECT id FROM users WHERE username='admin'); DELETE FROM user_2fa WHERE user_id=(SELECT id FROM users WHERE username='admin');"`
+and re-enrol after signing in.
+
+## 🗑️ Retention
+
+| Variable | Default | Description |
+|---|---|---|
+| `RESULT_RETENTION_DAYS` | `0` (forever) | Days to keep findings, counted from when a search **last returned** the finding (first sighting if never seen again). Once a day, findings no search has returned for longer are deleted together with their tags, IOCs, MISP push records, graph nodes (including the expansion subtree) and screenshots (files included); findings whose case status is **Investigating** or **Confirmed** are kept |
+| `SCREENSHOT_RETENTION_DAYS` | `0` (forever) | Days to keep screenshots (row + PNG); screenshots of an Investigating/Confirmed case's URL (evidence) are kept |
+
+- **Still-listed findings are not purged:** every search that returns a known finding refreshes its last-seen time, so
+  a page that is still live is not deleted and later re-created as "new" (no repeated webhook alert, MISP push or TAXII
+  publication). A finding that disappears for longer than the period and then reappears is treated as new again. Only
+  Investigating/Confirmed cases are exempt — a *Dismissed* finding that stops appearing is deleted like any other.
+- A graph node or screenshot is only removed with a finding when no other finding still uses that URL; screenshots of
+  watchlist URLs are governed by `SCREENSHOT_RETENTION_DAYS` only. Screenshot files are deleted right after each batch
+  of 500 rows, so an interrupted run leaves no orphaned PNGs behind; files that cannot be deleted are shown as a warning
+  under Settings → Retention.
+- Deletion is **secure**: purges run with `PRAGMA secure_delete` (the app connection uses `secure_delete=FAST`
+  throughout) and the WAL is truncated afterwards, so purged text is not left readable in the database file. **Existing
+  backups are not affected**: data stays in earlier backups until they are rotated out (`BACKUP_KEEP` ×
+  `BACKUP_INTERVAL_HOURS`; 7 days by default) — size `BACKUP_KEEP` accordingly.
+- Each run is logged and audited as `retention.purge` (counts only); the active policy (including
+  `AUDIT_RETENTION_DAYS`) and the last run are shown under Settings → Retention (admin).
+
 ## 🧑‍💻 Development
 
 ```bash
