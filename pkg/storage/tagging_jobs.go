@@ -75,6 +75,7 @@ func (db *DB) ListTaggingJobsByStatuses(statuses []string, limit int) ([]Tagging
 	}
 	args = append(args, limit)
 
+	//nolint:gosec // G201: sabit SQL parçaları biçimlenir; değerler parametre
 	query := fmt.Sprintf(`
 		SELECT
 			id, query, total_count, processed_count, success_count, failure_count,

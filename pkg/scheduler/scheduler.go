@@ -172,7 +172,9 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 	}
 
 	// Arama geçmişine ekle
-	s.db.SaveSearchHistory(ss.Query, len(results))
+	if err := s.db.SaveSearchHistory(ss.Query, len(results)); err != nil {
+		logger.Warn("Scheduler: arama geçmişi kaydedilemedi: %v", err)
+	}
 
 	// Scheduled search istatistiklerini güncelle
 	if err := s.db.UpdateScheduledSearchAfterRun(ss.ID, len(results), newCount); err != nil {

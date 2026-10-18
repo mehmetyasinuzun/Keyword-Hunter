@@ -54,7 +54,7 @@ func openDB(t *testing.T, path string) *storage.DB {
 	if err != nil {
 		t.Fatalf("storage.New: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 

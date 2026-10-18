@@ -46,7 +46,7 @@ func iconSVG(name, cls string) template.HTML {
 	if cls != "" {
 		c += " " + cls
 	}
-	return template.HTML(`<svg class="` + template.HTMLEscapeString(c) + `" aria-hidden="true"><use href="#i-` + template.HTMLEscapeString(name) + `"/></svg>`)
+	return template.HTML(`<svg class="` + template.HTMLEscapeString(c) + `" aria-hidden="true"><use href="#i-` + template.HTMLEscapeString(name) + `"/></svg>`) //nolint:gosec // G203: ad ve sınıf HTMLEscapeString ile kaçırılır; şablon sabit
 }
 
 type TagEngine interface {

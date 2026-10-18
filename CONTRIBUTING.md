@@ -24,7 +24,14 @@ go vet ./...
 go test -race -count=1 ./...
 go mod tidy -diff
 for f in $(find pkg/web/static/js -name '*.js' -not -path '*/vendor/*'); do node --check "$f"; done
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...   # 0 issues
+go run github.com/rhysd/actionlint/cmd/actionlint@latest                         # workflow değiştirdiyseniz
 ```
+
+`golangci-lint` yapılandırması `.golangci.yml`'dedir (errcheck, govet, staticcheck, ineffassign, unused,
+bodyclose, gosec, errorlint, misspell, nolintlint). Bulguyu kodda düzeltin; gerçekten yanlış alarm olan bir
+satırda `//nolint:<linter> // <gerekçe>` kullanın (linter adı ve gerekçe zorunludur, nolintlint denetler).
+Bir linter'ı depo genelinde kapatmayın.
 
 `pkg/capture`'ın gerçek tarayıcı testleri (sahte SOCKS5 proxy + sahte .onion;
 Tor gerekmez) yalnız `CHROME_BIN` verildiğinde koşar, aksi halde sessizce atlanır.
@@ -136,6 +143,43 @@ mobil taşma ve axe kontrolleri otomatik kapsar.
 - Kullanıcıya görünen her metin TR + EN katalogda olmalıdır.
 - Dark web'den gelen her metin güvenilmezdir: şablonda otomatik kaçış, JS'de
   `KH.esc` / `textContent`.
+
+## Dal koruması (bakımcılar için)
+
+Aşağıdakiler depoda değil GitHub ayarlarında tutulur; **Settings → Rules → Rulesets** (ya da Settings →
+Branches → Branch protection rules) altında `master` için elle etkinleştirilmelidir:
+
+- **Doğrudan push yok:** değişiklikler PR ile gelir; tüm konuşmalar çözülmüş olmalı. **Onay sayısı:** tek bakımcı
+  varken **0** (PR yazarı kendi PR'ını onaylayamaz; 1 zorunlu onay ve boş bypass listesiyle hiçbir PR birleşemez —
+  zorunlu kontroller ve PR şartı korumayı sağlar). İkinci bakımcı geldiğinde **1 onay** ve "yeni commit gelince
+  eski onaylar düşer" açın.
+- **Zorunlu durum kontrolleri** (iş adlarıyla; "dal güncel olmalı" açık):
+
+  | Workflow | Kontrol adı |
+  |---|---|
+  | CI | `Test & Vet` |
+  | CI | `golangci-lint` |
+  | CI | `govulncheck` |
+  | CI | `E2E (Playwright + axe)` |
+  | CI | `Cross-compile matrix (linux, amd64)` · `(linux, arm64)` · `(darwin, amd64)` · `(darwin, arm64)` · `(windows, amd64)` · `(windows, arm64)` |
+  | CodeQL | `CodeQL (go)` · `CodeQL (javascript-typescript)` · `CodeQL (actions)` |
+
+  Rulesets kullanıyorsanız ayrıca **Require code scanning results** → CodeQL, "High or higher" güvenlik
+  uyarısında birleştirmeyi engeller.
+- **Force push ve dal silme engelli**; bu kurallar ve zorunlu kontroller yöneticiler için de geçerli (bypass
+  listesi boş).
+- **Tag koruması** (`v*` için tag ruleset): **update** ve **deletion** kısıtlı (yayımlanmış bir sürümün tag'i başka
+  commit'e taşınamaz/silinemez). **Creation**'ı da kısıtlarsanız (yalnız bakımcılar) elle çalıştırılan Release
+  yolu yeni tag'i oluşturamaz (`GITHUB_TOKEN` bypass listesinde değildir): o durumda tag'i önce bir bakımcı push
+  eder, tag push'u sürümü çıkarır. Release workflow'u her `v*` tag push'unda imzalı sürüm üretir; imza kimliği
+  workflow'dur, tag'i kimin ittiği değil.
+- **Elle sürüm** (Actions → Release → Run workflow) yalnız `master`'dan ya da aynı adlı `v*` tag'inden ve o ref'in
+  ucundan çalışır; başka dal ya da geçmiş commit reddedilir (imza ve provenance çalıştırılan ref'i/commit'i
+  adlandırır; README'deki doğrulama komutları yalnız `v*` tag'i ve `master` kimliğini kabul eder). Geçmiş bir commit
+  için tag'i o commit'e push edin.
+- **Actions:** Settings → Actions → General → Workflow permissions = **Read repository contents** (workflow'lar
+  ihtiyaç duydukları yazma yetkisini iş bazında ister) ve "Allow GitHub Actions to create and approve pull
+  requests" kapalı.
 
 ## Commit ve PR
 

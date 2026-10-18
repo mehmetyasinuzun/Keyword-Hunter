@@ -1,6 +1,8 @@
 package web
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -80,7 +82,7 @@ func (s *Server) handleUserCreate(c *gin.Context) {
 	u, err := s.db.CreateUser(req.Username, hash, req.Role)
 	if err != nil {
 		s.audit(c, "user.create", "user:"+req.Username, map[string]any{"role": req.Role, "error": auditErrKind(err, storage.ErrUserExists, "exists")}, false)
-		if err == storage.ErrUserExists {
+		if errors.Is(err, storage.ErrUserExists) {
 			apiFail(c, http.StatusConflict, "username_taken")
 			return
 		}
@@ -235,7 +237,7 @@ func (s *Server) handleUserDelete(c *gin.Context) {
 // auditErrKind denetim ayrıntısı için hatayı kaba bir türe indirger: ham hata
 // metni (SQL ayrıntısı, dosya yolu) kayda taşınmaz.
 func auditErrKind(err, known error, kind string) string {
-	if err == known {
+	if errors.Is(err, known) {
 		return kind
 	}
 	return "internal"
@@ -276,6 +278,12 @@ func (s *Server) handleMyPassword(c *gin.Context) {
 	}
 	username := c.GetString("username")
 	u, err := s.db.GetUserByUsername(username)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		// Okuma hatasında bootstrap deposuna DÜŞÜLMEZ: aksi halde yalnız .env
+		// parolası değişir, users satırı eskisiyle kalır (handleLogin ile aynı kural).
+		respondInternalError(c, "GetUserByUsername", err)
+		return
+	}
 	if err != nil || u == nil {
 		// bootstrap kimlik deposu (users tablosunda yoksa)
 		if s.creds == nil || !s.creds.Verify(username, req.Current) {

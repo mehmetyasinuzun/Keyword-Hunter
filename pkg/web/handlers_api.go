@@ -871,7 +871,11 @@ func (s *Server) handleTagStats(c *gin.Context) {
 	}
 
 	// Etiketli sonuç sayısı
-	tagged, total, _ := s.db.GetTaggedResultsCount()
+	tagged, total, err := s.db.GetTaggedResultsCount()
+	if err != nil {
+		respondInternalError(c, "GetTaggedResultsCount", err)
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"tags":        stats,
@@ -1006,8 +1010,8 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 
 	// Parent node'u bul veya oluştur
 	parentNode, err := s.db.GetGraphNodeByURL(req.URL)
-	var parentID int64 = 0
-	var parentDepth int = 0
+	var parentID int64
+	var parentDepth int
 
 	if err == nil && parentNode != nil {
 		parentID = parentNode.ID
@@ -1063,7 +1067,9 @@ func (s *Server) handleExpandNode(c *gin.Context) {
 
 	// Parent'ı expanded olarak işaretle
 	if parentID > 0 {
-		s.db.MarkNodeExpanded(parentID)
+		if err := s.db.MarkNodeExpanded(parentID); err != nil {
+			logger.Warn("GRAPH: düğüm genişletildi olarak işaretlenemedi (%d): %v", parentID, err)
+		}
 	}
 
 	s.audit(c, "graph.expand", auditURL(req.URL), map[string]any{"links": len(links), "saved": savedCount}, true)

@@ -23,7 +23,9 @@ func TestCLI_BackupThenVerify(t *testing.T) {
 	if _, err := db.AppendAuditEvent(storage.AuditEvent{Actor: "admin", Action: "results.delete", Success: true}); err != nil {
 		t.Fatal(err)
 	}
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Kaynak DB_PATH'ten (ortam) çözülür
 	t.Setenv("DB_PATH", src)
@@ -66,7 +68,9 @@ func TestCLI_BackupThenVerify(t *testing.T) {
 	if _, err := c.Exec(`DROP TRIGGER audit_events_no_update; UPDATE audit_events SET actor = 'x'`); err != nil {
 		t.Fatal(err)
 	}
-	c.Close()
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
 	stdout.Reset()
 	if err := RunCommand("verify-db", []string{out}, "", "", &stdout, &stderr); err == nil || !strings.Contains(stdout.String(), "KIRIK") {
 		t.Fatalf("kırık zincir raporlanmalı: %v\n%s", err, stdout.String())

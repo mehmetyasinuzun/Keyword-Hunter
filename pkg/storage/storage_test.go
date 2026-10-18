@@ -51,7 +51,9 @@ func TestMergeDuplicateGraphNodes_MergesLegacyDuplicates(t *testing.T) {
 	}
 	// 3. kopyanın çocuğu var
 	var thirdID int64
-	db.conn.QueryRow("SELECT MAX(id) FROM graph_nodes WHERE url = 'http://dup.onion'").Scan(&thirdID)
+	if err := db.conn.QueryRow("SELECT MAX(id) FROM graph_nodes WHERE url = 'http://dup.onion'").Scan(&thirdID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.conn.Exec(`INSERT INTO graph_nodes (url, title, domain, parent_id, depth, link_type)
 		VALUES ('http://child.onion', 'C', 'child.onion', ?, 2, 'external')`, thirdID); err != nil {
 		t.Fatal(err)
@@ -62,18 +64,24 @@ func TestMergeDuplicateGraphNodes_MergesLegacyDuplicates(t *testing.T) {
 	}
 
 	var n int
-	db.conn.QueryRow("SELECT COUNT(*) FROM graph_nodes WHERE url = 'http://dup.onion'").Scan(&n)
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM graph_nodes WHERE url = 'http://dup.onion'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
 	if n != 1 {
 		t.Fatalf("birleştirme sonrası kopya sayısı = %d, beklenen 1", n)
 	}
 	var keeperExpanded int
 	var keeperID int64
-	db.conn.QueryRow("SELECT id, is_expanded FROM graph_nodes WHERE url = 'http://dup.onion'").Scan(&keeperID, &keeperExpanded)
+	if err := db.conn.QueryRow("SELECT id, is_expanded FROM graph_nodes WHERE url = 'http://dup.onion'").Scan(&keeperID, &keeperExpanded); err != nil {
+		t.Fatal(err)
+	}
 	if keeperExpanded != 1 {
 		t.Fatalf("korunan satır is_expanded=1 olmalı")
 	}
 	var childParent int64
-	db.conn.QueryRow("SELECT parent_id FROM graph_nodes WHERE url = 'http://child.onion'").Scan(&childParent)
+	if err := db.conn.QueryRow("SELECT parent_id FROM graph_nodes WHERE url = 'http://child.onion'").Scan(&childParent); err != nil {
+		t.Fatal(err)
+	}
 	if childParent != keeperID {
 		t.Fatalf("çocuk parent_id = %d, beklenen %d", childParent, keeperID)
 	}
@@ -139,14 +147,18 @@ func TestNormalizeLegacyTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 	var parsed *string
-	db.conn.QueryRow("SELECT datetime(next_run_at) FROM scheduled_searches").Scan(&parsed)
+	if err := db.conn.QueryRow("SELECT datetime(next_run_at) FROM scheduled_searches").Scan(&parsed); err != nil {
+		t.Fatal(err)
+	}
 	if parsed != nil {
 		t.Skip("bu sürücü eski biçimi zaten parse ediyor")
 	}
 	if err := normalizeLegacyTimestamps(db.conn); err != nil {
 		t.Fatal(err)
 	}
-	db.conn.QueryRow("SELECT datetime(next_run_at) FROM scheduled_searches").Scan(&parsed)
+	if err := db.conn.QueryRow("SELECT datetime(next_run_at) FROM scheduled_searches").Scan(&parsed); err != nil {
+		t.Fatal(err)
+	}
 	if parsed == nil || *parsed != "2026-01-02 12:04:05" {
 		got := "<NULL>"
 		if parsed != nil {
@@ -207,7 +219,9 @@ func TestCaseManagement(t *testing.T) {
 		t.Fatalf("seed: %d %v", n, err)
 	}
 	var id int64
-	db.conn.QueryRow(`SELECT id FROM search_results WHERE url='http://a.onion'`).Scan(&id)
+	if err := db.conn.QueryRow(`SELECT id FROM search_results WHERE url='http://a.onion'`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := db.UpdateResultCase(id, "bogus", "x"); err == nil {
 		t.Fatal("geçersiz durum kabul edildi")
@@ -225,9 +239,9 @@ func TestCaseManagement(t *testing.T) {
 	if err != nil || total != 1 || len(res) != 1 || res[0].ID != id {
 		t.Fatalf("confirmed filtresi: total=%d len=%d", total, len(res))
 	}
-	res, total, _ = db.GetResultsFiltered(ResultFilter{CaseStatus: "any", Limit: 10})
-	if total != 1 {
-		t.Fatalf("any filtresi: total=%d", total)
+	res, total, err = db.GetResultsFiltered(ResultFilter{CaseStatus: "any", Limit: 10})
+	if err != nil || total != 1 || len(res) != 1 {
+		t.Fatalf("any filtresi: total=%d len=%d err=%v", total, len(res), err)
 	}
 	counts, _ := db.CaseCounts()
 	if counts["confirmed"] != 1 || counts["none"] != 1 {

@@ -72,7 +72,7 @@ func Seed(o Options) (Summary, error) {
 	if err != nil {
 		return sum, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if n, err := db.CountUsers(); err != nil {
 		return sum, err
@@ -85,7 +85,7 @@ func Seed(o Options) (Summary, error) {
 	if o.BcryptCost == 0 {
 		o.BcryptCost = bcrypt.DefaultCost
 	}
-	s := &seeder{db: db, rng: rand.New(rand.NewPCG(o.Seed, o.Seed^0x9e3779b97f4a7c15)), now: o.Now.UTC().Truncate(time.Second), cost: o.BcryptCost}
+	s := &seeder{db: db, rng: rand.New(rand.NewPCG(o.Seed, o.Seed^0x9e3779b97f4a7c15)), now: o.Now.UTC().Truncate(time.Second), cost: o.BcryptCost} //nolint:gosec // G404: deterministik demo verisi için tohumlu PRNG bilinçli; güvenlik amaçlı değil
 	steps := []struct {
 		name string
 		fn   func(*Summary) error
@@ -168,7 +168,7 @@ func (s *seeder) onion() string {
 func (s *seeder) hexStr(n int) string {
 	buf := make([]byte, n)
 	for i := range buf {
-		buf[i] = byte(s.rng.IntN(256))
+		buf[i] = byte(s.rng.IntN(256)) //nolint:gosec // G115: IntN(256) her zaman [0,255] aralığında
 	}
 	return hex.EncodeToString(buf)
 }

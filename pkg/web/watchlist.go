@@ -52,7 +52,7 @@ func (s *Server) checkWatchlistItem(ctx context.Context, item storage.WatchlistI
 		logger.Debug("Watchlist kontrol başarısız (%s): %v", item.URL, err)
 		return result
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	result.HTTPCode = resp.StatusCode
 	body, err := io.ReadAll(io.LimitReader(resp.Body, shared.MaxResponseBytes))

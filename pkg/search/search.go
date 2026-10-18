@@ -276,9 +276,9 @@ func (s *Searcher) searchEnginePage(ctx context.Context, engine Engine, query st
 	// DoWithRetry kullan - exponential backoff ile
 	resp, err := shared.DoWithRetry(s.client, req)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", engine.Name, shared.ClassifyError(err))
+		return nil, fmt.Errorf("%s: %w", engine.Name, shared.ClassifyError(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		logger.Warn("ENGINE HTTP STATUS: %s returned %d", engine.Name, resp.StatusCode)

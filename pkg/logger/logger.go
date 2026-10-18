@@ -72,15 +72,17 @@ func Init(logDir string, minLevel LogLevel, consoleOutput bool) error {
 // GetInstance singleton instance döndürür
 func GetInstance() *Logger {
 	if instance == nil {
-		// Default initialization
-		Init("logs", INFO, true)
+		// Default initialization: dizin açılamazsa instance yine kurulur ve
+		// konsola yazmaya devam eder (dosya yazımı atlanır).
+		_ = Init("logs", INFO, true)
 	}
 	return instance
 }
 
 // ensureLogDir log dizinini oluşturur
 func (l *Logger) ensureLogDir() error {
-	return os.MkdirAll(l.logDir, 0755)
+	// Loglar sorgu ve hedef adresleri içerebilir: yalnız sahip (+grup okuma).
+	return os.MkdirAll(l.logDir, 0o750)
 }
 
 // rotateIfNeeded günlük log dosyası rotasyonu
@@ -93,12 +95,14 @@ func (l *Logger) rotateIfNeeded() error {
 
 	// Eski dosyayı kapat
 	if l.file != nil {
-		l.file.Close()
+		_ = l.file.Close()
+		// Yeni dosya açılamazsa kapalı dosyaya yazmaya çalışılmasın.
+		l.file = nil
 	}
 
 	// Yeni dosya aç
 	logPath := filepath.Join(l.logDir, fmt.Sprintf("%s.log", today))
-	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: yol operatörün LOG_DIR'i + tarih; kullanıcı girdisi değil
 	if err != nil {
 		return err
 	}
@@ -117,8 +121,9 @@ func (l *Logger) log(level LogLevel, format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Gün değişti mi kontrol et
-	l.rotateIfNeeded()
+	// Gün değişti mi kontrol et. Hata loglanamaz (logger'ın kendisi); dosya
+	// açılamazsa l.file nil kalır ve yalnız konsola yazılır.
+	_ = l.rotateIfNeeded()
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	levelStr := levelNames[level]
@@ -127,7 +132,7 @@ func (l *Logger) log(level LogLevel, format string, args ...interface{}) {
 	// Dosyaya yaz (renksiz)
 	logLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, levelStr, message)
 	if l.file != nil {
-		l.file.WriteString(logLine)
+		_, _ = l.file.WriteString(logLine) // logger kendi yazma hatasını loglayamaz
 	}
 
 	// Console'a yaz (renkli)

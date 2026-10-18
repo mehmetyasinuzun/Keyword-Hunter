@@ -2,6 +2,8 @@ package storage
 
 import (
 	"fmt"
+
+	"keywordhunter-mvp/pkg/logger"
 )
 
 // AnalyticsData grafikler için veri yapısı
@@ -230,12 +232,18 @@ func (db *DB) GetAnalyticsData(interval string, query string) (*AnalyticsData, e
 	}
 
 	// 7. Kelime Sıklığı İstatistikleri
+	// Panonun diğer bölümleri gibi en iyi çaba: okunamayan sayaç 0 kalır, hata loglanır.
+	scanStat := func(dst *int, q string) {
+		if err := db.conn.QueryRow(q, args...).Scan(dst); err != nil {
+			logger.Warn("ANALYTICS: kelime istatistiği okunamadı: %v", err)
+		}
+	}
 	var totalHits, avgHits, maxHits, withHits, withoutHits int
-	db.conn.QueryRow(`SELECT COALESCE(SUM(keyword_count), 0) FROM search_results`+whereClause, args...).Scan(&totalHits)
+	scanStat(&totalHits, `SELECT COALESCE(SUM(keyword_count), 0) FROM search_results`+whereClause)
 	// AVG REAL döner; tam sayı olmayan ortalama (ör. 3.2) int'e Scan edilemez ve
 	// hata yutulduğu için AvgHits 0 kalırdı. SQL tarafında yuvarlanır.
-	db.conn.QueryRow(`SELECT CAST(ROUND(COALESCE(AVG(keyword_count), 0)) AS INTEGER) FROM search_results`+whereClause, args...).Scan(&avgHits)
-	db.conn.QueryRow(`SELECT COALESCE(MAX(keyword_count), 0) FROM search_results`+whereClause, args...).Scan(&maxHits)
+	scanStat(&avgHits, `SELECT CAST(ROUND(COALESCE(AVG(keyword_count), 0)) AS INTEGER) FROM search_results`+whereClause)
+	scanStat(&maxHits, `SELECT COALESCE(MAX(keyword_count), 0) FROM search_results`+whereClause)
 
 	withWhere := whereClause
 	if withWhere == "" {
@@ -243,7 +251,7 @@ func (db *DB) GetAnalyticsData(interval string, query string) (*AnalyticsData, e
 	} else {
 		withWhere += " AND keyword_count > 0"
 	}
-	db.conn.QueryRow(`SELECT COUNT(*) FROM search_results`+withWhere, args...).Scan(&withHits)
+	scanStat(&withHits, `SELECT COUNT(*) FROM search_results`+withWhere)
 
 	withoutWhere := whereClause
 	if withoutWhere == "" {
@@ -251,7 +259,7 @@ func (db *DB) GetAnalyticsData(interval string, query string) (*AnalyticsData, e
 	} else {
 		withoutWhere += " AND (keyword_count = 0 OR keyword_count IS NULL)"
 	}
-	db.conn.QueryRow(`SELECT COUNT(*) FROM search_results`+withoutWhere, args...).Scan(&withoutHits)
+	scanStat(&withoutHits, `SELECT COUNT(*) FROM search_results`+withoutWhere)
 
 	data.KeywordStats.TotalHits = totalHits
 	data.KeywordStats.AvgHits = avgHits

@@ -24,7 +24,7 @@ func fakeControl(t *testing.T, password string) (addr string, got *[]string) {
 				return
 			}
 			go func(c net.Conn) {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				r := bufio.NewReader(c)
 				for {
 					line, err := r.ReadString('\n')
@@ -36,22 +36,22 @@ func fakeControl(t *testing.T, password string) (addr string, got *[]string) {
 					switch {
 					case strings.HasPrefix(line, "AUTHENTICATE"):
 						if password != "" && line != `AUTHENTICATE "`+password+`"` {
-							c.Write([]byte("515 Authentication failed\r\n"))
+							_, _ = c.Write([]byte("515 Authentication failed\r\n"))
 							return
 						}
-						c.Write([]byte("250 OK\r\n"))
+						_, _ = c.Write([]byte("250 OK\r\n"))
 					case line == "SIGNAL NEWNYM":
-						c.Write([]byte("250 OK\r\n"))
+						_, _ = c.Write([]byte("250 OK\r\n"))
 					case strings.HasPrefix(line, "GETINFO"):
-						c.Write([]byte("250-status/circuit-established=1\r\n250 OK\r\n"))
+						_, _ = c.Write([]byte("250-status/circuit-established=1\r\n250 OK\r\n"))
 					default:
-						c.Write([]byte("510 Unrecognized command\r\n"))
+						_, _ = c.Write([]byte("510 Unrecognized command\r\n"))
 					}
 				}
 			}(conn)
 		}
 	}()
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 	return ln.Addr().String(), cmds
 }
 

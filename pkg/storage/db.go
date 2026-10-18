@@ -44,7 +44,7 @@ func New(dbPath string) (*DB, error) {
 
 	// Bağlantıyı test et
 	if err := pingWithRetry(conn); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("veritabanı bağlantısı başarısız: %w", err)
 	}
 
@@ -53,19 +53,19 @@ func New(dbPath string) (*DB, error) {
 	// Şemayı sürümlü migrasyonlarla güncelle (bkz. migrate.go). Sürümü bu
 	// ikiliden yeni bir veritabanı ErrSchemaTooNew ile reddedilir.
 	if err := db.migrate(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 
 	// Yarıda kalmış bir budama bayrağı (işlem dışı yazılmışsa) silmeyi açık bırakmasın.
 	if _, err := conn.Exec(`UPDATE audit_chain_state SET pruning = 0 WHERE id = 1 AND pruning <> 0`); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("audit_chain_state: %w", err)
 	}
 
 	// İsteğe bağlı izleme listesi tohumu (WATCHLIST_SEED; varsayılan kapalı)
 	if err := db.SeedDefaultWatchlist(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("watchlist seed başarısız: %w", err)
 	}
 

@@ -228,7 +228,7 @@ func TestClient_PrivateDestinationBlockedAtDial(t *testing.T) {
 	tr := c.client.Transport.(*http.Transport)
 	conn, err := tr.DialContext(context.Background(), "tcp", "127.0.0.1:1")
 	if err == nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatal("dahili hedefe bağlantı reddedilmeliydi")
 	}
 	if !strings.Contains(err.Error(), "dahili") {
@@ -246,7 +246,7 @@ func TestClient_PlainHTTPOnlyToPrivateIPsAtDial(t *testing.T) {
 	tr := c.client.Transport.(*http.Transport)
 	conn, err := tr.DialContext(context.Background(), "tcp", "93.184.215.14:80")
 	if err == nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatal("düz http genel IP'ye bağlanmamalı")
 	}
 	if !errors.Is(err, errPublicPlainHTTP) {

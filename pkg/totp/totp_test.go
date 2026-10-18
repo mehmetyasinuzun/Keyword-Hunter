@@ -26,7 +26,7 @@ func TestRFC6238Vectors(t *testing.T) {
 	}
 	for _, v := range vectors {
 		ts := time.Unix(v.unix, 0)
-		if got := hotp(key, uint64(Step(ts)), 8); got != v.code {
+		if got := hotp(key, stepCounter(Step(ts)), 8); got != v.code {
 			t.Errorf("T=%d: %s, beklenen %s", v.unix, got, v.code)
 		}
 		// 6 haneli kod 8 hanelinin son 6 hanesidir (aynı kesmenin 10^6 modu).
@@ -61,7 +61,7 @@ func TestVerifyWindowAndReplay(t *testing.T) {
 
 	// ±1 adım kabul, ±2 ret
 	for d, ok := range map[int64]bool{-2: false, -1: true, 0: true, 1: true, 2: false} {
-		code := hotp(key, uint64(cur+d), Digits)
+		code := hotp(key, stepCounter(cur+d), Digits)
 		st, got := Verify(key, code, now, 0)
 		if got != ok {
 			t.Errorf("sapma %d: kabul=%v, beklenen %v", d, got, ok)
@@ -80,11 +80,11 @@ func TestVerifyWindowAndReplay(t *testing.T) {
 	if _, ok := Verify(key, code, now, st); ok {
 		t.Fatal("aynı kod aynı adımda ikinci kez kabul edildi (replay)")
 	}
-	prev := hotp(key, uint64(cur-1), Digits)
+	prev := hotp(key, stepCounter(cur-1), Digits)
 	if _, ok := Verify(key, prev, now, st); ok {
 		t.Fatal("kabul edilmiş adımdan eski kod kabul edildi")
 	}
-	next := hotp(key, uint64(cur+1), Digits)
+	next := hotp(key, stepCounter(cur+1), Digits)
 	if st2, ok := Verify(key, next, now, st); !ok || st2 != cur+1 {
 		t.Fatal("sonraki adımın kodu kabul edilmeliydi")
 	}

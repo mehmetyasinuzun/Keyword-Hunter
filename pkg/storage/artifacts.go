@@ -138,7 +138,7 @@ func (db *DB) ArtifactCountByResult(ids []int64) (map[int64]int, error) {
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := db.conn.Query("SELECT result_id, COUNT(*) FROM result_artifacts WHERE result_id IN ("+placeholders+") GROUP BY result_id", args...)
+	rows, err := db.conn.Query("SELECT result_id, COUNT(*) FROM result_artifacts WHERE result_id IN ("+placeholders+") GROUP BY result_id", args...) //nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 	if err != nil {
 		return nil, err
 	}

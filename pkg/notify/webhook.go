@@ -91,7 +91,7 @@ func SendWebhook(webhookURL string, payload AlertPayload) error {
 		}
 		return fmt.Errorf("webhook isteği başarısız (%s): %w", shared.RedactURL(webhookURL), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

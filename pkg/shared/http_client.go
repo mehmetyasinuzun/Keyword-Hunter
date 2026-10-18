@@ -68,7 +68,7 @@ func NewHTTPClient(torProxy string) (*http.Client, error) {
 
 // RandomUserAgent rastgele User-Agent döndürür
 func RandomUserAgent() string {
-	return UserAgents[rand.Intn(len(UserAgents))]
+	return UserAgents[rand.Intn(len(UserAgents))] //nolint:gosec // G404: User-Agent rotasyonu; güvenlik amaçlı değil
 }
 
 // DoWithRetry HTTP isteği yapar ve gerekirse exponential backoff ile yeniden dener
@@ -117,7 +117,7 @@ func DoWithRetryN(client *http.Client, req *http.Request, attempts int) (*http.R
 		}
 
 		// İsteği yap
-		resp, lastErr = client.Do(req)
+		resp, lastErr = client.Do(req) //nolint:gosec // G704: genel yeniden deneme sarmalayıcısı; hedef doğrulaması çağıranda ve istemcinin dialer'ında (Tor / SSRF korumalı clearnet)
 
 		// Başarılı - hata yok
 		if lastErr == nil {
@@ -127,7 +127,7 @@ func DoWithRetryN(client *http.Client, req *http.Request, attempts int) (*http.R
 			}
 
 			// Retryable status code - body'yi kapat ve yeniden dene
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d (retryable)", resp.StatusCode)
 			continue
 		}
@@ -155,7 +155,7 @@ func CalculateBackoff(attempt int) time.Duration {
 	}
 
 	// Jitter ekle (%0-25 arası rastgele)
-	jitter := backoff * (0.25 * rand.Float64())
+	jitter := backoff * (0.25 * rand.Float64()) //nolint:gosec // G404: geri çekilme jitter'ı; güvenlik amaçlı değil
 
 	return time.Duration(backoff + jitter)
 }
@@ -197,7 +197,7 @@ func IsRetryableError(err error) bool {
 	}
 
 	// EOF (bağlantı kesildi)
-	if err == io.EOF || strings.Contains(errStr, "EOF") {
+	if errors.Is(err, io.EOF) || strings.Contains(errStr, "EOF") {
 		return true
 	}
 

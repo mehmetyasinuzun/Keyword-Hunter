@@ -182,13 +182,13 @@ func (s *Server) handleBackupDownload(c *gin.Context) {
 		respondBackupError(c, err)
 		return
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // G304: yol sunucunun yedek dizininde kendi ürettiği geçici dosya
 	if err != nil {
 		s.audit(c, "backup.download", "database", map[string]any{"file": name, "error": "backup_failed"}, false)
 		respondBackupError(c, err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // salt okuma
 	st, err := f.Stat()
 	if err != nil {
 		s.audit(c, "backup.download", "database", map[string]any{"file": name, "error": "backup_failed"}, false)

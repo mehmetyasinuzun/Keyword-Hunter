@@ -18,7 +18,7 @@ func newDB(t *testing.T) *storage.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -158,7 +158,9 @@ func TestFromFile_BacksUpWithoutMigrating(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d2.Close()
+	if err := d2.Close(); err != nil {
+		t.Fatal(err)
+	}
 	dest := filepath.Join(t.TempDir(), "out.db")
 	if _, err := WriteFile(context.Background(), FromFile(src), dest); err != nil {
 		t.Fatal(err)

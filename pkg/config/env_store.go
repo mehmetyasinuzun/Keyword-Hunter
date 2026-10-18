@@ -97,7 +97,7 @@ func (s *EnvStore) SetPreserving(key, value string) error {
 		return err
 	}
 	if err != nil {
-		if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil && filepath.Dir(s.path) != "." {
+		if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil && filepath.Dir(s.path) != "." {
 			return err
 		}
 	}
@@ -130,7 +130,7 @@ func (s *EnvStore) SetPreserving(key, value string) error {
 		}
 		text += entry + "\n"
 	}
-	if err := os.WriteFile(s.path, []byte(text), 0o600); err != nil {
+	if err := os.WriteFile(s.path, []byte(text), 0o600); err != nil { //nolint:gosec // G703: yol operatörün ENV_FILE değeri; kullanıcı girdisi değil
 		return fmt.Errorf("env dosyasi yazilamadi: %w", err)
 	}
 	return nil
@@ -146,7 +146,7 @@ func (s *EnvStore) readUnlocked() (map[string]string, error) {
 		}
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() // salt okuma
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -176,7 +176,7 @@ func (s *EnvStore) readUnlocked() (map[string]string, error) {
 }
 
 func (s *EnvStore) writeUnlocked(values map[string]string) error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		if filepath.Dir(s.path) != "." {
 			return err
 		}

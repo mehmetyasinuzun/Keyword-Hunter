@@ -42,7 +42,7 @@ func main() {
 	if err := logger.Init(appConfig.LogDir, resolveLogLevel(appConfig.LogLevel), true); err != nil {
 		panic("Logger başlatılamadı: " + err.Error())
 	}
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	if appConfig.AdminPass == "admin123" || appConfig.AdminPass == "admin" || appConfig.AdminPass == "password" {
 		logger.Warn("ZAYIF PAROLA: ADMIN_PASS varsayilan/zayif bir deger. /settings ekranindan hemen degistirin")
@@ -91,7 +91,9 @@ func main() {
 	}
 	defer func() {
 		logger.Info("Database connection is being closed...")
-		db.Close()
+		if err := db.Close(); err != nil {
+			logger.Error("Database close error: %v", err)
+		}
 	}()
 	logger.Info("Database connection ready")
 

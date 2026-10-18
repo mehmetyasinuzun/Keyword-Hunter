@@ -153,6 +153,7 @@ func (db *DB) GetResultsByIDs(ids []int64) ([]SearchResult, error) {
 	for _, id := range ids {
 		args = append(args, id)
 	}
+	//nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 	rows, err := db.conn.Query(`
 		SELECT id, title, url, source, query, criticality, COALESCE(category, ''), keyword_count, COALESCE(auto_tags, ''), created_at
 		FROM search_results

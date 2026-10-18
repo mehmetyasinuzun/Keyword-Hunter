@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -102,7 +103,7 @@ func TestUsersAndSessions(t *testing.T) {
 	if err != nil || admin.Username != "Admin" || admin.Role != RoleAdmin || !admin.Enabled {
 		t.Fatalf("admin: %+v %v", admin, err)
 	}
-	if _, err := db.CreateUser("admin", "h", RoleViewer); err != ErrUserExists {
+	if _, err := db.CreateUser("admin", "h", RoleViewer); !errors.Is(err, ErrUserExists) {
 		t.Fatalf("büyük/küçük harf duyarsız benzersizlik: %v", err)
 	}
 	an, _ := db.CreateUser("analyst1", "h2", "bogus")

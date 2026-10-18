@@ -131,11 +131,11 @@ func freshSnapshot(t *testing.T) map[string]string {
 func TestMigrate_BaselineEqualsV016FreshSchema(t *testing.T) {
 	dir := t.TempDir()
 	legacy := openRaw(t, filepath.Join(dir, "legacy.db"))
-	defer legacy.Close()
+	defer func() { _ = legacy.Close() }()
 	loadFixture(t, legacy, "legacy_v0.16.sql")
 
 	fresh := openRaw(t, filepath.Join(dir, "fresh.db"))
-	defer fresh.Close()
+	defer func() { _ = fresh.Close() }()
 	if err := migrateBaseline(fresh); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,9 @@ func TestMigrate_AdoptsLegacyDatabases(t *testing.T) {
 					t.Fatalf("silinmiş id yeniden kullanılmamalı: %v %v", ids, err)
 				}
 				var feed sql.NullString
-				db.conn.QueryRow(`SELECT feed_at FROM search_results WHERE id = 4`).Scan(&feed)
+				if err := db.conn.QueryRow(`SELECT feed_at FROM search_results WHERE id = 4`).Scan(&feed); err != nil {
+					t.Fatal(err)
+				}
 				if !feed.Valid {
 					t.Fatal("feed_at tetikleyicisi yeniden kurulmalı")
 				}
@@ -212,13 +214,17 @@ func TestMigrate_AdoptsLegacyDatabases(t *testing.T) {
 			},
 			check: func(t *testing.T, db *DB) {
 				var n int
-				db.conn.QueryRow(`SELECT COUNT(*) FROM graph_nodes WHERE url = 'http://a.onion/'`).Scan(&n)
+				if err := db.conn.QueryRow(`SELECT COUNT(*) FROM graph_nodes WHERE url = 'http://a.onion/'`).Scan(&n); err != nil {
+					t.Fatal(err)
+				}
 				if n != 1 {
 					t.Fatalf("graf yinelenenleri birleşmeli: %d", n)
 				}
 				var orphan int
-				db.conn.QueryRow(`SELECT COUNT(*) FROM graph_nodes c WHERE c.parent_id IS NOT NULL
-					AND NOT EXISTS (SELECT 1 FROM graph_nodes p WHERE p.id = c.parent_id)`).Scan(&orphan)
+				if err := db.conn.QueryRow(`SELECT COUNT(*) FROM graph_nodes c WHERE c.parent_id IS NOT NULL
+					AND NOT EXISTS (SELECT 1 FROM graph_nodes p WHERE p.id = c.parent_id)`).Scan(&orphan); err != nil {
+					t.Fatal(err)
+				}
 				if orphan != 0 {
 					t.Fatalf("yetim çocuk düğüm: %d", orphan)
 				}
@@ -227,12 +233,16 @@ func TestMigrate_AdoptsLegacyDatabases(t *testing.T) {
 					t.Fatalf("feed_at created_at ile doldurulmalı: %q %q %v", feed, created, err)
 				}
 				var def int
-				db.conn.QueryRow(`SELECT default_active FROM engine_stats WHERE name = 'Torch'`).Scan(&def)
+				if err := db.conn.QueryRow(`SELECT default_active FROM engine_stats WHERE name = 'Torch'`).Scan(&def); err != nil {
+					t.Fatal(err)
+				}
 				if def != 1 {
 					t.Fatalf("default_active varsayılanı: %d", def)
 				}
 				var parsed sql.NullString
-				db.conn.QueryRow(`SELECT datetime(next_run_at) FROM scheduled_searches`).Scan(&parsed)
+				if err := db.conn.QueryRow(`SELECT datetime(next_run_at) FROM scheduled_searches`).Scan(&parsed); err != nil {
+					t.Fatal(err)
+				}
 				if !parsed.Valid || parsed.String != "2026-01-02 12:04:05" {
 					t.Fatalf("eski damga normalize edilmeli: %+v", parsed)
 				}
@@ -269,12 +279,16 @@ func TestMigrate_AdoptsLegacyDatabases(t *testing.T) {
 			},
 			check: func(t *testing.T, db *DB) {
 				var status, note string
-				db.conn.QueryRow(`SELECT case_status, note FROM search_results WHERE id = 1`).Scan(&status, &note)
+				if err := db.conn.QueryRow(`SELECT case_status, note FROM search_results WHERE id = 1`).Scan(&status, &note); err != nil {
+					t.Fatal(err)
+				}
 				if status != "in_progress" || note != "n" {
 					t.Fatalf("vaka verisi korunmalı: %q %q", status, note)
 				}
 				var key string
-				db.conn.QueryRow(`SELECT api_key_enc FROM misp_config WHERE id = 1`).Scan(&key)
+				if err := db.conn.QueryRow(`SELECT api_key_enc FROM misp_config WHERE id = 1`).Scan(&key); err != nil {
+					t.Fatal(err)
+				}
 				if key != "v1:key" {
 					t.Fatalf("MISP anahtarı korunmalı: %q", key)
 				}
@@ -310,13 +324,15 @@ func TestMigrate_AdoptsLegacyDatabases(t *testing.T) {
 			if v := userVersionOf(t, raw); v != 0 {
 				t.Fatalf("eski veritabanı sürümsüz olmalı: %d", v)
 			}
-			raw.Close()
+			if err := raw.Close(); err != nil {
+				t.Fatal(err)
+			}
 
 			db, err := New(path)
 			if err != nil {
 				t.Fatalf("eski veritabanı benimsenemedi: %v", err)
 			}
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			if v, _ := db.SchemaVersion(); v != LatestSchemaVersion() {
 				t.Fatalf("user_version = %d, beklenen %d", v, LatestSchemaVersion())
 			}
@@ -336,12 +352,14 @@ func TestMigrate_AdoptsLegacyDatabases(t *testing.T) {
 
 			// Yeniden açılış idempotent: şema ve sürüm değişmez
 			snap := schemaSnapshot(t, db.conn)
-			db.Close()
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
 			db2, err := New(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer db2.Close()
+			defer func() { _ = db2.Close() }()
 			diffSnapshots(t, "yeniden açılış", snap, schemaSnapshot(t, db2.conn))
 		})
 	}
@@ -363,7 +381,9 @@ func tableCounts(t *testing.T, c *sql.DB) map[string]int {
 	var names []string
 	for rows.Next() {
 		var n string
-		rows.Scan(&n)
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
 		names = append(names, n)
 	}
 	rows.Close()
@@ -422,13 +442,15 @@ func TestMigrate_AdoptsV04BornDatabaseKeepingChildren(t *testing.T) {
 		mustExec(t, raw, q)
 	}
 	before := tableCounts(t, raw)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(path)
 	if err != nil {
 		t.Fatalf("benimseme: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	diffSnapshots(t, "v0.4 kökenli benimsenmiş vs yeni", freshSnapshot(t), schemaSnapshot(t, db.conn))
 	after := tableCounts(t, db.conn)
 	for _, tb := range []string{"search_results", "result_tags", "result_artifacts", "misp_pushed"} {
@@ -437,7 +459,9 @@ func TestMigrate_AdoptsV04BornDatabaseKeepingChildren(t *testing.T) {
 		}
 	}
 	var tags, status string
-	db.conn.QueryRow(`SELECT auto_tags, case_status FROM search_results WHERE id = 1`).Scan(&tags, &status)
+	if err := db.conn.QueryRow(`SELECT auto_tags, case_status FROM search_results WHERE id = 1`).Scan(&tags, &status); err != nil {
+		t.Fatal(err)
+	}
 	if tags != "ransomware" || status != "confirmed" {
 		t.Fatalf("değerler doğru sütunlara kopyalanmalı: %q %q", tags, status)
 	}
@@ -445,7 +469,9 @@ func TestMigrate_AdoptsV04BornDatabaseKeepingChildren(t *testing.T) {
 		t.Fatalf("yabancı anahtar ihlali: %d", n)
 	}
 	var fk int
-	db.conn.QueryRow(`PRAGMA foreign_keys`).Scan(&fk)
+	if err := db.conn.QueryRow(`PRAGMA foreign_keys`).Scan(&fk); err != nil {
+		t.Fatal(err)
+	}
 	if fk != 1 {
 		t.Fatal("benimsemeden sonra yabancı anahtarlar yeniden açık olmalı")
 	}
@@ -489,7 +515,9 @@ func TestMigrate_ForeignKeysOffStep(t *testing.T) {
 	mustExec(t, db.conn, `INSERT INTO user_2fa (user_id, enabled, secret_enc) VALUES (?, 1, 'v1:s')`, u.ID)
 	mustExec(t, db.conn, `INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, 'h1'), (?, 'h2')`, u.ID, u.ID)
 	before := tableCounts(t, db.conn)
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	base := LatestSchemaVersion()
 
 	orig := migrations
@@ -530,14 +558,18 @@ func TestMigrate_ForeignKeysOffStep(t *testing.T) {
 		}
 	}
 	var fk int
-	db.conn.QueryRow(`PRAGMA foreign_keys`).Scan(&fk)
+	if err := db.conn.QueryRow(`PRAGMA foreign_keys`).Scan(&fk); err != nil {
+		t.Fatal(err)
+	}
 	if fk != 1 {
 		t.Fatal("adımdan sonra yabancı anahtarlar yeniden açık olmalı")
 	}
 	if v, _ := db.SchemaVersion(); v != base+1 {
 		t.Fatalf("user_version = %d", v)
 	}
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Yeni ihlal bırakan adım geri alınır
 	migrations = append(migrations, migration{name: "orphan", foreignKeysOff: true, up: func(q runner) error {
@@ -548,12 +580,14 @@ func TestMigrate_ForeignKeysOffStep(t *testing.T) {
 		t.Fatalf("ihlal bırakan adım reddedilmeli: %v", err)
 	}
 	raw := openRaw(t, path)
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	if v := userVersionOf(t, raw); v != base+1 {
 		t.Fatalf("user_version değişmemeli: %d", v)
 	}
 	var orphans int
-	raw.QueryRow(`SELECT COUNT(*) FROM result_tags WHERE result_id = 999999`).Scan(&orphans)
+	if err := raw.QueryRow(`SELECT COUNT(*) FROM result_tags WHERE result_id = 999999`).Scan(&orphans); err != nil {
+		t.Fatal(err)
+	}
 	if orphans != 0 {
 		t.Fatal("geri alınan adımın satırı kalmamalı")
 	}
@@ -566,19 +600,23 @@ func TestMigrate_RefusesNewerSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	future := LatestSchemaVersion() + 1
 	raw := openRaw(t, path)
 	mustExec(t, raw, fmt.Sprintf(`PRAGMA user_version = %d`, future))
 	mustExec(t, raw, `CREATE TABLE from_the_future (x)`)
 	before := schemaSnapshot(t, raw)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := New(path); !errors.Is(err, ErrSchemaTooNew) {
 		t.Fatalf("yeni şema reddedilmeli, hata: %v", err)
 	}
 	raw = openRaw(t, path)
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	if v := userVersionOf(t, raw); v != future {
 		t.Fatalf("user_version değişmemeli: %d", v)
 	}
@@ -592,7 +630,9 @@ func TestMigrate_FailedStepRollsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	base := LatestSchemaVersion()
 
 	orig := migrations
@@ -607,12 +647,14 @@ func TestMigrate_FailedStepRollsBack(t *testing.T) {
 		t.Fatalf("başarısız migrasyon hata döndürmeli: %v", err)
 	}
 	raw := openRaw(t, path)
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	if v := userVersionOf(t, raw); v != base {
 		t.Fatalf("user_version = %d, beklenen %d", v, base)
 	}
 	var n int
-	raw.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'half_done'`).Scan(&n)
+	if err := raw.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'half_done'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
 	if n != 0 {
 		t.Fatal("yarım adımın tablosu geri alınmalı")
 	}
@@ -622,12 +664,14 @@ func TestMigrate_FailedStepRollsBack(t *testing.T) {
 		_, err := q.Exec(`CREATE TABLE half_done (x)`)
 		return err
 	}
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	db, err = New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if v, _ := db.SchemaVersion(); v != base+1 {
 		t.Fatalf("user_version = %d, beklenen %d", v, base+1)
 	}
@@ -653,7 +697,7 @@ func TestMigrate_ConcurrentOpen(t *testing.T) {
 				t.Fatalf("eşzamanlı açılış: %v", err)
 			}
 			if db := <-dbs; db != nil {
-				defer db.Close()
+				defer func() { _ = db.Close() }()
 			}
 		case <-deadline:
 			t.Fatal("eşzamanlı açılış zaman aşımı")
@@ -670,13 +714,15 @@ func TestMigrate_UpgradesFromVersion1(t *testing.T) {
 	}
 	mustExec(t, raw, `PRAGMA user_version = 1`)
 	mustExec(t, raw, `INSERT INTO search_results (title, url, source, query) VALUES ('A', 'http://a.onion/', 'Torch', 'q')`)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if v, _ := db.SchemaVersion(); v != LatestSchemaVersion() {
 		t.Fatalf("user_version = %d", v)
 	}

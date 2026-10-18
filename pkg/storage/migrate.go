@@ -60,7 +60,7 @@ func (db *DB) migrate() error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	q := connRunner{ctx: ctx, c: c}
 
 	cur, err := userVersion(q)

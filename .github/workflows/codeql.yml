@@ -1,0 +1,64 @@
+name: CodeQL
+
+# Statik güvenlik analizi: Go (gerçek derleme ile), ön yüz JavaScript'i ve
+# workflow dosyalarının kendisi (actions). Bulgular Security → Code scanning
+# sekmesine düşer. Haftalık koşu, kod değişmese bile yeni CodeQL sorgularını
+# mevcut koda uygular.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '23 4 * * 1' # Pazartesi 04:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.language == 'go'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+      # Otomatik derleme yerine açık derleme: CodeQL izleyicisi altında tüm
+      # paketler (cmd, cmd/khseed, pkg/...) gerçekten derlenir; derlenmeyen
+      # kod analiz dışı kalmaz, derleme hatası işi düşürür.
+      - name: Build (go build ./...)
+        if: matrix.build-mode == 'manual'
+        run: go build -v ./...
+      - name: Analyze
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          category: /language:${{ matrix.language }}

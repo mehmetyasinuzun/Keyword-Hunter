@@ -157,6 +157,7 @@ func (db *DB) purgeResultBatch(ctx context.Context, cut time.Time, st *PurgeStat
 }
 
 func purgeResultBatchTx(tx *sql.Tx, cut time.Time, st *PurgeStats) (int, error) {
+	//nolint:gosec // G202: sabit SQL parçaları; değerler parametre
 	rows, err := tx.Query(`SELECT id, url FROM search_results
 		WHERE `+resultAgeSQL+` < julianday(?) AND NOT `+keepCaseSQL("case_status")+`
 		ORDER BY id LIMIT ?`, cut, retentionBatch)
@@ -192,7 +193,7 @@ func purgeResultBatchTx(tx *sql.Tx, cut time.Time, st *PurgeStats) (int, error) 
 		append(append(append([]any{}, args...), args...), args...)...).Scan(&tags, &arts, &misp); err != nil {
 		return 0, err
 	}
-	res, err := tx.Exec(`DELETE FROM search_results WHERE id IN (`+in+`)`, args...)
+	res, err := tx.Exec(`DELETE FROM search_results WHERE id IN (`+in+`)`, args...) //nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 	if err != nil {
 		return 0, err
 	}
@@ -215,6 +216,7 @@ func purgeResultBatchTx(tx *sql.Tx, cut time.Time, st *PurgeStats) (int, error) 
 		uin, uargs := placeholders(len(orphan)), stringArgs(orphan)
 		// Kök düğüm + derinleştirme alt ağacı; tek ifadede silinir (yabancı
 		// anahtar denetimi ifade sonunda yapılır, çocuklar ebeveynle birlikte gider).
+		//nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 		g, err := tx.Exec(`WITH RECURSIVE sub(id) AS (
 				SELECT id FROM graph_nodes WHERE parent_id IS NULL AND url IN (`+uin+`)
 				UNION SELECT g.id FROM graph_nodes g JOIN sub ON g.parent_id = sub.id)
@@ -244,7 +246,7 @@ func purgeResultBatchTx(tx *sql.Tx, cut time.Time, st *PurgeStats) (int, error) 
 // deleteScreenshots koşula uyan ekran görüntüsü satırlarını siler ve
 // dosya adlarını döndürür (başka bir satırın hâlâ kullandığı dosya hariç).
 func deleteScreenshots(tx *sql.Tx, where string, args ...any) ([]string, int64, error) {
-	rows, err := tx.Query(`SELECT id, file_path FROM screenshots WHERE `+where, args...)
+	rows, err := tx.Query(`SELECT id, file_path FROM screenshots WHERE `+where, args...) //nolint:gosec // G202: where çağıranların sabit koşulları; değerler parametre
 	if err != nil {
 		return nil, 0, err
 	}
@@ -269,7 +271,7 @@ func deleteScreenshots(tx *sql.Tx, where string, args ...any) ([]string, int64, 
 	var n int64
 	for start := 0; start < len(ids); start += retentionBatch {
 		chunk := ids[start:min(start+retentionBatch, len(ids))]
-		res, err := tx.Exec(`DELETE FROM screenshots WHERE id IN (`+placeholders(len(chunk))+`)`, int64Args(chunk)...)
+		res, err := tx.Exec(`DELETE FROM screenshots WHERE id IN (`+placeholders(len(chunk))+`)`, int64Args(chunk)...) //nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 		if err != nil {
 			return nil, 0, err
 		}
@@ -332,7 +334,7 @@ func (db *DB) secureDeleteTx(ctx context.Context, fn func(tx *sql.Tx) error) err
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if _, err := c.ExecContext(ctx, `PRAGMA secure_delete = ON`); err != nil {
 		return err
 	}

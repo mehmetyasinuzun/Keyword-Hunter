@@ -172,6 +172,14 @@ func (em *EngineMonitor) checkAll() {
 }
 
 // checkEngine tek bir motoru kontrol eder
+// record motor kontrol sonucunu yazar; yazılamazsa bir sonraki kontrol
+// yeniden dener, hata loglanır.
+func (em *EngineMonitor) record(name, status string, elapsedMs int) {
+	if err := em.db.UpdateEngineCheck(name, status, elapsedMs, 0); err != nil {
+		logger.Warn("ENGINE CHECK SAVE ERROR: %s - %v", name, err)
+	}
+}
+
 func (em *EngineMonitor) checkEngine(eng search.Engine) {
 	start := time.Now()
 
@@ -180,7 +188,7 @@ func (em *EngineMonitor) checkEngine(eng search.Engine) {
 
 	req, err := http.NewRequest("GET", testURL, nil)
 	if err != nil {
-		em.db.UpdateEngineCheck(eng.Name, "down", 0, 0)
+		em.record(eng.Name, "down", 0)
 		return
 	}
 	req.Header.Set("User-Agent", shared.RandomUserAgent())
@@ -190,18 +198,18 @@ func (em *EngineMonitor) checkEngine(eng search.Engine) {
 
 	if err != nil {
 		logger.Debug("ENGINE CHECK FAIL: %s → %v", eng.Name, err)
-		em.db.UpdateEngineCheck(eng.Name, "down", elapsed, 0)
+		em.record(eng.Name, "down", elapsed)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 200, 301, 302 → up; diğerleri → down
 	if resp.StatusCode == 200 || resp.StatusCode == 301 || resp.StatusCode == 302 || resp.StatusCode == 429 {
 		logger.Debug("ENGINE CHECK OK: %s → %d (%dms)", eng.Name, resp.StatusCode, elapsed)
-		em.db.UpdateEngineCheck(eng.Name, "up", elapsed, 0)
+		em.record(eng.Name, "up", elapsed)
 	} else {
 		logger.Debug("ENGINE CHECK FAIL: %s → HTTP %d (%dms)", eng.Name, resp.StatusCode, elapsed)
-		em.db.UpdateEngineCheck(eng.Name, "down", elapsed, 0)
+		em.record(eng.Name, "down", elapsed)
 	}
 }
 

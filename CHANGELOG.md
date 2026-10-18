@@ -144,6 +144,55 @@
   izleme listesi istisnaları, sayımlar, `0` ile kapalı; bakım işçilerinin kısa gecikmeyle kendiliğinden çalışması ve
   kapanışta durması.
 
+### Tedarik zinciri
+- **CodeQL** (`.github/workflows/codeql.yml`): Go (gerçek `go build ./...` ile, `build-mode: manual`),
+  JavaScript/TypeScript ve GitHub Actions; `security-extended` sorguları; `master`'a push, PR ve haftalık koşu. İş
+  yetkileri yalnız `security-events: write`, `contents: read`, `actions: read`.
+- **golangci-lint v2** (`.golangci.yml`, CI'da `golangci-lint` işi, linter setup-go'nun Go 1.27 araç zinciriyle
+  derlenir): errcheck, govet, staticcheck, ineffassign, unused, bodyclose, gosec, errorlint, misspell, nolintlint.
+  Mevcut ~470 bulgunun tamamı kodda düzeltildi; istisnalar dar kapsamlı ve gerekçeli (errcheck için yalnız
+  `sql.Rows/Stmt.Close`, `sql.Tx.Rollback` ve `fmt.Fprint*`; i18n kataloglarında ve testlerde belirli gosec
+  kuralları; satır düzeyindeki her `//nolint` linter adı + gerekçe taşır). misspell Türkçe sözcükler ve kalıcı
+  `cancelled` durum kodu için ayarlı.
+- **Sürümler imzalı ve izlenebilir** (`release.yml`): ikililerin SPDX SBOM'u (`keywordhunter-<sürüm>.spdx.json`,
+  `SHA256SUMS.txt`'ye dahil) ve imajın SPDX SBOM'u (`…-image.spdx.json`) release'e eklenir; `SHA256SUMS.txt`
+  cosign ile anahtarsız imzalanır (`SHA256SUMS.txt.sigstore.json`, yayından önce workflow kimliğiyle doğrulanır);
+  imaj etiketle değil özetle imzalanır (`cosign sign ghcr.io/…@sha256:…`); `dist/*` ve imaj için GitHub build
+  provenance attestation'ı (imajınki registry'ye itilir); imaj SBOM'u ayrıca imaj özetine SBOM attestation'ı olarak
+  bağlanır. İmzalar yayından önce README'deki kimlik kuralıyla (yalnız `v*` tag'i ya da `master`) doğrulanır.
+  Doğrulama komutları README → **Sürümleri doğrulama** (`gh attestation verify` de aynı ref kuralını şart koşar).
+- Elle sürüm yalnız `master`'dan (ya da aynı adlı tag'den) ve o ref'in ucundan çalışır: başka dal, incelenmemiş ya
+  da geçmiş bir commit imzalı/attestation'lı sürüme dönüşemez ve provenance hep derlenen commit'i adlandırır.
+  Geçmiş bir commit için tag push yolu kullanılır.
+- Tüm workflow'lardaki action'lar commit SHA'sına sabitlendi (`# vX.Y.Z` yorumuyla; Dependabot günceller): taşınan
+  bir etiket imza kimliğini kullanamaz.
+- Release workflow yetkileri iş bazına indirildi (üst düzey yalnız `contents: read`; `id-token`/`attestations`
+  yalnız imzalayan işlerde); Docker işi ikili işini bekler (tag/ref doğrulaması imaj itilmeden önce yapılır);
+  sürüm derlemesi Go modül önbelleği kullanmaz; checkout kimlik bilgisini saklamaz.
+- Release notlarındaki göreli Markdown bağlantıları tag'e sabit mutlak adrese çevrilir
+  (`https://github.com/<repo>/blob/<tag>/<yol>`, görseller `raw/`, başlıklı bağlantılar dahil; kod blokları ve
+  `kod` aralıkları, `../` bağlantılar olduğu gibi kalır).
+- CONTRIBUTING: `master` için önerilen dal koruması (zorunlu kontroller iş adlarıyla, tek bakımcıya uygun onay
+  sayısı, tag koruması ve elle sürüm yoluyla ilişkisi, Actions yetkileri) — bakımcıların GitHub ayarlarında
+  etkinleştirmesi gerekir. Workflow'lar `actionlint` + shellcheck temiz.
+- Lint'in bulduğu hatalar:
+  - **Oturum rolü:** kullanıcı satırı okunurken veritabanı hatası (ör. meşgul) olursa oturum **admin** sayılıyordu;
+    artık okuma hatasında en düşük rol (viewer). users tablosunda olmayan bir adın oturumu yalnız `.env`
+    (bootstrap) hesabınınsa admin'dir; başka ad (ör. silinen bir kullanıcının, silmeyle yarışan girişinden kalan
+    oturum) admin sayılmaz, oturum silinir ve 401 döner. Parola değiştirme de okuma hatasında `.env` hesabına
+    düşmez (yalnız `.env` parolasının değişip users satırının eski kalması engellendi).
+  - Günlük log rotasyonu başarısız olursa kapanmış dosyaya yazılmaya çalışılıyordu; log dosyaları artık `0600`,
+    log / ekran görüntüsü / `.env` dizinleri `0750`, ekran görüntüsü PNG'leri `0600` ile oluşturulur (mevcut
+    dosyaların izinleri değişmez). **Yükseltme notu:** Docker'da bu dosyaların sahibi uid 10001'dir; host'ta
+    `tail data/logs/…` izin hatası verir — `docker compose logs app` ya da `sudo` kullanın (README → Docker).
+  - Etiketli sonuç sayacı ve analitik kelime istatistikleri sorgu hatasını yutuyordu (etiket istatistikleri artık
+    sahte 0/0 yerine hata döndürür ve loglar); örümcek ilerlemesi, motor kontrolü, planlı arama geçmişi ve graf
+    "genişletildi" işaretinin yazma hataları sessizce kayboluyordu (artık loglanır).
+  - Arama motoru hatası `%v` ile sarıldığı için `errors.Is` sınıflandırması kırılabiliyordu (`%w`); sentinel
+    karşılaştırmaları `errors.Is`'e çevrildi.
+  - Bellekteki içerik tekilleştirme özeti MD5 → SHA-256, STIX paket parmak izi SHA-1 → SHA-256 (ikisi de
+    saklanmaz).
+
 ## v0.16.0 — 2026-10-17 · "Sentinel"
 
 Ekip ve entegrasyon sürümü: denetim kaydı, kişisel API token'ları, iki adımlı

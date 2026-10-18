@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/subtle"
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 		session, err := s.db.GetSession(sessionID)
 		if err != nil {
-			if err != sql.ErrNoRows {
+			if !errors.Is(err, sql.ErrNoRows) {
 				logger.Warn("Session okunamadi: %v", err)
 			}
 			clearAuthCookies(c, s.cookieSecure)
@@ -91,7 +92,9 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 		// Rol her istekte users tablosundan tazelenir (rol/pasif değişikliği anında etkindir).
 		role := storage.RoleViewer
-		if u, err := s.db.GetUserByUsername(session.Username); err == nil && u != nil {
+		u, err := s.db.GetUserByUsername(session.Username)
+		switch {
+		case err == nil && u != nil:
 			if !u.Enabled {
 				_ = s.db.DeleteSession(sessionID)
 				clearAuthCookies(c, s.cookieSecure)
@@ -100,9 +103,24 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 				return
 			}
 			role = u.Role
-		} else {
-			// users tablosunda yoksa (bootstrap edilmemiş eski oturum) admin varsay
+		case errors.Is(err, sql.ErrNoRows):
+			// users tablosunda yok: yalnız .env (bootstrap) hesabının oturumu
+			// admin'dir (REQUIRE_2FA'yı twoFactorGate ayrıca uygular). Başka bir
+			// ad sahipsiz oturumdur (ör. silinen kullanıcının silme sırasında
+			// yarışan girişi): admin sayılmaz, oturum düşürülür.
+			if s.creds == nil || session.Username != s.creds.Username() {
+				logger.Warn("Sahipsiz oturum reddedildi (%s)", session.Username)
+				_ = s.db.DeleteSession(sessionID)
+				clearAuthCookies(c, s.cookieSecure)
+				unauthorized(c)
+				c.Abort()
+				return
+			}
 			role = storage.RoleAdmin
+		default:
+			// Okuma hatası (ör. veritabanı meşgul): yetkiyi yükseltmek yerine
+			// en düşük role düş (fail closed); bir sonraki istek tazeler.
+			logger.Warn("Oturum kullanicisi okunamadi (%s): %v", session.Username, err)
 		}
 		c.Set("role", role)
 

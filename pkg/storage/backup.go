@@ -70,7 +70,7 @@ func vacuumInto(ctx context.Context, dsn, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	c.SetMaxOpenConns(1)
 	if _, err := c.ExecContext(ctx, `VACUUM INTO ?`, abs); err != nil {
 		return fmt.Errorf("VACUUM INTO: %w", err)
@@ -103,7 +103,7 @@ func scrubBackup(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	c.SetMaxOpenConns(1)
 	var n, version int
 	if err := c.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sessions'`).Scan(&n); err != nil {
@@ -184,7 +184,7 @@ func IntegrityCheck(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	ok, msgs, err := integrityCheck(ctx, c)
 	if err != nil {
 		return err
@@ -223,7 +223,7 @@ func VerifyFile(ctx context.Context, path string) (*VerifyReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	rep := &VerifyReport{Path: path, LatestSchemaVersion: LatestSchemaVersion(), Counts: map[string]int{}}
 	if st, err := os.Stat(path); err == nil {
 		rep.SizeBytes = st.Size()

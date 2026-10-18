@@ -18,7 +18,7 @@ type DemoUser struct {
 // DemoUsers admin dışındaki demo hesapları. Parolalar herkesçe bilinir;
 // e2e/README ve CONTRIBUTING.md ile aynı tutulmalıdır.
 var DemoUsers = []DemoUser{
-	{Username: "analyst", Password: "Analyst-Demo-Pass-1!", Role: "analyst"},
+	{Username: "analyst", Password: "Analyst-Demo-Pass-1!", Role: "analyst"}, //nolint:gosec // G101: herkesçe bilinen, belgelenmiş demo parolası (yalnız geliştirme/test)
 	{Username: "viewer", Password: "Viewer-Demo-Pass-1!", Role: "viewer"},
 }
 

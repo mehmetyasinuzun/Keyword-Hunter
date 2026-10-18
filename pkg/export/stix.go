@@ -3,7 +3,7 @@
 package export
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -273,7 +273,7 @@ func truncate(s string, n int) string {
 
 // Fingerprint paketin içerik özetini döndürür (loglama/ETag için).
 func Fingerprint(b *Bundle) string {
-	h := sha1.New()
+	h := sha256.New()
 	for _, o := range b.Objects {
 		fmt.Fprintf(h, "%v", o)
 	}

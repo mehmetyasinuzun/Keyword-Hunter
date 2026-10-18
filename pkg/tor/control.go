@@ -107,7 +107,7 @@ func (c *Controller) Ping() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_, err = c.command(conn, `GETINFO status/circuit-established`)
 	return err
 }
@@ -117,7 +117,7 @@ func (c *Controller) signal(sig string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_, err = c.command(conn, "SIGNAL "+sig)
 	return err
 }
@@ -133,7 +133,7 @@ func (c *Controller) dial() (net.Conn, error) {
 		auth = fmt.Sprintf("AUTHENTICATE %q", c.password)
 	}
 	if _, err := c.command(conn, auth); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("kimlik doğrulama başarısız (TOR_CONTROL_PASSWORD?): %w", err)
 	}
 	return conn, nil

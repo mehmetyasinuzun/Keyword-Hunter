@@ -280,7 +280,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		}
 		return Errorf([]error{err}, "MISP'e bağlanılamadı: %v", "Could not connect to MISP: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
 	if err != nil {
 		return Errorf([]error{err}, "MISP yanıtı okunamadı: %v", "Could not read the MISP response: %v", err)

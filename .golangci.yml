@@ -1,0 +1,84 @@
+# golangci-lint v2 yapılandırması. CI'daki "golangci-lint" işi ve yerel
+# çalıştırma aynı dosyayı kullanır:
+#   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+#
+# İlke: bulgu kodda düzeltilir. İstisna yalnız dar kapsamlıdır (belirli bir
+# kural + belirli bir yol ya da satır) ve gerekçesi yanında yazılıdır; bir
+# linter depo genelinde kapatılmaz. Satır düzeyindeki //nolint yorumları
+# nolintlint ile denetlenir: linter adı ve gerekçe zorunludur.
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - errcheck
+    - errorlint
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nolintlint
+    - staticcheck
+    - unused
+
+  settings:
+    errcheck:
+      # Yalnız hatası bilinçli olarak anlamsız olan çağrılar:
+      #  - sql.Rows.Close: okuma hataları rows.Err()/Scan ile zaten raporlanır;
+      #    imleç kapatma hatası işlenebilir bir bilgi taşımaz.
+      #  - sql.Tx.Rollback: "defer tx.Rollback()" güvenlik ağıdır; Commit'ten
+      #    sonra tasarım gereği sql.ErrTxDone döner.
+      #  - sql.Stmt.Close: hazırlanmış ifade kapanışı; bağlantı havuzuna döner.
+      #  - fmt.Fprint*: terminal (CLI çıktısı) ve http.ResponseWriter yazımı;
+      #    yazma hatası karşı tarafın gittiği anlamına gelir, yapılacak bir şey yok.
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*database/sql.Stmt).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+    gosec:
+      # G104 ("errors unhandled") errcheck'in birebir kopyasıdır ve yukarıdaki
+      # gerekçeli exclude-functions listesine uymaz; denetim errcheck'te kalır.
+      excludes:
+        - G104
+
+    misspell:
+      # Yerel ayar zorlanmaz: EN katalog İngiliz yazımını kullanır
+      # ("organisation") ve "cancelled" kalıcı bir iş durumu / API kodudur
+      # (veritabanında ve istemcilerde saklanır; değiştirmek uyumluluğu bozar).
+      # Türkçe (ve çok dilli sınıflandırıcı fikstürlerindeki İspanyolca)
+      # sözcükler İngilizce yazım hatası değildir.
+      ignore-rules:
+        - adres
+        - mamal
+        - paralel
+        - performans
+        - discreto
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+  exclusions:
+    generated: lax
+    rules:
+      # i18n katalogları "parola", "token", "secret" gibi sözcükler içeren
+      # anahtar/metinlerdir; gerçek kimlik bilgisi değildir.
+      - path: ^pkg/i18n/catalog_[a-z_]+\.go$
+        linters: [gosec]
+        text: "G101:"
+      # Testler: sahte kimlik bilgisi fikstürleri (G101), t.TempDir()/testdata
+      # altındaki dosyaları okuma (G304, G703) ve httptest istekleri için
+      # elle kurulan istemci tarafı çerezler (G124; Secure/HttpOnly/SameSite
+      # yalnız sunucunun Set-Cookie'sinde anlamlıdır).
+      - path: _test\.go$
+        linters: [gosec]
+        text: "G(101|124|304|703):"

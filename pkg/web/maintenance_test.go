@@ -201,7 +201,7 @@ func TestBackupDownload_OutlivesServerWriteTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("istek yazma süresinde kesildi: %v", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	body, err := io.ReadAll(res.Body)
 	if err != nil || res.StatusCode != http.StatusOK || int64(len(body)) != res.ContentLength {
 		t.Fatalf("indirme: %d, %d/%d bayt, %v", res.StatusCode, len(body), res.ContentLength, err)

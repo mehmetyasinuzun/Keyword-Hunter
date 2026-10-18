@@ -56,7 +56,7 @@ func NormalizeRecoveryCode(code string) string {
 		switch {
 		case r == '-' || r == ' ':
 			continue
-		case r < 128 && strings.IndexByte(recoveryAlphabet, byte(r)) >= 0:
+		case strings.ContainsRune(recoveryAlphabet, r):
 			b.WriteRune(r)
 		default:
 			return ""

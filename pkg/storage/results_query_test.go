@@ -571,7 +571,9 @@ func TestWatchlist_UptimeChangeAndSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	var orphan int
-	db.conn.QueryRow(`SELECT COUNT(*) FROM watchlist_checks WHERE watchlist_id = ?`, other).Scan(&orphan)
+	if err := db.conn.QueryRow(`SELECT COUNT(*) FROM watchlist_checks WHERE watchlist_id = ?`, other).Scan(&orphan); err != nil {
+		t.Fatal(err)
+	}
 	if orphan != 0 {
 		t.Fatalf("silinen öğenin kontrolleri kalmamalı: %d", orphan)
 	}

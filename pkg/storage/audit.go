@@ -190,7 +190,7 @@ func validAuditAction(a string) bool {
 	}
 	for i := 0; i < len(a); i++ {
 		c := a[i]
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '.' && c != '_' && c != '-' {
 			return false
 		}
 	}
@@ -368,7 +368,7 @@ func (db *DB) queryAuditEvents(f AuditFilter) ([]AuditEvent, error) {
 		order = " ORDER BY id ASC"
 	}
 	args = append(args, f.Limit, f.Offset)
-	rows, err := db.conn.Query(`SELECT `+auditColumns+` FROM audit_events`+where+order+` LIMIT ? OFFSET ?`, args...)
+	rows, err := db.conn.Query(`SELECT `+auditColumns+` FROM audit_events`+where+order+` LIMIT ? OFFSET ?`, args...) //nolint:gosec // G202: sütun listesi ve WHERE/ORDER sabit parçalardan kurulur; değerler parametre
 	if err != nil {
 		return nil, err
 	}

@@ -85,6 +85,7 @@ docker pull ghcr.io/mehmetyasinuzun/keyword-hunter:latest
 - Varsayılan olarak yalnızca bu makineden erişilir; Tor konteyneri host'a port yayınlamaz.
 - LAN/sunucudan erişim: `KH_BIND=0.0.0.0 docker compose up -d` — mutlaka güçlü parola, HTTPS ters vekil (Caddy/nginx) ve `WEB_SECURE_COOKIES=true`.
 - Kalıcı veri `./data/` altında: `keywordhunter.db`, `.env`, `logs/`, `screenshots/`. `docker compose down -v && rm -rf data` tümünü siler.
+- v0.17.0'dan itibaren yeni log dosyaları ve ekran görüntüleri yalnız sahibine açıktır (`0600`; Docker'da sahibi uid 10001 `kh`): host'ta `tail data/logs/…` izin hatası verir. Logları `docker compose logs app` (konsola da yazılır) ya da `sudo` ile okuyun; host'ta çalışan bir log toplayıcıyı uid 10001 ile ya da konteyner içinde çalıştırın. Eski dosyaların izinleri değişmez.
 - Windows: `temiz_baslat.bat` aynı adımları yapar.
 
 ### Yerel (macOS / Linux / Windows, Go 1.27+)
@@ -169,10 +170,74 @@ Bu araç saldırgan içerik barındıran siteleri ziyaret eder ve oradan gelen m
 - **Sızıntı önleme:** webhook sırları log, API ve HTML'de maskelenir; CSV export formül enjeksiyonuna karşı korumalı.
 - **Entegrasyonlar:** MISP API anahtarı `APP_SECRET`'tan ayrı amaçla türetilen anahtarla AES-256-GCM şifreli saklanır, hiçbir yanıtta/sayfada/denetim kaydında görünmez ve adres başka sunucuya taşınırken yeniden istenir; MISP çıkışı Tor değil doğrudan clearnet/intranet'tir (yalnız genel hedef — "özel ağa izin ver" açılmadıkça —, yönlendirme yok, 1 MB / 15 sn). TAXII yalnız API token kabul eder (çerez yok, yazma yok); kart ve telefon numaraları ne TAXII'de ne MISP'te paylaşılır; düz http ile MISP yalnız kurum içi IP'lere. Ayrıntı: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 - **Denetim kaydı:** giriş/çıkış, reddedilen erişimler, kullanıcı ve ayar değişiklikleri, silme, dışa aktarma gibi tüm durum değiştiren işlemler "kim, ne zaman, nereden, ne yaptı" olarak SHA-256 **hash zincirli**, yalnız eklenebilir bir tabloya yazılır; tek bir satırın değiştirilmesi, silinmesi ya da sondan kırpılması `/audit` ekranında (yalnız admin) kırılma noktasıyla gösterilir. Ayrıntılarda parola, çerez, token ve webhook yolu asla tutulmaz; `AUDIT_RETENTION_DAYS` ile budanır (zincir çapayla doğrulanabilir kalır), CSV/JSON dışa aktarılabilir.
-- **Tedarik zinciri:** tüm varlıklar gömülü (CDN yok), her push'ta `govulncheck`, Dependabot, sürümlerde SHA256 özetleri.
+- **Tedarik zinciri:** tüm varlıklar gömülü (CDN yok); her push/PR'da `govulncheck`, `golangci-lint` (gosec dahil) ve CodeQL (Go, JavaScript, Actions; haftalık da); Dependabot. Sürümlerde SPDX SBOM (ikililer + imaj), cosign ile anahtarsız imzalı `SHA256SUMS.txt` ve özetle imzalı imaj, GitHub build provenance attestation'ları — bkz. [Sürümleri doğrulama](#-sürümleri-doğrulama).
 - **Docker:** root olmayan kullanıcı, `no-new-privileges`, Tor portu host'a kapalı.
 
 Zafiyet bildirimi için [SECURITY.md](SECURITY.md).
+
+## ✅ Sürümleri doğrulama
+
+Her sürüm GitHub Actions'taki [`release.yml`](.github/workflows/release.yml) tarafından üretilir ve depoda saklanan bir
+anahtar olmadan, o workflow'un OIDC kimliğiyle ([Sigstore](https://www.sigstore.dev/) / Fulcio) imzalanır. Release
+sayfasında ikililerin yanında şunlar bulunur:
+
+| Dosya | İçerik |
+|---|---|
+| `SHA256SUMS.txt` | Tüm ikililerin ve ikili SBOM'unun SHA-256 özetleri |
+| `SHA256SUMS.txt.sigstore.json` | `SHA256SUMS.txt`'nin cosign imza paketi (sertifika + şeffaflık kaydı) |
+| `keywordhunter-<sürüm>.spdx.json` | İkililerin SPDX SBOM'u (gömülü Go modülleri ve araç zinciri) |
+| `keywordhunter-<sürüm>-image.spdx.json` | Docker imajının (linux/amd64) SPDX SBOM'u — bilgi amaçlı kopya; `SHA256SUMS.txt` kapsamında değildir, imzalı hali imaj özetine bağlı SBOM attestation'ıdır (aşağıda) |
+
+Gerekenler: [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) v3+ (imzalar Sigstore paket biçimindedir) ve
+[GitHub CLI](https://cli.github.com/) (`gh attestation`; GitHub API'sini kullandığı için önce `gh auth login` ya da `GH_TOKEN`).
+`gh` olmadan da dosyaları Releases sayfasından indirip 2. ve 3. adımları ve imajın `cosign verify`'ını yapabilirsiniz.
+Aşağıda `0.17.0` yerine doğruladığınız sürümü yazın.
+
+```bash
+# 1) Dosyaları indirin (ya da Releases sayfasından elle)
+gh release download v0.17.0 --repo mehmetyasinuzun/Keyword-Hunter --dir kh-0.17.0 && cd kh-0.17.0
+
+# 2) Özet listesinin imzası: yalnız bu deponun release workflow'u (v* tag'i ya da master'dan elle) imzalamış olmalı
+cosign verify-blob \
+  --bundle SHA256SUMS.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  SHA256SUMS.txt
+
+# 3) Dosyalar imzalı listeyle eşleşmeli (tek ikili indirdiyseniz: --ignore-missing ekleyin)
+sha256sum -c SHA256SUMS.txt
+
+# 4) Build provenance: ikili bu deponun release workflow'unda (v* tag'i ya da master; GitHub'ın kendi runner'ı)
+#    derlendi; kaynak commit çıktıdaki sourceRepositoryDigest'tir
+gh attestation verify keywordhunter-0.17.0-linux-amd64 \
+  --repo mehmetyasinuzun/Keyword-Hunter \
+  --cert-identity-regex '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --deny-self-hosted-runners
+```
+
+Docker imajı (etiket bir özete çözülür; en sıkısı `@sha256:…` ile özeti sabitlemektir):
+
+```bash
+cosign verify ghcr.io/mehmetyasinuzun/keyword-hunter:0.17.0 \
+  --certificate-identity-regexp '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# Provenance (imaj bu workflow'da derlendi)
+gh attestation verify oci://ghcr.io/mehmetyasinuzun/keyword-hunter:0.17.0 \
+  --repo mehmetyasinuzun/Keyword-Hunter \
+  --cert-identity-regex '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --deny-self-hosted-runners
+
+# İmzalı SBOM (release'teki SBOM dosyasının imzalı karşılığı; --format json ile içeriği alınır)
+gh attestation verify oci://ghcr.io/mehmetyasinuzun/keyword-hunter:0.17.0 \
+  --repo mehmetyasinuzun/Keyword-Hunter \
+  --cert-identity-regex '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --deny-self-hosted-runners \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+macOS'ta `sha256sum` yoksa `shasum -a 256 -c SHA256SUMS.txt`. v0.17.0 öncesi sürümlerde yalnız `SHA256SUMS.txt` vardır
+(imza, SBOM ve attestation yoktur).
 
 ## 🧭 Mimari
 

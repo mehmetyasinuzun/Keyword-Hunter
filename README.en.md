@@ -62,6 +62,11 @@ docker compose logs app | grep -A3 "yönetici parolası"   # admin password gene
 
 Open **http://localhost:8080** · health: `/healthz` · prebuilt image: `ghcr.io/mehmetyasinuzun/keyword-hunter:latest`.
 
+Persistent data lives in `./data/` (`keywordhunter.db`, `.env`, `logs/`, `screenshots/`). Since v0.17.0 new log files and
+screenshots are owner-only (`0600`; in Docker the owner is uid 10001 `kh`), so `tail data/logs/…` on the host fails with
+permission denied: use `docker compose logs app` (logs also go to the console) or `sudo`, and run host-side log shippers
+as uid 10001 or inside the container. Existing files keep their permissions.
+
 Local run (Go 1.27+): `./run.sh` (macOS/Linux) · `.\run.ps1` (Windows) · `./run.sh release` builds six platform binaries into `dist/`.
 Tor must be listening (Tor Browser 9150 / tor service 9050) — set `TOR_PROXY` in `.env`.
 See the [Turkish README](README.md) for the full configuration table (`.env` variables).
@@ -101,9 +106,73 @@ The tool visits hostile sites and displays their text, so the UI assumes **untru
 - SSRF guards: expand / analyze / watch / render are `.onion`-only; webhook and screenshot targets cannot resolve to internal addresses; redirects are not followed.
 - Secrets masked in logs, API and HTML; CSV export protected against formula injection.
 - Integrations: the MISP API key is stored AES-256-GCM-encrypted with a purpose-separated key derived from `APP_SECRET`, never appears in any response, page or audit row, and must be re-entered when the URL moves to another server; MISP egress is direct clearnet/intranet, not Tor (public targets only unless "allow private networks" is on, no redirects, 1 MB / 15 s caps). TAXII accepts API tokens only (no cookies, no writes); card and phone numbers are shared neither over TAXII nor to MISP; plain-http MISP is allowed only to internal IPs. Details: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
-- All assets embedded (no CDN), `govulncheck` on every push, Dependabot, SHA256 sums on releases; Docker runs as non-root with `no-new-privileges`.
+- All assets embedded (no CDN); `govulncheck`, `golangci-lint` (incl. gosec) and CodeQL (Go, JavaScript, Actions; also weekly) on every push/PR; Dependabot. Releases ship SPDX SBOMs (binaries + image), a keyless cosign-signed `SHA256SUMS.txt`, a digest-signed image and GitHub build provenance attestations — see [Verifying releases](#-verifying-releases). Docker runs as non-root with `no-new-privileges`.
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
+## ✅ Verifying releases
+
+Every release is produced by [`release.yml`](.github/workflows/release.yml) on GitHub Actions and signed keylessly with
+that workflow's OIDC identity ([Sigstore](https://www.sigstore.dev/) / Fulcio) — no signing key is stored in the repo.
+Next to the binaries each release carries:
+
+| File | Contents |
+|---|---|
+| `SHA256SUMS.txt` | SHA-256 digests of every binary and of the binary SBOM |
+| `SHA256SUMS.txt.sigstore.json` | cosign signature bundle for `SHA256SUMS.txt` (certificate + transparency log entry) |
+| `keywordhunter-<version>.spdx.json` | SPDX SBOM of the binaries (embedded Go modules and toolchain) |
+| `keywordhunter-<version>-image.spdx.json` | SPDX SBOM of the Docker image (linux/amd64) — informational copy, not covered by `SHA256SUMS.txt`; its signed form is the SBOM attestation bound to the image digest (below) |
+
+You need [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) v3+ (signatures use the Sigstore bundle format) and
+the [GitHub CLI](https://cli.github.com/) (`gh attestation`; it calls the GitHub API, so run `gh auth login` or set `GH_TOKEN` first).
+Without `gh` you can still download the assets from the Releases page and run steps 2 and 3 and the image `cosign verify`.
+Replace `0.17.0` with the version you are verifying.
+
+```bash
+# 1) Download the assets (or grab them from the Releases page)
+gh release download v0.17.0 --repo mehmetyasinuzun/Keyword-Hunter --dir kh-0.17.0 && cd kh-0.17.0
+
+# 2) Signature of the checksum list: only this repo's release workflow (a v* tag, or a manual run from master) may have signed it
+cosign verify-blob \
+  --bundle SHA256SUMS.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  SHA256SUMS.txt
+
+# 3) Files must match the signed list (downloaded a single binary? add --ignore-missing)
+sha256sum -c SHA256SUMS.txt
+
+# 4) Build provenance: the binary was built by this repo's release workflow (a v* tag or master, on a
+#    GitHub-hosted runner); the source commit is the sourceRepositoryDigest in the output
+gh attestation verify keywordhunter-0.17.0-linux-amd64 \
+  --repo mehmetyasinuzun/Keyword-Hunter \
+  --cert-identity-regex '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --deny-self-hosted-runners
+```
+
+Docker image (the tag resolves to a digest; pinning `@sha256:…` is strictest):
+
+```bash
+cosign verify ghcr.io/mehmetyasinuzun/keyword-hunter:0.17.0 \
+  --certificate-identity-regexp '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# Provenance (the image was built by this workflow)
+gh attestation verify oci://ghcr.io/mehmetyasinuzun/keyword-hunter:0.17.0 \
+  --repo mehmetyasinuzun/Keyword-Hunter \
+  --cert-identity-regex '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --deny-self-hosted-runners
+
+# Signed SBOM (the signed counterpart of the release's SBOM file; --format json prints its content)
+gh attestation verify oci://ghcr.io/mehmetyasinuzun/keyword-hunter:0.17.0 \
+  --repo mehmetyasinuzun/Keyword-Hunter \
+  --cert-identity-regex '^https://github\.com/mehmetyasinuzun/Keyword-Hunter/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/master)$' \
+  --deny-self-hosted-runners \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+On macOS without `sha256sum`: `shasum -a 256 -c SHA256SUMS.txt`. Releases before v0.17.0 only ship `SHA256SUMS.txt`
+(no signature, SBOM or attestations).
 
 ## 🔌 API
 

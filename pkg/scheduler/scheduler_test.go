@@ -221,7 +221,7 @@ func TestCheckAndRun_OnlyDueAndOneAtATime(t *testing.T) {
 	}
 	close(fs.gate)
 
-	var firstID int64 = due1.ID
+	firstID := due1.ID
 	if first == "due2" {
 		firstID = due2.ID
 	}

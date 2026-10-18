@@ -113,7 +113,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err := logger.Init(os.TempDir()+string(os.PathSeparator)+"khseed-logs", logger.WARN, true); err != nil {
 		return fmt.Errorf("logger başlatılamadı: %w", err)
 	}
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	start := time.Now()
 	sum, err := Seed(Options{

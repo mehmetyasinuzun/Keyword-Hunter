@@ -101,7 +101,7 @@ func WriteFile(ctx context.Context, src Source, dest string) (int64, error) {
 	if err := Produce(ctx, src, name); err != nil {
 		return 0, err
 	}
-	f, err := os.Open(name)
+	f, err := os.Open(name) //nolint:gosec // G304: yol bu fonksiyonun hedef dizinde kendi oluşturduğu geçici dosya
 	if err != nil {
 		return 0, err
 	}
@@ -109,7 +109,9 @@ func WriteFile(ctx context.Context, src Source, dest string) (int64, error) {
 	if err == nil {
 		err = f.Sync()
 	}
-	f.Close()
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -181,9 +183,9 @@ func SweepStale(dir string, olderThan time.Duration, now time.Time) ([]string, e
 // syncDir yeniden adlandırmanın dizin girdisini diske yazar (en iyi çaba;
 // bazı platformlar dizin fsync'ini desteklemez).
 func syncDir(dir string) {
-	if d, err := os.Open(dir); err == nil {
+	if d, err := os.Open(dir); err == nil { //nolint:gosec // G304: yol operatörün yedek dizini; kullanıcı girdisi değil
 		_ = d.Sync()
-		d.Close()
+		_ = d.Close()
 	}
 }
 

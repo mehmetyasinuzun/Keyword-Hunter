@@ -23,12 +23,12 @@ func TestClassifyError_ReturnsSentinels(t *testing.T) {
 		if !errors.Is(got, tc.want) {
 			t.Errorf("ClassifyError(%q) = %v, want %v", tc.in, got, tc.want)
 		}
-		if FetchErrorKind(got) != tc.want {
+		if !errors.Is(FetchErrorKind(got), tc.want) {
 			t.Errorf("FetchErrorKind(ClassifyError(%q)) != %v", tc.in, tc.want)
 		}
 	}
 	other := errors.New("HTTP 404")
-	if got := ClassifyError(other); got != other {
+	if got := ClassifyError(other); got != other { //nolint:errorlint // kimlik karşılaştırması bilinçli: tanınmayan hata sarmalanmadan aynen dönmeli
 		t.Errorf("tanınmayan hata değişmemeli: %v", got)
 	}
 	if ClassifyError(nil) != nil {
@@ -40,13 +40,13 @@ func TestClassifyError_ReturnsSentinels(t *testing.T) {
 // sarmalanmış ve metne dönüşmüş hatayı da tanımalı.
 func TestFetchErrorKind_WrappedAndStringified(t *testing.T) {
 	for _, s := range fetchErrors {
-		if got := FetchErrorKind(fmt.Errorf("üst katman: %w", s)); got != s {
+		if got := FetchErrorKind(fmt.Errorf("üst katman: %w", s)); !errors.Is(got, s) {
 			t.Errorf("%%w ile sarmalanmış %v tanınmadı: %v", s, got)
 		}
-		if got := FetchErrorKind(fmt.Errorf("%s", s.Error())); got != s {
+		if got := FetchErrorKind(fmt.Errorf("%s", s.Error())); !errors.Is(got, s) {
 			t.Errorf("metne dönüşmüş %v tanınmadı: %v", s, got)
 		}
-		if got := FetchErrorKind(fmt.Errorf("sayfa çekilemedi: %s", s.Error())); got != s {
+		if got := FetchErrorKind(fmt.Errorf("sayfa çekilemedi: %s", s.Error())); !errors.Is(got, s) {
 			t.Errorf("önekli %v tanınmadı: %v", s, got)
 		}
 	}

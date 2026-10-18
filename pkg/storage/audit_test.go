@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -112,13 +113,13 @@ func TestAudit_TamperedRowDetected(t *testing.T) {
 func TestAudit_DeletionAndTruncationDetected(t *testing.T) {
 	forceDelete := func(t *testing.T, db *DB, where string) {
 		t.Helper()
-		if _, err := db.conn.Exec(`DELETE FROM audit_events WHERE ` + where); err == nil {
+		if _, err := db.conn.Exec(`DELETE FROM audit_events WHERE ` + where); err == nil { //nolint:gosec // G202: test içi sabit WHERE parçası
 			t.Fatal("DELETE tetikleyiciyle reddedilmeliydi")
 		}
 		if _, err := db.conn.Exec(`DROP TRIGGER audit_events_no_delete`); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.conn.Exec(`DELETE FROM audit_events WHERE ` + where); err != nil {
+		if _, err := db.conn.Exec(`DELETE FROM audit_events WHERE ` + where); err != nil { //nolint:gosec // G202: test içi sabit WHERE parçası
 			t.Fatal(err)
 		}
 	}
@@ -203,7 +204,7 @@ func TestAudit_RetentionKeepsChainVerifiable(t *testing.T) {
 func TestAudit_InputNormalization(t *testing.T) {
 	db := newTestDB(t)
 	for _, bad := range []string{"", "Auth.Login", "auth login", ".auth", "auth.", "auth;drop", strings.Repeat("a", 65)} {
-		if _, err := db.AppendAuditEvent(AuditEvent{Action: bad}); err != ErrInvalidAuditAction {
+		if _, err := db.AppendAuditEvent(AuditEvent{Action: bad}); !errors.Is(err, ErrInvalidAuditAction) {
 			t.Errorf("eylem %q reddedilmeliydi: %v", bad, err)
 		}
 	}

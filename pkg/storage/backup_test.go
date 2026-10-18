@@ -53,7 +53,7 @@ func TestBackup_ConsistentCopyWithoutSessions(t *testing.T) {
 
 	// Oturumlar hariç tüm tablolar aynı satır sayısında
 	raw := openRaw(t, dest)
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	src, got := tableCounts(t, db.conn), tableCounts(t, raw)
 	for tb, n := range src {
 		want := n
@@ -68,7 +68,9 @@ func TestBackup_ConsistentCopyWithoutSessions(t *testing.T) {
 		t.Fatal("kaynaktaki oturum silinmemeli")
 	}
 	// Oturum kimliği dosyada (serbest sayfalarda bile) kalmamalı
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	b, err := os.ReadFile(dest)
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +83,7 @@ func TestBackup_ConsistentCopyWithoutSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("yedek açılamadı: %v", err)
 	}
-	defer restored.Close()
+	defer func() { _ = restored.Close() }()
 	if ok, _, err := restored.VerifyAuditChain(); !ok || err != nil {
 		t.Fatalf("geri yüklenen zincir: %v %v", ok, err)
 	}
@@ -116,13 +118,15 @@ func TestBackupFile_DoesNotMigrateSource(t *testing.T) {
 	src := filepath.Join(dir, "legacy.db")
 	raw := openRaw(t, src)
 	loadFixture(t, raw, "legacy_v0.16.sql")
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	dest := filepath.Join(dir, "copy.db")
 	if err := BackupFile(context.Background(), src, dest); err != nil {
 		t.Fatal(err)
 	}
 	raw = openRaw(t, src)
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	if v := userVersionOf(t, raw); v != 0 {
 		t.Fatalf("kaynak migrasyona uğramamalı: user_version=%d", v)
 	}
@@ -161,7 +165,7 @@ func TestIntegrityCheck_DetectsCorruption(t *testing.T) {
 	// Başlık (1. sayfa) sağlam; sondan bir önceki sayfa çöp.
 	page := len(b)/4096 - 2
 	for i := page * 4096; i < (page+1)*4096; i++ {
-		b[i] = byte(i * 7)
+		b[i] = byte(i * 7) //nolint:gosec // G115: bilinçli taşan bayt: sayfayı çöple doldurur
 	}
 	if err := os.WriteFile(dest, b, 0o600); err != nil {
 		t.Fatal(err)
@@ -184,7 +188,9 @@ func TestVerifyFile_ReportsBrokenChainAndNewerSchema(t *testing.T) {
 	raw := openRaw(t, dest)
 	mustExec(t, raw, `DROP TRIGGER audit_events_no_update`)
 	mustExec(t, raw, `UPDATE audit_events SET actor = 'mallory' WHERE id = 2`)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	rep, err := VerifyFile(context.Background(), dest)
 	if err != nil {
 		t.Fatal(err)
@@ -199,7 +205,9 @@ func TestVerifyFile_ReportsBrokenChainAndNewerSchema(t *testing.T) {
 	}
 	raw = openRaw(t, dest2)
 	mustExec(t, raw, `PRAGMA user_version = 999`)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	rep, err = VerifyFile(context.Background(), dest2)
 	if err != nil || rep.OK() || rep.SchemaVersion != 999 {
 		t.Fatalf("yeni şema OK sayılmamalı: %+v %v", rep, err)
@@ -249,7 +257,7 @@ func TestBackup_ScrubsSessionsWhenPathHasQuestionMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	var n int
 	if err := c.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("yedekte oturum kalmamalı: %d %v", n, err)
@@ -275,7 +283,9 @@ func TestScrubBackup_FailsClosed(t *testing.T) {
 	mustExec(t, raw, `CREATE TABLE search_results (id INTEGER PRIMARY KEY)`)
 	mustExec(t, raw, `PRAGMA user_version = 2`)
 	mustExec(t, raw, `PRAGMA journal_mode = DELETE`)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err := scrubBackup(context.Background(), noSessions); err == nil {
 		t.Fatal("sürümlü yedekte sessions tablosunun yokluğu hata olmalı")
 	}
@@ -284,7 +294,9 @@ func TestScrubBackup_FailsClosed(t *testing.T) {
 	raw = openRaw(t, legacy)
 	loadFixture(t, raw, "legacy_v0.4.sql")
 	mustExec(t, raw, `PRAGMA journal_mode = DELETE`)
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err := scrubBackup(context.Background(), legacy); err != nil {
 		t.Fatalf("oturum tablosu olmayan sürümsüz veritabanı: %v", err)
 	}
@@ -306,7 +318,9 @@ func TestBackupFile_LeavesSourceUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedBackupData(t, w)
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, src := range []string{archived, walSrc} {
 		before, err := os.ReadFile(src)

@@ -229,7 +229,7 @@ func (p *pendingLogins) cleanup() {
 }
 
 func (s *Server) setPendingCookie(c *gin.Context, id string) {
-	http.SetCookie(c.Writer, &http.Cookie{
+	http.SetCookie(c.Writer, &http.Cookie{ //nolint:gosec // G124: HttpOnly + SameSite=Strict; Secure WEB_SECURE_COOKIES izler (yerel düz http kurulumları)
 		Name: pendingLoginCookie, Value: id, Path: "/login",
 		MaxAge: int(pendingLoginTTL / time.Second), HttpOnly: true,
 		Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode,
@@ -237,7 +237,7 @@ func (s *Server) setPendingCookie(c *gin.Context, id string) {
 }
 
 func (s *Server) clearPendingCookie(c *gin.Context) {
-	http.SetCookie(c.Writer, &http.Cookie{
+	http.SetCookie(c.Writer, &http.Cookie{ //nolint:gosec // G124: HttpOnly + SameSite=Strict; Secure WEB_SECURE_COOKIES izler (yerel düz http kurulumları)
 		Name: pendingLoginCookie, Value: "", Path: "/login", MaxAge: -1,
 		HttpOnly: true, Secure: s.cookieSecure, SameSite: http.SameSiteStrictMode,
 	})

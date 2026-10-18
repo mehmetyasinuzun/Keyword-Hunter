@@ -95,6 +95,7 @@ func (db *DB) FeedFindings(ctx context.Context, f FeedFilter, withArtifacts bool
 		args = append(args, f.AfterKey, f.AfterKey, f.AfterID)
 	}
 	args = append(args, f.Limit)
+	//nolint:gosec // G202: sabit SQL parçaları; değerler parametre
 	rows, err := db.conn.QueryContext(ctx, `
 		SELECT r.id, r.title, r.url, r.source, r.query, r.criticality, COALESCE(r.category, ''), r.keyword_count,
 		       COALESCE(r.auto_tags, ''), r.created_at, CAST(r.feed_at AS TEXT),
@@ -137,6 +138,7 @@ func (db *DB) FeedFindings(ctx context.Context, f FeedFilter, withArtifacts bool
 	for _, ff := range out {
 		ids = append(ids, ff.ID)
 	}
+	//nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 	arows, err := db.conn.QueryContext(ctx, `
 		SELECT a.id, a.result_id, a.type, a.value, COALESCE(a.context, ''), a.confidence, a.created_at,
 		       NOT EXISTS (SELECT 1 FROM result_artifacts a2 JOIN search_results p ON p.id = a2.result_id

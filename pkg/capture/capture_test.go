@@ -56,7 +56,7 @@ func fakeChrome(t *testing.T) (bin, argsFile string) {
 	argsFile = filepath.Join(dir, "args.txt")
 	bin = filepath.Join(dir, "chrome")
 	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > '" + argsFile + "'\nexit 1\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil { //nolint:gosec // G306: sahte chrome betiği çalıştırılabilir olmalı
 		t.Fatal(err)
 	}
 	return bin, argsFile

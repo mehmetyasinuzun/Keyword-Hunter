@@ -335,7 +335,7 @@ func loadWatchlistSeedFile(path string) []watchlistSeed {
 	if path == "" {
 		return nil
 	}
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // G304: yol operatörün WATCHLIST_SEED değeri; kullanıcı girdisi değil
 	if err != nil {
 		return nil
 	}

@@ -228,7 +228,7 @@ func (r *Runner) run(id string) {
 
 		if err != nil {
 			shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("✗ %s: %v", shared.Truncate(f.url, 50), err), "Crawler")
-			r.db.UpdateCrawlProgress(id, pages, found, saved)
+			r.progress(id, pages, found, saved)
 			r.delay(ctx)
 			continue
 		}
@@ -257,7 +257,7 @@ func (r *Runner) run(id string) {
 		}
 
 		shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("✓ sayfa %d/%d · %d link · derinlik %d", pages, job.MaxPages, len(links), f.depth), "Crawler")
-		r.db.UpdateCrawlProgress(id, pages, found, saved)
+		r.progress(id, pages, found, saved)
 		r.delay(ctx)
 	}
 
@@ -285,8 +285,16 @@ func (r *Runner) savePage(pageURL, query string) (int, error) {
 	return r.db.SaveResults([]storage.SearchResult{res})
 }
 
+// progress ilerleme sayaçlarını yazar; yazılamazsa tarama sürer (sayaçlar
+// yalnız gösterim içindir), ama hata loglanır.
+func (r *Runner) progress(id string, pages, found, saved int) {
+	if err := r.db.UpdateCrawlProgress(id, pages, found, saved); err != nil {
+		logger.Warn("CRAWL PROGRESS ERROR: %s - %v", id, err)
+	}
+}
+
 func (r *Runner) finish(id, status, msg string, pages, found, saved int, start time.Time) {
-	r.db.UpdateCrawlProgress(id, pages, found, saved)
+	r.progress(id, pages, found, saved)
 	_ = r.db.MarkCrawlFinished(id, status, msg)
 	if status == "completed" {
 		shared.Streamer.BroadcastLog("success", fmt.Sprintf("Örümcek tamamlandı: %d sayfa, %d yeni bulgu", pages, saved), "Crawler")
@@ -294,7 +302,7 @@ func (r *Runner) finish(id, status, msg string, pages, found, saved int, start t
 }
 
 func politeDelay(ctx context.Context) {
-	d := minDelay + time.Duration(rand.Int63n(int64(jitterDelay)))
+	d := minDelay + time.Duration(rand.Int63n(int64(jitterDelay))) //nolint:gosec // G404: nezaket gecikmesi jitter'ı; güvenlik amaçlı değil
 	select {
 	case <-time.After(d):
 	case <-ctx.Done():

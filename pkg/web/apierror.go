@@ -173,14 +173,15 @@ func errDetail(err, sentinel error) string {
 // fetchFailCode sınıflandırılmış bir çekme hatasının (Tor kapalı, site
 // çevrimdışı, zaman aşımı…) kararlı kodunu verir. Tanınmayan hatada ok=false.
 func fetchFailCode(err error) (code string, ok bool) {
-	switch shared.FetchErrorKind(err) {
-	case shared.ErrTorUnreachable:
+	kind := shared.FetchErrorKind(err)
+	switch {
+	case errors.Is(kind, shared.ErrTorUnreachable):
 		code = "tor_unreachable"
-	case shared.ErrSiteUnreachable:
+	case errors.Is(kind, shared.ErrSiteUnreachable):
 		code = "site_unreachable"
-	case shared.ErrSiteNotResponding:
+	case errors.Is(kind, shared.ErrSiteNotResponding):
 		code = "site_not_responding"
-	case shared.ErrFetchTimeout:
+	case errors.Is(kind, shared.ErrFetchTimeout):
 		code = "site_timeout"
 	default:
 		return "", false

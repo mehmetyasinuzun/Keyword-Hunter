@@ -1,7 +1,7 @@
 package scraper
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
 	"strings"
@@ -130,7 +130,7 @@ func generateContentHash(text string) string {
 	if len(normalizedText) > 1000 {
 		normalizedText = normalizedText[:1000]
 	}
-	hash := md5.Sum([]byte(normalizedText))
+	hash := sha256.Sum256([]byte(normalizedText))
 	return hex.EncodeToString(hash[:])
 }
 

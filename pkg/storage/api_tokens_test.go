@@ -65,7 +65,7 @@ func TestAPITokens_LifecycleAndStatus(t *testing.T) {
 	if err != nil || got.ID != tok.ID {
 		t.Fatalf("özetle arama: %v %+v", err, got)
 	}
-	if _, err := db.GetAPITokenByHash(HashAPIToken(plain + "x")); err != ErrTokenNotFound {
+	if _, err := db.GetAPITokenByHash(HashAPIToken(plain + "x")); !errors.Is(err, ErrTokenNotFound) {
 		t.Fatalf("bilinmeyen özet: %v", err)
 	}
 	now := time.Now()

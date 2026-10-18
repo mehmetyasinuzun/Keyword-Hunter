@@ -53,7 +53,7 @@ func (db *DB) PruneEngineStats(known []string) (int64, error) {
 	for _, n := range known {
 		args = append(args, n)
 	}
-	res, err := db.conn.Exec("DELETE FROM engine_stats WHERE name NOT IN ("+placeholders+")", args...)
+	res, err := db.conn.Exec("DELETE FROM engine_stats WHERE name NOT IN ("+placeholders+")", args...) //nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 	if err != nil {
 		return 0, err
 	}

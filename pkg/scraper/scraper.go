@@ -190,7 +190,7 @@ func (s *Scraper) ScrapeURL(ctx context.Context, urlStr, title string) Content {
 		content.Error = shared.ClassifyError(err).Error()
 		return content
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		content.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
@@ -301,7 +301,7 @@ func (s *Scraper) ScrapeMultiple(ctx context.Context, urls []struct{ URL, Title 
 
 				// İstekler arası gecikme (iptal-edilebilir)
 				select {
-				case <-time.After(time.Duration(500+rand.Intn(1000)) * time.Millisecond):
+				case <-time.After(time.Duration(500+rand.Intn(1000)) * time.Millisecond): //nolint:gosec // G404: istekler arası gecikme jitter'ı; güvenlik amaçlı değil
 				case <-ctx.Done():
 					return
 				}

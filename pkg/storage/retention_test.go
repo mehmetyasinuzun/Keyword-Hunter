@@ -170,7 +170,9 @@ func TestPurgeScreenshotsBefore_KeepsCaseEvidence(t *testing.T) {
 	rows, _ := db.conn.Query(`SELECT file_path FROM screenshots ORDER BY file_path`)
 	for rows.Next() {
 		var f string
-		rows.Scan(&f)
+		if err := rows.Scan(&f); err != nil {
+			t.Fatal(err)
+		}
 		left = append(left, f)
 	}
 	rows.Close()
@@ -261,7 +263,7 @@ func TestPurgeResults_LeavesNoRemnantsOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if n := countWhere(t, db, `PRAGMA secure_delete`); n != 2 {
 		t.Fatalf("uygulama bağlantısı secure_delete=FAST (2) olmalı: %d", n)
 	}

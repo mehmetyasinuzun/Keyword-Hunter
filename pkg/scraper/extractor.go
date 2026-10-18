@@ -147,7 +147,7 @@ func (s *Scraper) scrapeURLForExpand(ctx context.Context, urlStr string) Content
 		content.Error = shared.ClassifyError(err).Error()
 		return content
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		// 403/503 (bot koruması) durumunda tarayıcı ile bir şans daha

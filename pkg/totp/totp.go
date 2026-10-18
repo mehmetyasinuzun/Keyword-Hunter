@@ -86,6 +86,15 @@ func Step(t time.Time) int64 {
 	return t.Unix() / int64(Period/time.Second)
 }
 
+// stepCounter bir zaman adımını HOTP sayacına çevirir; 1970 öncesi (negatif)
+// adımlar 0'a sabitlenir (sayaç işaretsizdir).
+func stepCounter(st int64) uint64 {
+	if st < 0 {
+		return 0
+	}
+	return uint64(st)
+}
+
 // hotp RFC 4226 §5.3: HMAC-SHA1(key, sayaç) → dinamik kesme → 10^digits modu.
 func hotp(key []byte, counter uint64, digits int) string {
 	var msg [8]byte
@@ -108,7 +117,7 @@ func hotp(key []byte, counter uint64, digits int) string {
 
 // CodeAt sırrın verilen andaki 6 haneli kodunu üretir (testler ve tanılama).
 func CodeAt(key []byte, t time.Time) string {
-	return hotp(key, uint64(Step(t)), Digits)
+	return hotp(key, stepCounter(Step(t)), Digits)
 }
 
 // NormalizeCode kullanıcı girdisindeki boşluk/tireyi atar ("123 456" → "123456").

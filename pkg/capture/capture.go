@@ -86,7 +86,7 @@ func New(torProxy, chromePath, outDir string) *Capturer {
 			outDir = "screenshots"
 		}
 	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
+	if err := os.MkdirAll(outDir, 0o750); err != nil { //nolint:gosec // G703: dizin operatörün SCREENSHOT_DIR değeri ya da sabit varsayılan
 		logger.Warn("Ekran görüntüsü dizini oluşturulamadı (%s): %v", outDir, err)
 	}
 
@@ -130,7 +130,7 @@ func findChrome() string {
 		candidates = []string{"/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/snap/bin/chromium", "/usr/bin/brave-browser"}
 	}
 	for _, p := range candidates {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() { //nolint:gosec // G703: adaylar operatörün CHROME_BIN değeri ve sabit sistem yolları
 			return p
 		}
 	}
@@ -227,7 +227,7 @@ func (c *Capturer) Capture(ctx context.Context, targetURL string) (*Shot, error)
 
 	name := fmt.Sprintf("%s_%d.png", c.safeHost(targetURL), now.Unix())
 	full := filepath.Join(c.outDir, name)
-	if err := os.WriteFile(full, buf, 0o644); err != nil {
+	if err := os.WriteFile(full, buf, 0o600); err != nil {
 		return nil, fmt.Errorf("PNG yazılamadı: %w", err)
 	}
 

@@ -140,13 +140,14 @@ func TestDoWithRetryN_NonRetryableAndGuards(t *testing.T) {
 	if err != nil || resp.StatusCode != 404 || hits != 1 {
 		t.Fatalf("404 yeniden denenmemeli: resp=%v err=%v hits=%d", resp, err, hits)
 	}
-	resp.Body.Close()
+	closeBody(resp)
 
 	// Gövdeli istek GetBody olmadan reddedilir (yeniden denemede gövde tükenirdi).
 	body := io.NopCloser(strings.NewReader("x"))
 	req2, _ := http.NewRequest(http.MethodPost, srv.URL, body)
 	req2.GetBody = nil
-	if _, err := DoWithRetryN(srv.Client(), req2, 2); err == nil {
+	if resp, err := DoWithRetryN(srv.Client(), req2, 2); err == nil {
+		closeBody(resp)
 		t.Fatal("GetBody'siz gövdeli istek reddedilmeli")
 	}
 
@@ -154,7 +155,8 @@ func TestDoWithRetryN_NonRetryableAndGuards(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	req3, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
-	if _, err := DoWithRetryN(srv.Client(), req3, 0); !errors.Is(err, context.Canceled) {
+	if resp, err := DoWithRetryN(srv.Client(), req3, 0); !errors.Is(err, context.Canceled) {
+		closeBody(resp)
 		t.Fatalf("iptal: %v", err)
 	}
 	if hits != 1 {
@@ -164,9 +166,12 @@ func TestDoWithRetryN_NonRetryableAndGuards(t *testing.T) {
 	// Yeniden denenemez ağ hatası tek denemede sınıflandırılarak döner.
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
-	ln.Close()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
 	req4, _ := http.NewRequest(http.MethodGet, "http://"+addr, nil)
-	if _, err := DoWithRetryN(&http.Client{Timeout: time.Second}, req4, 1); !errors.Is(err, ErrTorUnreachable) {
+	if resp, err := DoWithRetryN(&http.Client{Timeout: time.Second}, req4, 1); !errors.Is(err, ErrTorUnreachable) {
+		closeBody(resp)
 		t.Fatalf("connection refused → ErrTorUnreachable: %v", err)
 	}
 }
@@ -196,9 +201,10 @@ func TestClearnetClients_NoRedirectAndPrivateGuard(t *testing.T) {
 	if err != nil || resp.StatusCode != http.StatusFound {
 		t.Fatalf("yönlendirme takip edilmemeli: %v %v", resp, err)
 	}
-	resp.Body.Close()
+	closeBody(resp)
 	safe := NewSafeClearnetClient(5 * time.Second)
-	if _, err := safe.Get(srv.URL); err == nil || !errors.Is(err, ErrPrivateDestination) {
+	if resp, err := safe.Get(srv.URL); err == nil || !errors.Is(err, ErrPrivateDestination) {
+		closeBody(resp)
 		t.Fatalf("güvenli istemci loopback'e bağlanmamalı: %v", err)
 	}
 }
@@ -237,4 +243,11 @@ func TestBroadcaster_DeliversAndDropsSlowClients(t *testing.T) {
 		t.Fatal("kayıt silinen kanal kapanmalı")
 	}
 	b.Unregister(slow) // zaten düşürülmüş: ikinci kapatma paniği olmamalı
+}
+
+// closeBody beklenmedik biçimde dönen bir yanıtın gövdesini kapatır (nil güvenli).
+func closeBody(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 }

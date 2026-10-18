@@ -223,7 +223,7 @@ func (db *DB) ExistingResultIDSet(ids []int64) (map[int64]bool, error) {
 	}
 
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(uniqueIDs)), ",")
-	query := fmt.Sprintf("SELECT id FROM search_results WHERE id IN (%s)", placeholders)
+	query := fmt.Sprintf("SELECT id FROM search_results WHERE id IN (%s)", placeholders) //nolint:gosec // G201: yalnız "?" yer tutucuları biçimlenir; değerler parametre
 
 	args := make([]interface{}, 0, len(uniqueIDs))
 	for _, id := range uniqueIDs {
@@ -505,8 +505,12 @@ func (db *DB) GetResultsByTag(tag string, limit int) ([]SearchResult, error) {
 // GetTaggedResultsCount etiketli sonuç sayısını döndürür
 func (db *DB) GetTaggedResultsCount() (int, int, error) {
 	var tagged, total int
-	db.conn.QueryRow("SELECT COUNT(*) FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL").Scan(&tagged)
-	db.conn.QueryRow("SELECT COUNT(*) FROM search_results").Scan(&total)
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM search_results WHERE auto_tags != '' AND auto_tags IS NOT NULL").Scan(&tagged); err != nil {
+		return 0, 0, err
+	}
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM search_results").Scan(&total); err != nil {
+		return 0, 0, err
+	}
 	return tagged, total, nil
 }
 
@@ -693,6 +697,7 @@ func (db *DB) GetResultsFiltered(f ResultFilter) ([]SearchResult, int, error) {
 	}
 
 	listArgs := append(append([]interface{}{}, args...), f.Limit, f.Offset)
+	//nolint:gosec // G202: WHERE/ORDER sabit parçalardan (izin listesi) kurulur; değerler parametre
 	rows, err := db.conn.Query(`
 		SELECT id, title, url, source, query, criticality, category, keyword_count, COALESCE(auto_tags, ''), COALESCE(note,''), COALESCE(case_status,''), created_at
 		FROM search_results
@@ -726,7 +731,7 @@ func (db *DB) DeleteResults(ids []int64) (int64, error) {
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	res, err := db.conn.Exec("DELETE FROM search_results WHERE id IN ("+placeholders+")", args...)
+	res, err := db.conn.Exec("DELETE FROM search_results WHERE id IN ("+placeholders+")", args...) //nolint:gosec // G202: yalnız "?" yer tutucuları birleştirilir; değerler parametre
 	if err != nil {
 		return 0, err
 	}

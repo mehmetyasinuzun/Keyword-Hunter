@@ -101,7 +101,7 @@ func LooksLikeAPIToken(s string) bool {
 	}
 	for i := len(APITokenPrefix); i < len(s); i++ {
 		c := s[i]
-		if !(c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
+		if (c < '0' || c > '9') && (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') {
 			return false
 		}
 	}
@@ -193,7 +193,7 @@ func (db *DB) CreateAPITokenLimited(userID int64, username, name, scope string, 
 	return plain, t, nil
 }
 
-const apiTokenCols = `id, user_id, username, name, prefix, token_hash, scope, created_at, last_used_at, last_used_ip, expires_at, revoked_at`
+const apiTokenCols = `id, user_id, username, name, prefix, token_hash, scope, created_at, last_used_at, last_used_ip, expires_at, revoked_at` //nolint:gosec // G101: SQL sütun listesi, kimlik bilgisi değil
 
 func scanAPIToken(sc scanner) (*APIToken, error) {
 	var t APIToken
@@ -295,7 +295,7 @@ func (db *DB) RevokeUserAPITokens(userID int64) (int64, error) {
 }
 
 // inactiveAPITokenWhere iptal edilmiş ya da süresi dolmuş satırlar (ilk ? = şimdi).
-const inactiveAPITokenWhere = `(revoked_at IS NOT NULL OR (expires_at IS NOT NULL AND datetime(expires_at) <= datetime(?)))`
+const inactiveAPITokenWhere = `(revoked_at IS NOT NULL OR (expires_at IS NOT NULL AND datetime(expires_at) <= datetime(?)))` //nolint:gosec // G101: SQL WHERE parçası, kimlik bilgisi değil
 
 // PruneUserInactiveAPITokens kullanıcının etkin olmayan (iptal/süresi dolmuş)
 // token'larından en yeni `keep` tanesi dışındakileri siler. Oluştur-iptal et
