@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/scraper"
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
@@ -226,6 +227,7 @@ func (s *Server) handleWatchlistCheck(c *gin.Context) {
 	defer cancel()
 
 	result := s.checkWatchlistItem(ctx, *item)
+	metrics.WatchlistCheck(result.Status, result.Changed)
 	if err := s.db.RecordWatchlistCheck(item.ID, result.Status, result.HTTPCode, result.ResponseMs, result.ContentHash, result.Title, result.Changed); err != nil {
 		logger.Warn("Watchlist kontrol kaydedilemedi (ID: %d): %v", item.ID, err)
 	}

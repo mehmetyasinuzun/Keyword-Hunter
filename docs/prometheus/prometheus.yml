@@ -1,0 +1,30 @@
+# KeywordHunter için örnek Prometheus kazıma yapılandırması (bkz. docs/METRICS.md).
+#
+# 1. KeywordHunter'da METRICS_ENABLED=true ayarlayıp yeniden başlatın.
+# 2. Admin rolündeki bir hesapla Hesabım → API token'ları → "metrics" kapsamlı bir token üretin
+#    (ör. "prometheus"). Bu kapsam YALNIZ /metrics'i kazır; /api/ ve /taxii2/'de reddedilir, yani
+#    bu sunucudan sızan token bulgu/IOC okuyamaz. read/write token'ları /metrics'te kabul edilmez.
+# 3. Token'ı Prometheus'un okuyabildiği bir dosyaya, kabuk geçmişine düşürmeden yazın
+#    (read -s yazılanı göstermez ve komut satırına koymaz; satır sonu sorun değil):
+#      read -rs T && printf '%s' "$T" | sudo install -m 0400 -o prometheus /dev/stdin /etc/prometheus/keywordhunter.token; unset T
+#    Token'ı bu YAML'a doğrudan (credentials:) yazmayın: yapılandırma dosyaları sıkça paylaşılır.
+global:
+  scrape_interval: 30s      # DB'den türetilen göstergeler zaten en fazla 30 sn'de bir yenilenir
+  evaluation_interval: 30s
+
+rule_files:
+  - keywordhunter-alerts.yml
+
+scrape_configs:
+  - job_name: keywordhunter
+    metrics_path: /metrics
+    scheme: https            # TLS sonlandıran ters vekil arkasında; doğrudan :8080 için http
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/keywordhunter.token
+    # Kazıma ~ms sürer; Tor SOCKS denetimi en fazla 2 sn ekleyebilir.
+    scrape_timeout: 15s
+    static_configs:
+      - targets: ['keywordhunter.example.internal']
+        labels:
+          env: prod

@@ -14,6 +14,7 @@ import (
 	"keywordhunter-mvp/pkg/crawler"
 	"keywordhunter-mvp/pkg/export"
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/tor"
@@ -181,6 +182,15 @@ func (s *Server) handleTorStatus(c *gin.Context) {
 	})
 }
 
+// torRenewalResult NEWNYM hatasını metrik sonucuna çevirir.
+func torRenewalResult(err error) string {
+	var cd *tor.CooldownError
+	if errors.As(err, &cd) {
+		return metrics.ResultCooldown
+	}
+	return metrics.ResultFailure
+}
+
 func (s *Server) handleTorNewNym(c *gin.Context) {
 	if s.torCtl == nil {
 		s.audit(c, "tor.newnym", "tor", map[string]any{"error": "not_configured"}, false)
@@ -192,6 +202,7 @@ func (s *Server) handleTorNewNym(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 	if err := s.torCtl.NewNym(req.Force); err != nil {
+		metrics.TorRenewal(metrics.TorReasonManual, torRenewalResult(err))
 		s.audit(c, "tor.newnym", s.torCtl.Addr(), map[string]any{"force": req.Force, "error": "rejected"}, false)
 		var cd *tor.CooldownError
 		if errors.As(err, &cd) {
@@ -201,6 +212,7 @@ func (s *Server) handleTorNewNym(c *gin.Context) {
 		apiFail(c, http.StatusConflict, "tor_newnym_failed", truncateErr(err.Error()))
 		return
 	}
+	metrics.TorRenewal(metrics.TorReasonManual, metrics.ResultSuccess)
 	s.invalidateEngineCache()
 	s.audit(c, "tor.newnym", s.torCtl.Addr(), map[string]any{"force": req.Force}, true)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": apiText(c, "tor_newnym")})

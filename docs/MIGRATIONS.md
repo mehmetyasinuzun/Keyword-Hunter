@@ -10,6 +10,8 @@ listedeki sırasıdır (1'den başlar).
 | 2 | `maintenance_runs` | Yedekleme / saklama işlerinin son çalışma durumu |
 | 3 | `search_results_last_seen` | `search_results.last_seen_at`: saklama süresi bulgunun son görüldüğü andan sayılır |
 | 4 | `screenshots_file_index` | `screenshots(file_path)` indeksi (saklama temizliğinde dosya başına tablo taraması yok) |
+| 5 | `metrics_indexes` | `search_results(criticality)` ve `watchlist_checks(watchlist_id, checked_at, id)` indeksleri (`/metrics` göstergeleri tablo taramasız sayılır) |
+| 6 | `api_token_metrics_scope` | `api_tokens.scope` kısıtına `metrics` (yalnız `/metrics`'i kazıyan token) eklenir; tablo yeniden kurulur, satırlar, id'ler ve AUTOINCREMENT sırası korunur |
 
 ## Açılışta ne olur
 
@@ -35,8 +37,8 @@ listedeki sırasıdır (1'den başlar).
    ```go
    var migrations = []migration{
    	{name: "baseline", up: migrateBaseline, foreignKeysOff: true},
-   	// … mevcut adımlar (2–4) …
-   	{name: "screenshots_file_index", up: migrateScreenshotsFileIndex},
+   	// … mevcut adımlar (2–5) …
+   	{name: "api_token_metrics_scope", up: migrateAPITokenMetricsScope},
    	{name: "watchlist_tags", up: func(q runner) error {
    		_, err := q.Exec(`ALTER TABLE watchlist ADD COLUMN tags TEXT NOT NULL DEFAULT ''`)
    		return err

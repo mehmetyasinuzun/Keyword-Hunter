@@ -193,6 +193,68 @@
   - Bellekteki içerik tekilleştirme özeti MD5 → SHA-256, STIX paket parmak izi SHA-1 → SHA-256 (ikisi de
     saklanmaz).
 
+### Prometheus metrikleri
+- `GET /metrics` (Prometheus metin biçimi), yalnız `METRICS_ENABLED=true` iken (varsayılan kapalı → 404). Ayrıntı,
+  tüm metriklerin listesi ve örnekler: `docs/METRICS.md`; Ayarlar → **Prometheus metrikleri** durumu gösterir.
+- **Asla anonim değil:** mevcut kişisel API token sisteminde yeni, yalnız-kazıma **`metrics` kapsamı**
+  (`Authorization: Bearer kh_…`); token'ın **sahibi admin** olmalı (yalnız admin bu kapsamı oluşturabilir; rol her
+  istekte tazelenir, `REQUIRE_2FA` uygulanır). `metrics` token'ı `/api/`'de `403 token_metrics_only`, `/taxii2/`'de
+  `403` alır: Prometheus sunucusundan sızsa bile bulgu/IOC okuyamaz. `read`/`write` token'ları `/metrics`'te
+  reddedilir (`403 metrics_scope_required`). Ayrı bir `METRICS_TOKEN` yerine API token'ları seçildi: özetle
+  saklanır, süreli olabilir, arayüzden iptal edilir, son kullanımı görünür ve sahibi pasifleşince geçersizleşir.
+  Token yok/geçersiz → `401` (`metrics_token_required` / `token_*`, `WWW-Authenticate: Bearer`), yanlış kapsam ya
+  da admin olmayan sahip → `403` (`access.denied` olarak, token başına dakikada bir denetlenir); oturum çerezi kabul
+  edilmez. Hesabım → Yeni token'da admin'e *Metrik* seçeneği; kapsam açıklaması ve README token kuralları
+  güncellendi (`read` izleyiciye eşittir, `/api/` + `/taxii2/`; `metrics` yalnız `/metrics`).
+- Şema migrasyonu 6 (`api_token_metrics_scope`): `api_tokens` kapsam kısıtına `metrics` eklenir (tablo yeniden
+  kurulur; satırlar, id'ler ve AUTOINCREMENT sırası korunur).
+- Bağımlılık: `github.com/prometheus/client_golang` v1.25.0 (biçimin referans uygulaması: içerik müzakeresi,
+  histogram anlamı, Go çalışma zamanı ve süreç toplayıcıları). Varsayılan küresel kayıt defteri yerine sunucuya
+  özel kayıt defteri (Go + süreç toplayıcılarıyla).
+- Metrikler (`keywordhunter_`): `build_info{version,goversion}`; `http_requests_total{method,route,status_class}` ve
+  `http_request_duration_seconds{method,route}` — `route` Gin rota kalıbı, eşleşmeyen `unmatched`, yöntem sabit
+  kümeye (`OTHER`) indirgenir, ara katman en dışta (Recovery'nin 500'leri de sayılır), SSE akışı histograma
+  yazılmaz; `search_runs_total` / `search_duration_seconds{trigger=manual|scheduled}`;
+  `new_findings_total{severity}` (her kaynaktan ilk kez kaydedilen bulgu, işlem başarılıysa);
+  `scheduled_scan_runs_total{result=success|engines_failed|timeout|error}` (`engines_failed`: hiçbir motor yanıt
+  vermedi — Tor kapalı, tümü hata verdi ya da etkin motor yok; arama paketi motor özetini (`SearchStats`) döndürür); `watchlist_checks_total{result=up|changed|blocked|down}`;
+  `tor_circuit_renewals_total{reason=manual|all_engines_down,result}`; `retention_purged_total{kind}` (saklama
+  temizliği + denetim budaması); `notification_sends_total{channel,result}`;
+  `login_attempts_total{method=password|totp|recovery_code,result=success|failure|locked|challenge|error}` (kod
+  denetlenmeden reddedilen ikinci adım gönderimleri de: bekleyen giriş yok → `failure`, deneme hakkı tükenmiş →
+  `locked`, 2FA bu arada sıfırlanmış → `failure`).
+- Veritabanından türetilen göstergeler en fazla **30 sn'de bir** tek okumayla yenilenen önbellekli toplayıcıdan:
+  `findings{severity}`, `active_sessions`, `watchlist_sites` / `watchlist_sites_down`, motor başına `engine_up`,
+  `engine_active`, `engine_response_seconds` (yalnız son kontrol başarılıysa; başarısız kontrolün süresi yanıt
+  süresi sayılmaz), `engine_success_ratio`, `backup_enabled`, `backup_last_status`,
+  `backup_last_run_timestamp_seconds`, `backup_last_success_timestamp_seconds`, `tor_reachable` (TOR_PROXY'ye
+  SOCKS5 selamlaması; hedefe bağlanılmaz), `audit_chain_ok`, `audit_chain_verify_error` ve
+  `audit_chain_last_verify_timestamp_seconds` (kilitsiz özet; doğrulama öncesi yanıltıcı 0 yerine seri yok;
+  doğrulama HATA verirse — taranamayan satır, silinmiş zincir durumu — `audit_chain_ok` 0 olur, önceki başarılı
+  değer korunmaz), önbelleğin yaşı ve yenileme hataları.
+- Şema migrasyonu 5 (`metrics_indexes`): `search_results(criticality)` ve
+  `watchlist_checks(watchlist_id, checked_at, id)` indeksleri — sayımlar tablo taramasız.
+- Kardinalite/gizlilik: tüm etiket değerleri sabit kümelerden (bilinmeyen → `other`); etiketlerde sorgu, URL,
+  kullanıcı adı, IP yok. Bilinen etiket birleşimleri sıfırla önceden oluşturulur.
+- Belgeler: README (TR/EN) bölümü ve yapılandırma tablosu, `docs/METRICS.md`, Bearer `credentials_file`'lı örnek
+  `docs/prometheus/prometheus.yml` (token dosyası kabuk geçmişine düşmeden `read -s` ile yazılır; Compose hedefi
+  servis adı `app:8080`), örnek uyarı kuralları (açılıştan beri hiç doğrulanmamış zincir için `unless` kuralı dahil) `docs/prometheus/keywordhunter-alerts.yml` (ikisi de
+  `promtool check` ile doğrulandı) ve içe aktarılabilir Grafana panosu `docs/grafana/keywordhunter.json`
+  (`datasource` + `instance` değişkenleri; sorgular `promtool` ile ayrıştırıldı).
+- Testler: kapalıyken 404; anonim / Basic / biçimsiz / bilinmeyen token 401, read/write token'ları (admin'inki
+  dahil) 403 `metrics_scope_required` (ve denetim kaydı), admin `metrics` token'ı 200 ama `/api/` ve `/taxii2/`'de
+  403, admin dışı rol `metrics` token'ı oluşturamaz, yalnız çerez 401, rolü düşürülen admin 403, 2FA politikası 403;
+  şema 6 yükseltmesi satırları/id'leri/sırayı korur; doğrulama hatasında `audit_chain_ok` 0;
+  exposition `expfmt` ile ayrıştırılır; tohumlanan durum (bulgu, oturum, izleme, motor, yedek, Tor, denetim zinciri)
+  değerlere birebir yansır; önbellek süresi içinde tek veritabanı okuması; HTTP ara katmanı etiketleri (rota
+  kalıbı, `unmatched`, `OTHER`, ham yol/sorgu sızmaz, panik 500'ü sayılır); keyfi girdilerle sınırlı seri sayısı;
+  hiçbir etikette sorgu/URL/kullanıcı adı yok; planlı tarama (hiçbir motor yanıt vermediğinde `engines_failed`),
+  webhook ve yeni bulgu sayaçları; uygulamadaki çağrı yerleri (elle arama, Ayarlar'dan ve tüm-motorlar-düşük
+  kancasından Tor yenileme — başarı/bekleme/hata, iki yoldan izleme kontrolü, saklama temizliğinin tür başına
+  sayımları, denetim budaması); metrik ara katmanının sırası `New` ile aynı `useBaseMiddleware`'den sınanır; Grafana panosundaki
+  ve `METRICS.md`/uyarı kurallarındaki her metrik adının gerçekten yayımlandığı ve her metriğin belgede/panoda yer
+  aldığı.
+
 ## v0.16.0 — 2026-10-17 · "Sentinel"
 
 Ekip ve entegrasyon sürümü: denetim kaydı, kişisel API token'ları, iki adımlı

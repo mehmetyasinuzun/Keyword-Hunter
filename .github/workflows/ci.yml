@@ -164,6 +164,7 @@ jobs:
           RATE_LIMIT_RPS=200
           RATE_LIMIT_BURST=500
           WATCHLIST_SEED=none
+          METRICS_ENABLED=true
           ENV
           ENV_FILE="$RUNNER_TEMP/e2e.env" nohup "$RUNNER_TEMP/keywordhunter" > "$RUNNER_TEMP/server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/server.pid"

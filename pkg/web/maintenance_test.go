@@ -541,12 +541,23 @@ func TestRetention_PurgesWithFakeClock(t *testing.T) {
 	}
 
 	s.resultRetentionDays, s.screenshotRetentionDays = 30, 30
+	before := globalFamilies(t)
 	st, err := s.runRetention()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if st.Results != 1 || st.KeptCases != 2 || st.Screenshots != 2 {
 		t.Fatalf("sayımlar: %+v", st)
+	}
+	// /metrics: retention_purged_total her tür için silinen kadar artar.
+	after := globalFamilies(t)
+	for kind, want := range map[string]int64{
+		"results": st.Results, "tags": st.Tags, "artifacts": st.Artifacts, "misp_pushed": st.MISPPushed,
+		"graph_nodes": st.GraphNodes, "screenshots": st.Screenshots, "screenshot_files": 2,
+	} {
+		if d := counterDelta(t, before, after, "keywordhunter_retention_purged_total", "kind", kind); d != float64(want) {
+			t.Errorf("retention_purged_total{%s} artışı %v, beklenen %d", kind, d, want)
+		}
 	}
 	exists := func(id int64) bool {
 		r, err := s.db.GetResultByID(id)

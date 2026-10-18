@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
@@ -368,20 +369,33 @@ func (s *Server) auditChain(force bool) (storage.AuditChainStatus, error) {
 		// "toplam olay" ile tutarlı kalır.
 		st, err = s.db.ExtendAuditChainReport(*s.auditChainCache)
 		if err != nil {
+			s.auditChainVerifyFailed()
 			return st, err
 		}
 		s.auditChainCache = &st
 	} else {
 		if st, err = s.db.AuditChainReport(); err != nil {
+			s.auditChainVerifyFailed()
 			return st, err
 		}
 		s.auditChainCache = &st
 		s.auditChainAt = time.Now() // TTL yalnız tam doğrulamayla yenilenir
 	}
+	// /metrics özeti: kazıma bu kilidi beklemesin diye ayrıca (atomik) tutulur.
+	s.auditChainSample.Store(&auditChainSample{OK: st.OK, VerifiedAt: s.auditChainAt})
 	if !st.OK && wasOK { // her listede değil, yalnız kırılma ilk görüldüğünde
 		logger.Error("AUDIT CHAIN BROKEN: #%d satırında kırık (%s) — denetim kaydı kurcalanmış olabilir", st.BrokenAt, st.Reason)
 	}
 	return st, nil
+}
+
+// auditChainVerifyFailed doğrulama HATA verdiğinde (okunamayan/türü bozulmuş
+// satır, silinmiş zincir durumu…) /metrics özetini "sağlam değil" yapar.
+// Önceki başarılı örnek korunsaydı kurcalama, satırı taranamaz hâle getiren bir
+// düzenlemeyle uyarıdan gizlenebilirdi. Son TAM doğrulama zamanı değişmez.
+// auditChainMu tutulurken çağrılır.
+func (s *Server) auditChainVerifyFailed() {
+	s.auditChainSample.Store(&auditChainSample{OK: false, VerifyError: true, VerifiedAt: s.auditChainAt})
 }
 
 // startAuditMaintenance saklama budamasını ve periyodik zincir doğrulamasını
@@ -410,6 +424,7 @@ func (s *Server) runAuditMaintenance() {
 		case err != nil:
 			logger.Error("Denetim kaydı budanamadı: %v", err)
 		case n > 0:
+			metrics.RetentionPurged("audit_events", n)
 			logger.Info("AUDIT PRUNE: %d olay (> %d gün) silindi; zincir çapası güncellendi", n, s.auditRetentionDays)
 			s.auditSystem("audit.prune", "audit_events", map[string]any{"deleted": n, "retentionDays": s.auditRetentionDays}, true)
 		}

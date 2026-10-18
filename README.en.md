@@ -50,6 +50,7 @@ classifies findings automatically, extracts IOCs, monitors sites and alerts on n
 | 🧾 **Audit log** | Who did what, when, from where: sign-ins, roles, cases, settings, tokens and exports; **SHA-256 hash chain** for tamper evidence, one-click chain verification, filters, CSV/JSON export, retention (`AUDIT_RETENTION_DAYS`) |
 | 🔐 **Two-factor auth** | RFC 6238 TOTP (QR + manual key), single-use recovery codes, enforce with `REQUIRE_2FA=admins\|all`, secrets AES-256-GCM encrypted with a key derived from `APP_SECRET`, admin reset |
 | 🔗 **Integrations** | Read-only **TAXII 2.1 server** for OpenCTI / Microsoft Sentinel (fixed collections, stable STIX objects, token via Basic/Bearer); push selected findings to **MISP** as a single event (encrypted key, SSRF-guarded, optional auto-push) — [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
+| 📊 **Observability** | Optional Prometheus `/metrics` (an admin's scrape-only `metrics` token, never anonymous): HTTP, search, engine health, findings, watchlist, Tor, audit chain, backup and login metrics; sample `prometheus.yml`, alert rules and an importable Grafana dashboard — [docs/METRICS.md](docs/METRICS.md) |
 
 ## 🚀 Quick start
 
@@ -176,7 +177,7 @@ On macOS without `sha256sum`: `shasum -a 256 -c SHA256SUMS.txt`. Releases before
 
 ## 🔌 API
 
-Every `/api/` endpoint accepts either a browser session (cookie + `X-CSRF-Token` header on writes) or a **personal API token** — e.g. `GET /api/results?q=&minCriticality=&tag=&limit=&page=`, `GET /api/export/results?format=csv|json`, `GET /api/export/stix`, `GET /api/artifacts?type=&value=`, `POST /api/results/:id/case`, `GET|POST /api/watchlist`, `GET|POST /api/scheduled`, `GET /api/engines`, `GET /api/whoami`, `POST /api/integrations/misp/push`. `GET /healthz` is public.
+Every `/api/` endpoint accepts either a browser session (cookie + `X-CSRF-Token` header on writes) or a **personal API token** — e.g. `GET /api/results?q=&minCriticality=&tag=&limit=&page=`, `GET /api/export/results?format=csv|json`, `GET /api/export/stix`, `GET /api/artifacts?type=&value=`, `POST /api/results/:id/case`, `GET|POST /api/watchlist`, `GET|POST /api/scheduled`, `GET /api/engines`, `GET /api/whoami`, `POST /api/integrations/misp/push`. `GET /healthz` is public; `GET /metrics` (when `METRICS_ENABLED=true`) accepts only an admin's `metrics`-scoped token.
 
 **Error contract:** every `/api` error returns `{"error": "<human-readable message>", "code": "<stable code>"}` (some endpoints also keep `"success": false` for older clients; the 2FA lockout adds `retryAfter`). Automations should match on **`code`** (`session_expired`, `csrf_failed`, `role_required`, `session_required`, `token_invalid`, `token_revoked`, `token_expired`, `token_read_only`, `2fa_required`, `too_many_requests`, `invalid_request`, `not_found`, `tor_unreachable`, `site_unreachable`, `site_timeout`…); the `error` text is a translation and may change. Message language: the `lang` cookie, otherwise `Accept-Language` (`tr` | `en`, q-values honoured), otherwise Turkish. HTTP status codes do not depend on the language.
 
@@ -208,9 +209,9 @@ curl -sS -X POST -H "Authorization: Bearer $KH_TOKEN" -H 'Content-Type: applicat
 curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/whoami
 ```
 
-- **Scope:** `read` is downgraded to viewer and can never write; `write` acts with the owner's **current** role (demoting the user demotes the token immediately). Viewers can only create `read` tokens.
+- **Scope:** `read` is downgraded to viewer and can never write (on `/api/` and `/taxii2/`); `write` acts with the owner's **current** role (demoting the user demotes the token immediately). Viewers can only create `read` tokens. `metrics` (admins only) is **only** for Prometheus `GET /metrics`: it gets `403 token_metrics_only` on `/api/` and is rejected on `/taxii2/`, so it cannot read findings; `/metrics` in turn accepts only this scope (see [Prometheus metrics](#-prometheus-metrics)).
 - **Lifetime:** 7 / 30 / 90 / 180 / 365 days or no expiry; revocable at any time. Revoked, expired or unknown tokens, and tokens of disabled/deleted users, get `401 {"error": …, "code": "token_invalid|token_revoked|token_expired"}` with `WWW-Authenticate: Bearer`.
-- **`/api/` only, header only:** HTML pages, `/events` (SSE) and screenshot files ignore tokens; query-string values such as `?token=` are never read.
+- **`/api/`, `/taxii2/` and `/metrics` only, header only:** tokens work on `/api/` endpoints, on TAXII 2.1 (`/taxii2/`, `read`/`write`) and on Prometheus `/metrics` (`metrics` scope); HTML pages, `/events` (SSE) and screenshot files ignore tokens; query-string values such as `?token=` are never read.
 - **CSRF rule:** only requests authenticated by a Bearer token *without* a session cookie skip CSRF. If a session cookie is also present, the session path is used and CSRF is required.
 - **Endpoints tokens cannot call** (`403 {"code": "session_required", "error": …}`): `/api/tokens*` (token management), `/api/me/*` (password, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook integrations), `/api/integrations/misp/config` and `/api/integrations/misp/test` (MISP settings). A leaked token cannot mint tokens, change passwords or manage accounts and integrations.
 - **Password changes and incident response:** when an admin resets a user's password, that user's sessions are signed out **and all of their API tokens are revoked** (`tokensRevoked` in the `user.password.reset` event). A user's own password change does not revoke tokens by default (so integrations keep working); if you suspect a compromise, tick "Also revoke all my API tokens" under **My Account → Password** (`"revokeTokens": true` in the `POST /api/me/password` body). Disabling a user also invalidates their tokens immediately.
@@ -329,13 +330,39 @@ and re-enrol after signing in.
 - Each run is logged and audited as `retention.purge` (counts only); the active policy (including
   `AUDIT_RETENTION_DAYS`) and the last run are shown under Settings → Retention (admin).
 
+## 📈 Prometheus metrics
+
+| Variable | Default | Description |
+|---|---|---|
+| `METRICS_ENABLED` | `false` | `true` registers Prometheus `GET /metrics` (off → 404). Never anonymous: send a **`metrics`-scoped** API token owned by an **admin** account (scrape-only; `read`/`write` tokens are rejected) as `Authorization: Bearer` |
+
+Full metric list, sample scrape config, alert rules and Grafana dashboard: [docs/METRICS.md](docs/METRICS.md).
+
+- **Auth — never anonymous:** a personal API token of the **`metrics` scope** whose owner has the admin role,
+  `Authorization: Bearer kh_…` (My Account → API tokens → New token → *Metrics*). This token can **only** scrape
+  `/metrics`; it is rejected on `/api/` and `/taxii2/`, so even if it leaks from the Prometheus host it cannot read
+  findings or IOCs. `read`/`write` tokens are not accepted on `/metrics` (`403 metrics_scope_required`): a `read`
+  token is a viewer credential for all finding data and does not belong in a scrape config. Missing/invalid token →
+  `401`, owner no longer admin → `403` (audited). Session cookies are not accepted here. API tokens were chosen over
+  a separate `METRICS_TOKEN` because they are stored hashed, can expire, are revocable from the UI, show their last
+  use and stop working when the owner is disabled.
+- **Metrics (`keywordhunter_` prefix):** `build_info`; `http_requests_total` / `http_request_duration_seconds`
+  (`route` = Gin route template, `unmatched` when nothing matched — never the raw path); search runs/duration
+  (`manual`/`scheduled`); per-engine `engine_up`, response time and success ratio; `findings` and
+  `new_findings_total` by severity; scheduled scan results (`engines_failed` when no engine answered); watchlist checks and sites down; Tor circuit renewals and
+  SOCKS reachability; audit chain status (a failed verification also reads 0), verify error and last verification; last backup status and last successful backup time;
+  retention purges by kind; notification sends; login attempts by method/result; active sessions; Go and process
+  metrics.
+- **Gentle on SQLite:** database-derived gauges are refreshed at most every 30 s with indexed queries.
+- **Privacy:** no queries, URLs, usernames or IPs in labels; every label value comes from a fixed set.
+
 ## 🧑‍💻 Development
 
 ```bash
 go build ./... && go vet ./... && go test -race ./...
 ```
 
-Frontend contract: [docs/FRONTEND.md](docs/FRONTEND.md) · Integrations (TAXII 2.1, MISP): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) · Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) · Changelog: [CHANGELOG.md](CHANGELOG.md).
+Frontend contract: [docs/FRONTEND.md](docs/FRONTEND.md) · Integrations (TAXII 2.1, MISP): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) · Prometheus metrics: [docs/METRICS.md](docs/METRICS.md) · Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) · Changelog: [CHANGELOG.md](CHANGELOG.md).
 
 ## ⚖️ Legal
 

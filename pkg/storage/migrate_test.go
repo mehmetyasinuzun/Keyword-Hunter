@@ -734,3 +734,55 @@ func TestMigrate_UpgradesFromVersion1(t *testing.T) {
 	}
 	diffSnapshots(t, "v1 → son", freshSnapshot(t), schemaSnapshot(t, db.conn))
 }
+
+// Şema 6: api_tokens'ın kapsam kısıtı "metrics"i kabul eder; şema 5'teki
+// token'lar, id'leri ve AUTOINCREMENT sırası (silinmiş en yüksek id yeniden
+// verilmez) korunur; geçersiz kapsam hâlâ reddedilir.
+func TestMigrate_APITokenMetricsScope(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v5.db")
+	raw := openRaw(t, path)
+	const v6 = 6
+	for i := 0; i < v6-1; i++ {
+		if err := migrations[i].up(raw); err != nil {
+			t.Fatalf("adım %d: %v", i+1, err)
+		}
+	}
+	mustExec(t, raw, fmt.Sprintf(`PRAGMA user_version = %d`, v6-1))
+	if _, err := raw.Exec(`INSERT INTO api_tokens (user_id, username, name, prefix, token_hash, scope) VALUES (1, 'a', 'n', 'kh_x', 'h0', 'metrics')`); err == nil {
+		t.Fatal("şema 5 'metrics' kapsamını reddetmeli (test ön koşulu)")
+	}
+	mustExec(t, raw, `INSERT INTO api_tokens (user_id, username, name, prefix, token_hash, scope, last_used_ip) VALUES (1, 'a', 'one', 'kh_1', 'h1', 'read', '192.0.2.1')`)
+	mustExec(t, raw, `INSERT INTO api_tokens (user_id, username, name, prefix, token_hash, scope) VALUES (1, 'a', 'two', 'kh_2', 'h2', 'write')`)
+	mustExec(t, raw, `INSERT INTO api_tokens (user_id, username, name, prefix, token_hash, scope) VALUES (1, 'a', 'three', 'kh_3', 'h3', 'read')`)
+	mustExec(t, raw, `DELETE FROM api_tokens WHERE id = 3`)
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if v, _ := db.SchemaVersion(); v != LatestSchemaVersion() || v < v6 {
+		t.Fatalf("user_version = %d", v)
+	}
+	t1, err := db.GetAPIToken(1)
+	if err != nil || t1.Name != "one" || t1.Scope != TokenScopeRead || t1.LastUsedIP != "192.0.2.1" {
+		t.Fatalf("token 1 korunmadı: %+v %v", t1, err)
+	}
+	if t2, err := db.GetAPIToken(2); err != nil || t2.Scope != TokenScopeWrite {
+		t.Fatalf("token 2 korunmadı: %+v %v", t2, err)
+	}
+	_, mt, err := db.CreateAPIToken(1, "a", "prom", TokenScopeMetrics, nil)
+	if err != nil {
+		t.Fatalf("metrics kapsamı: %v", err)
+	}
+	if mt.ID != 4 || mt.Scope != TokenScopeMetrics {
+		t.Fatalf("yeni token id/kapsam: %d %q (silinmiş id 3 yeniden verilmemeli)", mt.ID, mt.Scope)
+	}
+	if _, err := db.conn.Exec(`INSERT INTO api_tokens (user_id, username, name, prefix, token_hash, scope) VALUES (1, 'a', 'n', 'kh_y', 'h9', 'admin')`); err == nil {
+		t.Fatal("geçersiz kapsam reddedilmeli")
+	}
+	diffSnapshots(t, "v5 → son", freshSnapshot(t), schemaSnapshot(t, db.conn))
+}

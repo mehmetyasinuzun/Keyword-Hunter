@@ -15,6 +15,7 @@ import (
 
 	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/storage"
 	"keywordhunter-mvp/pkg/totp"
 )
@@ -575,17 +576,21 @@ func (s *Server) handleLogin2FAPage(c *gin.Context) {
 func (s *Server) handleLogin2FA(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	clientIP := c.ClientIP()
-	id, pl, ok := s.pendingFromCookie(c)
-	if !ok {
-		s.clearPendingCookie(c)
-		c.Redirect(http.StatusFound, "/login?message=2fa_expired")
-		return
-	}
 	mode := "totp"
 	back := "/login/2fa?"
 	if c.PostForm("mode") == "recovery" {
 		mode = "recovery"
 		back = "/login/2fa?mode=recovery&"
+	}
+	// Reddedilen her ikinci adım gönderimi login_attempts_total'da sayılır
+	// (kod denetlenmeden reddedilenler dahil): başarısız giriş uyarısı eksik
+	// saymasın.
+	id, pl, ok := s.pendingFromCookie(c)
+	if !ok {
+		metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultFailure)
+		s.clearPendingCookie(c)
+		c.Redirect(http.StatusFound, "/login?message=2fa_expired")
+		return
 	}
 	target := "user:" + pl.username
 	audit := func(action string, success bool, details map[string]any) {
@@ -598,6 +603,7 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 	// aşamaz (yalnız başta bakıp sonra saymak yarışa açıktı).
 	if s.loginGuard != nil {
 		if ok, wait := s.loginGuard.Acquire(clientIP); !ok {
+			metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultLocked)
 			secs := int(wait.Seconds()) + 1
 			if s.auditNoise.allow("login-locked:"+clientIP, time.Minute) {
 				audit("auth.login.locked", false, map[string]any{"retryAfterSec": secs, "step": "2fa"})
@@ -609,11 +615,13 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 		defer s.loginGuard.Release(clientIP)
 	}
 	if _, found, ok := s.pendingLogins.reserve(id); !found {
+		metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultFailure)
 		s.clearPendingCookie(c)
 		c.Redirect(http.StatusFound, "/login?message=2fa_expired")
 		return
 	} else if !ok {
 		// Hak, uçuştaki denemelerle tükendi; sonuçları kaydı düşürecek.
+		metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultLocked)
 		s.clearPendingCookie(c)
 		c.Redirect(http.StatusFound, "/login?error=2fa_locked")
 		return
@@ -623,6 +631,7 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 	if err != nil || u == nil || !u.Enabled || u.Username != pl.username {
 		s.pendingLogins.remove(id)
 		s.clearPendingCookie(c)
+		metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultFailure)
 		audit("auth.2fa.failure", false, map[string]any{"reason": "user_unavailable", "method": mode})
 		c.Redirect(http.StatusFound, "/login?error=1")
 		return
@@ -630,11 +639,13 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 	tf, err := s.db.GetTwoFactor(u.ID)
 	if err != nil {
 		logger.Error("2FA kaydı okunamadı (kullanıcı=%s): %v", u.Username, err)
+		metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultError)
 		c.Redirect(http.StatusFound, back+"error=1")
 		return
 	}
 	if !tf.Enabled {
 		// Bu arada admin 2FA'yı sıfırladı: girişi baştan başlat.
+		metrics.LoginAttempt(loginMetricMethod(mode), metrics.ResultFailure)
 		s.pendingLogins.remove(id)
 		s.clearPendingCookie(c)
 		c.Redirect(http.StatusFound, "/login?message=2fa_expired")
@@ -647,6 +658,7 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 			s.loginGuard.Fail(clientIP)
 		}
 		remaining, invalidated := s.pendingLogins.failReserved(id)
+		metrics.LoginAttempt(loginMetricMethod(usedMode), metrics.ResultFailure)
 		logger.UserLogin(u.Username+" (2FA)", false, clientIP)
 		audit("auth.2fa.failure", false, map[string]any{"reason": reason, "method": usedMode, "attemptsLeft": remaining})
 		if invalidated {
@@ -662,6 +674,7 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 	if !s.pendingLogins.take(id, u.ID) {
 		// Doğrulama sürerken bekleyen giriş geçersiz kılındı (iptal, hak
 		// tükenmesi, admin sıfırlaması/parola değişikliği): oturum açılmaz.
+		metrics.LoginAttempt(loginMetricMethod(usedMode), metrics.ResultFailure)
 		audit("auth.2fa.failure", false, map[string]any{"reason": "pending_invalidated", "method": usedMode})
 		c.Redirect(http.StatusFound, "/login?message=2fa_expired")
 		return
@@ -683,6 +696,15 @@ func (s *Server) handleLogin2FA(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, "/dashboard")
+}
+
+// loginMetricMethod ikinci adım kipini metrik yöntemine çevirir
+// (başarılı giriş startSession'da, details["mfa"] ile sayılır).
+func loginMetricMethod(mode string) string {
+	if mode == "recovery" {
+		return metrics.LoginRecoveryCode
+	}
+	return metrics.LoginTOTP
 }
 
 // handleLogin2FACancel bekleyen girişi iptal eder. Çerez SameSite=Strict ve

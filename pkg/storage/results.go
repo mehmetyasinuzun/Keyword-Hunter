@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/shared"
 )
 
@@ -89,6 +90,9 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 	defer touch.Close()
 
 	saved := 0
+	// newCrits ilk kez eklenen bulguların kritikliği: metrik yalnız Commit
+	// başarılıysa sayılır (geri alınan işlem "yeni bulgu" üretmez).
+	var newCrits []int
 	for _, r := range results {
 		// Default values
 		crit := r.Criticality
@@ -110,6 +114,7 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 		}
 		if affected > 0 {
 			saved++
+			newCrits = append(newCrits, crit)
 			// Kaydedilen ID'yi al
 			if savedIDs != nil {
 				lastID, err := result.LastInsertId()
@@ -135,6 +140,9 @@ func (db *DB) SaveResultsWithIDs(results []SearchResult, savedIDs *[]int64) (int
 
 	if err := tx.Commit(); err != nil {
 		return 0, err
+	}
+	for _, crit := range newCrits {
+		metrics.NewFinding(crit)
 	}
 
 	return saved, nil

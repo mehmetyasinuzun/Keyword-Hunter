@@ -54,6 +54,7 @@ CTI platformu.**
 | 🧾 **Denetim Kaydı** | Kim, ne zaman, nereden, ne yaptı: giriş, rol, vaka, ayar, token ve dışa aktarma olayları; **SHA-256 hash zinciri** ile kurcalanma tespiti, tek tıkla zincir doğrulama, filtre, CSV/JSON dışa aktarma, saklama süresi (`AUDIT_RETENTION_DAYS`) |
 | 🔐 **İki Adımlı Doğrulama** | RFC 6238 TOTP (QR + manuel anahtar), tek kullanımlık kurtarma kodları, `REQUIRE_2FA=admins\|all` ile zorunlu kılma, sırlar `APP_SECRET`'tan türetilen anahtarla AES-256-GCM şifreli, admin tarafından sıfırlama |
 | 🔗 **Entegrasyonlar** | OpenCTI / Microsoft Sentinel için salt okunur **TAXII 2.1 sunucusu** (sabit koleksiyonlar, kararlı STIX nesneleri, token ile Basic/Bearer); seçili bulguları tek **MISP olayı** olarak gönderme (şifreli anahtar, SSRF korumalı, isteğe bağlı otomatik gönderim) — [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
+| 📊 **Gözlemlenebilirlik** | İsteğe bağlı Prometheus `/metrics` (admin'in yalnız-kazıma `metrics` token'ıyla, anonim değil): HTTP, arama, motor sağlığı, bulgu, izleme, Tor, denetim zinciri, yedek, giriş metrikleri; örnek `prometheus.yml`, uyarı kuralları ve içe aktarılabilir Grafana panosu — [docs/METRICS.md](docs/METRICS.md) |
 
 ### Arayüz
 
@@ -146,6 +147,7 @@ değiştiğinde kullanıcı özelleştirmeleri korunur.
 | `BACKUP_KEEP` | `7` | Dizinde tutulacak en yeni yedek sayısı (1–1000); eskiler silinir |
 | `RESULT_RETENTION_DAYS` | `0` (süresiz) | Bulguların saklanacağı gün; bir aramanın bulguyu **son döndürdüğü** andan sayılır (hiç yeniden görülmediyse ilk görülmeden). Günde bir, bu süreden uzun süredir görülmeyen bulgular etiket, IOC, MISP kaydı, graf düğümü (derinleştirme alt ağacı dahil) ve ekran görüntüleriyle (dosya dahil) silinir; vaka durumu **İnceleniyor** ya da **Doğrulandı** olanlar tutulur. Bkz. [Saklama süresi](#️-saklama-süresi) |
 | `SCREENSHOT_RETENTION_DAYS` | `0` (süresiz) | Ekran görüntülerinin (satır + PNG) saklanacağı gün; İnceleniyor/Doğrulandı bir vakanın URL'sine ait görüntüler (kanıt) tutulur |
+| `METRICS_ENABLED` | `false` | `true` ise Prometheus `GET /metrics` açılır (kapalıyken 404). Anonim değildir: admin rolündeki bir hesabın **`metrics` kapsamlı** API token'ı (yalnız `/metrics`'i kazır; `read`/`write` kabul edilmez) `Authorization: Bearer` ile gönderilir. Bkz. [Prometheus metrikleri](#-prometheus-metrikleri) |
 | `WATCHLIST_INTERVAL_MIN` | `15` | İzleme kontrol aralığı |
 | `WATCHLIST_SEED` | `none` | `turkey` = gömülü Türk onion listesi; dosya yolu = JSON seed |
 | `SCREENSHOT_DIR` | `/data/screenshots` (Docker) / `screenshots` | PNG çıktı dizini |
@@ -264,7 +266,7 @@ flowchart LR
     BG --> NTF -->|"Slack · Discord · Teams · SIEM"| EXT(["Webhook alıcıları"])
 ```
 
-Ön yüz sözleşmesi (bileşenler, olay delegasyonu, tema, i18n): [docs/FRONTEND.md](docs/FRONTEND.md) · TAXII 2.1 ve MISP entegrasyonları: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+Ön yüz sözleşmesi (bileşenler, olay delegasyonu, tema, i18n): [docs/FRONTEND.md](docs/FRONTEND.md) · TAXII 2.1 ve MISP entegrasyonları: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) · Prometheus metrikleri: [docs/METRICS.md](docs/METRICS.md).
 
 ## 🔌 API
 
@@ -278,7 +280,7 @@ Tarayıcı oturumuyla (çerez + `X-CSRF-Token`) ya da **kişisel API token'ı** 
 `POST /api/scheduled/:id/run-now` · `GET|POST /api/alert-config` · `POST /api/alert-config/test` ·
 `GET|POST /api/watchlist` · `POST /api/watchlist/:id/check` · `POST /api/screenshot` ·
 `GET /api/screenshots` · `GET /api/analytics` · `GET /api/graph/*` · `GET /events` (SSE) ·
-`POST /api/integrations/misp/push` · `GET /healthz` (açık).
+`POST /api/integrations/misp/push` · `GET /healthz` (açık) · `GET /metrics` (`METRICS_ENABLED=true` iken; yalnız admin'in `metrics` kapsamlı token'ı).
 
 **Hata sözleşmesi:** her `/api` hatası `{"error": "<insan okunur ileti>", "code": "<kararlı kod>"}` döner
 (eski istemciler için bazı uçlarda ek olarak `"success": false`; 2FA kilidinde `retryAfter`). Otomasyonda
@@ -319,9 +321,9 @@ curl -sS -X POST -H "Authorization: Bearer $KH_TOKEN" -H 'Content-Type: applicat
 curl -sS -H "Authorization: Bearer $KH_TOKEN" https://keywordhunter.example/api/whoami
 ```
 
-- **Kapsam:** `read` izleyici (viewer) yetkisine indirgenir, hiçbir yazma işlemi yapamaz; `write` sahibinin **güncel** rolü kadar yetkilidir (rol düşürülürse token da anında düşer). İzleyiciler yalnız `read` token oluşturabilir.
+- **Kapsam:** `read` izleyici (viewer) yetkisine indirgenir, hiçbir yazma işlemi yapamaz (`/api/` ve `/taxii2/`); `write` sahibinin **güncel** rolü kadar yetkilidir (rol düşürülürse token da anında düşer). İzleyiciler yalnız `read` token oluşturabilir. `metrics` (yalnız admin oluşturabilir) **yalnız** Prometheus `GET /metrics` içindir: `/api/`'de `403 token_metrics_only`, `/taxii2/`'de `403` alır, bulgu okuyamaz; `/metrics` de yalnız bu kapsamı kabul eder (bkz. [Prometheus metrikleri](#-prometheus-metrikleri)).
 - **Geçerlilik:** 7 / 30 / 90 / 180 / 365 gün ya da süresiz; dilediğiniz an iptal edilir. İptal edilmiş, süresi dolmuş, bilinmeyen token ya da pasif/silinmiş kullanıcı → `401 {"error": …, "code": "token_invalid|token_revoked|token_expired"}` + `WWW-Authenticate: Bearer`.
-- **Yalnız `/api/` ve yalnız başlık:** HTML sayfaları, `/events` (SSE) ve ekran görüntüsü dosyaları token kabul etmez; `?token=` gibi sorgu dizgisi değerleri asla okunmaz.
+- **Yalnız `/api/`, `/taxii2/`, `/metrics` ve yalnız başlık:** token `/api/` uçlarında, TAXII 2.1'de (`/taxii2/`, `read`/`write`) ve Prometheus `/metrics`'te (`metrics` kapsamı) geçerlidir; HTML sayfaları, `/events` (SSE) ve ekran görüntüsü dosyaları token kabul etmez; `?token=` gibi sorgu dizgisi değerleri asla okunmaz.
 - **CSRF kuralı:** yalnız Bearer ile gelen (oturum çerezi taşımayan) istekler CSRF'ten muaftır. Aynı istekte oturum çerezi de varsa oturum yolu kullanılır ve CSRF zorunludur.
 - **Token ile çağrılamayan uçlar** (`403 {"code": "session_required", "error": …}`): `/api/tokens*` (token yönetimi), `/api/me/*` (parola, 2FA), `/api/users*`, `/api/settings/*`, `/api/site-profiles*`, `/api/alert-config*` (webhook entegrasyonları), `/api/integrations/misp/config` ve `/api/integrations/misp/test` (MISP ayarları). Sızmış bir token yeni token basamaz, parola değiştiremez, hesap ya da entegrasyon yönetemez.
 - **Parola değişikliği ve olay müdahalesi:** admin bir kullanıcının parolasını sıfırladığında o kullanıcının oturumları kapanır **ve tüm API token'ları iptal edilir** (`user.password.reset` olayında `tokensRevoked`). Kullanıcının kendi parola değişikliği token'ları varsayılan olarak iptal etmez (entegrasyonlar bozulmasın); ele geçirme şüphesinde **Hesabım → Parola** altındaki "Tüm API token'larımı da iptal et" seçeneğini işaretleyin (`POST /api/me/password` gövdesinde `"revokeTokens": true`). Kullanıcıyı pasifleştirmek de token'larını anında geçersiz kılar.
@@ -435,6 +437,29 @@ uygulanır:
   eski yedeklerde kalır — `BACKUP_KEEP`'i buna göre seçin.
 - Her çalışma loglanır ve `retention.purge` olarak (yalnız sayımlarla) denetlenir; etkin politika
   (`AUDIT_RETENTION_DAYS` dahil) ve son çalışma Ayarlar → Saklama süresi'nde (admin) görünür.
+
+## 📈 Prometheus metrikleri
+
+`METRICS_ENABLED=true` ile `GET /metrics` Prometheus metin biçiminde metrik yayımlar (varsayılan kapalı → 404).
+Ayrıntılı metrik listesi, örnek yapılandırma, uyarı kuralları ve Grafana panosu: [docs/METRICS.md](docs/METRICS.md).
+
+- **Kimlik — asla anonim değil:** admin rolündeki bir hesabın **`metrics` kapsamlı** kişisel API token'ı,
+  `Authorization: Bearer kh_…` (Hesabım → API token'ları → Yeni token → *Metrik*). Bu token **yalnız `/metrics`'i**
+  kazır; `/api/` ve `/taxii2/`'de reddedilir — Prometheus sunucusundan sızsa bile bulgu/IOC okuyamaz. `read`/`write`
+  token'ları `/metrics`'te kabul edilmez (`403 metrics_scope_required`): `read` token'ı tüm bulguları okuyabilen bir
+  izleyici kimliğidir ve kazıma yapılandırmasına konmamalıdır. Token yoksa/geçersizse `401`, sahibi (artık) admin
+  değilse `403` (denetlenir). Oturum çerezi bu uçta kabul edilmez. Ayrı bir `METRICS_TOKEN` yerine API token'ları
+  seçildi: özetle saklanır, süreli olabilir, arayüzden iptal edilir, son kullanımı görünür ve sahibi pasifleşince
+  geçersizleşir.
+- **Metrikler (`keywordhunter_` öneki):** `build_info`; `http_requests_total` / `http_request_duration_seconds`
+  (`route` = Gin rota kalıbı, eşleşmeyen `unmatched` — ham yol asla); arama sayısı/süresi (`manual`/`scheduled`);
+  motor başına `engine_up`, yanıt süresi, başarı oranı; önem derecesine göre `findings` ve `new_findings_total`;
+  planlı tarama sonuçları (hiçbir motor yanıt vermediyse `engines_failed`); izleme kontrolleri ve düşük site sayısı; Tor devre yenilemeleri ve SOCKS erişilebilirliği;
+  denetim zinciri durumu (doğrulama hatası da 0 sayılır), doğrulama hatası ve son doğrulama zamanı; son yedek durumu ve son başarılı yedek zamanı; saklama temizliğinin
+  sildikleri (tür başına); bildirim gönderimleri; giriş denemeleri (yöntem/sonuç); aktif oturumlar; Go ve süreç
+  metrikleri.
+- **SQLite'ı yormaz:** veritabanından türetilen göstergeler en fazla 30 sn'de bir, indeksli sorgularla okunur.
+- **Gizlilik:** etiketlerde sorgu, URL, kullanıcı adı ya da IP yoktur; tüm etiket değerleri sabit kümelerdendir.
 
 ## 🧑‍💻 Geliştirme
 

@@ -148,11 +148,31 @@ func (s *Searcher) SearchAll(ctx context.Context, query string) []Result {
 	return s.SearchAllPages(ctx, query, 1)
 }
 
+// SearchStats bir arama çalışmasının motor özeti. Answered, ilk sayfası hatasız
+// dönen motor sayısıdır (0 sonuç da yanıttır); Engines == 0 ya da
+// Answered == 0 ise hiçbir motor yanıt vermemiştir (ör. Tor kapalı).
+type SearchStats struct {
+	Engines  int // çalışmaya alınan etkin motor
+	Answered int // hatasız yanıt veren motor
+}
+
+// SearchAllStats SearchAll gibidir; ayrıca motor özetini döndürür (zamanlanmış
+// taramanın "hiçbir motor yanıt vermedi" sonucunu ayırt etmesi için).
+func (s *Searcher) SearchAllStats(ctx context.Context, query string) ([]Result, SearchStats) {
+	return s.searchAllPages(ctx, query, 1)
+}
+
 // SearchAllPages aktif motorlarda arama yapar; sayfalama destekleyen motorlarda
 // `pages` sayfaya kadar iner (sayfalar sırayla, motorlar paralel). Bir sayfa
 // yeni sonuç üretmezse o motor için durur.
 func (s *Searcher) SearchAllPages(ctx context.Context, query string, pages int) []Result {
+	res, _ := s.searchAllPages(ctx, query, pages)
+	return res
+}
+
+func (s *Searcher) searchAllPages(ctx context.Context, query string, pages int) ([]Result, SearchStats) {
 	var results []Result
+	var stats SearchStats
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	startTime := time.Now()
@@ -164,10 +184,11 @@ func (s *Searcher) SearchAllPages(ctx context.Context, query string, pages int) 
 	}
 
 	engines := s.ActiveEngines()
+	stats.Engines = len(engines)
 	logger.SearchStarted(query, len(engines))
 	if len(engines) == 0 {
 		shared.Streamer.BroadcastLog("error", "Aktif arama motoru yok — /monitor ekranından en az bir motoru etkinleştirin", "")
-		return nil
+		return nil, stats
 	}
 
 	for _, engine := range engines {
@@ -219,6 +240,9 @@ func (s *Searcher) SearchAllPages(ctx context.Context, query string, pages int) 
 				shared.Streamer.BroadcastLog("engine_end", fmt.Sprintf("SEARCH ENGINE ERROR: %v", err), eng.Name)
 				return
 			}
+			mu.Lock()
+			stats.Answered++
+			mu.Unlock()
 
 			if len(engineResults) > 0 {
 				// Toplam hit sayısını hesapla
@@ -246,7 +270,7 @@ func (s *Searcher) SearchAllPages(ctx context.Context, query string, pages int) 
 	logger.SearchCompleted(query, len(deduped), time.Since(startTime))
 	shared.Streamer.BroadcastLog("success", fmt.Sprintf("SEARCH COMPLETED: %d unique results found in %v", len(deduped), time.Since(startTime).Round(time.Millisecond)), "")
 
-	return deduped
+	return deduped, stats
 }
 
 // searchEngine tek bir arama motorunda (ilk sayfa) arama yapar - retry ile

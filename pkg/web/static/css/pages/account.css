@@ -78,7 +78,7 @@
 .acc-scopes { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
 .acc-scopes legend { margin-bottom: 8px; }
 .acc-scope-opt { --c: var(--primary); position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--surface-hover); cursor: pointer; transition: border-color var(--dur-2), background var(--dur-2), box-shadow var(--dur-2); }
-.acc-scope-opt.s-read { --c: var(--info); } .acc-scope-opt.s-write { --c: var(--warn); }
+.acc-scope-opt.s-read { --c: var(--info); } .acc-scope-opt.s-write { --c: var(--warn); } .acc-scope-opt.s-metrics { --c: var(--ok); }
 .acc-scope-opt:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--border-strong)); }
 .acc-scope-opt input { position: absolute; opacity: 0; pointer-events: none; }
 .acc-scope-opt:has(input:checked) { border-color: var(--c); background: color-mix(in srgb, var(--c) 9%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 14%, transparent); }

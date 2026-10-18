@@ -105,7 +105,7 @@ değil boş bir zarf + `next` olur. Aynı anda en fazla 4 tarama (hesap başına
 ### Kimlik doğrulama
 
 Yalnız **kişisel API token'ı** kabul edilir (Hesabım → API token'ları, `/account`). **`read` kapsamı
-yeterlidir** ve önerilir.
+yeterlidir** ve önerilir. Yalnız Prometheus kazıması için olan `metrics` kapsamlı token'lar burada `403` alır.
 
 - `Authorization: Bearer kh_…`, **ya da**
 - **HTTP Basic**: parola = token; kullanıcı adı **boş** ya da token sahibinin kullanıcı adı olmalıdır
@@ -299,7 +299,7 @@ Each request scans at most 5000 findings (also `objects/{id}/`: an empty envelop
 of `404` when the budget runs out); at most 4 concurrent scans (2 per account), otherwise `429`.
 Payment card and phone numbers are never published.
 
-**Auth** — personal API token (`read` scope is enough) as `Authorization: Bearer kh_…` or HTTP Basic
+**Auth** — personal API token (`read` scope is enough; scrape-only `metrics` tokens get `403`) as `Authorization: Bearer kh_…` or HTTP Basic
 (password = token, username empty or the token owner's). No cookies, no CSRF; `401` carries
 `WWW-Authenticate: Basic realm="KeywordHunter TAXII"`.
 

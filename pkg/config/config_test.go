@@ -189,3 +189,16 @@ func TestLoad_RetentionSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_MetricsEnabled(t *testing.T) {
+	cfg, _, err := loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\n")
+	if err != nil || cfg.MetricsEnabled {
+		t.Fatalf("varsayılan kapalı olmalı: %v %v", cfg.MetricsEnabled, err)
+	}
+	for raw, want := range map[string]bool{"true": true, "1": true, "TRUE": true, "false": false, "0": false, "ture": false} {
+		cfg, _, err := loadWith(t, "ADMIN_USER=a\nADMIN_PASS=bbbbbbbb\nMETRICS_ENABLED="+raw+"\n")
+		if err != nil || cfg.MetricsEnabled != want {
+			t.Errorf("METRICS_ENABLED=%s → %v (%v), beklenen %v", raw, cfg.MetricsEnabled, err, want)
+		}
+	}
+}

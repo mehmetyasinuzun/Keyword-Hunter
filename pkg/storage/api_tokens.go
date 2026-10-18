@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -29,6 +30,10 @@ import (
 const (
 	TokenScopeRead  = "read"  // yalnız okuma (viewer eşdeğeri)
 	TokenScopeWrite = "write" // kullanıcının rolü kadar yazma
+	// TokenScopeMetrics YALNIZ GET /metrics (Prometheus kazıması); /api/ ve
+	// /taxii2/'de reddedilir. Yalnız admin hesabı üretebilir. Kazıma
+	// sunucusunda duran token sızarsa bulgulara erişim vermez.
+	TokenScopeMetrics = "metrics"
 )
 
 const (
@@ -84,7 +89,70 @@ func (t *APIToken) Status(now time.Time) string {
 
 // ValidTokenScope kapsamın geçerli olup olmadığını döndürür.
 func ValidTokenScope(s string) bool {
-	return s == TokenScopeRead || s == TokenScopeWrite
+	return s == TokenScopeRead || s == TokenScopeWrite || s == TokenScopeMetrics
+}
+
+// apiTokensV6 şema 6'daki api_tokens tanımı (kapsam CHECK'ine "metrics"
+// eklendi). Taban metni (schema.go) donmuştur; bu metin de değiştirilmez.
+const apiTokensV6 = `CREATE TABLE api_tokens (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER NOT NULL DEFAULT 0,
+	username TEXT NOT NULL COLLATE NOCASE,
+	name TEXT NOT NULL,
+	prefix TEXT NOT NULL,
+	token_hash TEXT NOT NULL UNIQUE,
+	scope TEXT NOT NULL DEFAULT 'read' CHECK (scope IN ('read', 'write', 'metrics')),
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	last_used_at DATETIME,
+	last_used_ip TEXT NOT NULL DEFAULT '',
+	expires_at DATETIME,
+	revoked_at DATETIME
+)`
+
+// migrateAPITokenMetricsScope şema 6: api_tokens'ın kapsam CHECK kısıtına
+// "metrics" eklenir. SQLite CHECK'i ALTER ile değiştiremediğinden tablo
+// yeniden kurulur (başka tablo api_tokens'a başvurmaz; yabancı anahtar
+// kapatmak gerekmez). Satırlar, id'ler ve AUTOINCREMENT sırası korunur:
+// denetim kaydındaki tokenId'ler yeni bir token'a yeniden verilmez.
+func migrateAPITokenMetricsScope(q runner) error {
+	const cols = `id, user_id, username, name, prefix, token_hash, scope, created_at, last_used_at, last_used_ip, expires_at, revoked_at`
+	var seq sql.NullInt64
+	if err := q.QueryRow(`SELECT seq FROM sqlite_sequence WHERE name = 'api_tokens'`).Scan(&seq); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var before int64
+	if err := q.QueryRow(`SELECT COUNT(*) FROM api_tokens`).Scan(&before); err != nil {
+		return err
+	}
+	for _, st := range []string{
+		`CREATE TABLE kh_migrate_api_tokens AS SELECT ` + cols + ` FROM api_tokens`,
+		`DROP TABLE api_tokens`,
+		apiTokensV6,
+		`INSERT INTO api_tokens (` + cols + `) SELECT ` + cols + ` FROM kh_migrate_api_tokens ORDER BY id`,
+		`DROP TABLE kh_migrate_api_tokens`,
+		`CREATE INDEX idx_api_tokens_username ON api_tokens(username)`,
+	} {
+		if _, err := q.Exec(st); err != nil {
+			return err
+		}
+	}
+	var after int64
+	if err := q.QueryRow(`SELECT COUNT(*) FROM api_tokens`).Scan(&after); err != nil {
+		return err
+	}
+	if after != before {
+		return fmt.Errorf("api_tokens yeniden kurmada satır sayısı değişti (%d → %d)", before, after)
+	}
+	if seq.Valid {
+		if _, err := q.Exec(`UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'api_tokens'`, seq.Int64); err != nil {
+			return err
+		}
+		if _, err := q.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'api_tokens', ?
+			WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'api_tokens')`, seq.Int64); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // HashAPIToken düz metin token'ın saklanan özetini (hex SHA-256) üretir.

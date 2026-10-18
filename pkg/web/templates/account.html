@@ -192,6 +192,13 @@
             <span class="acc-scope-ic">{{icon "lightning"}}</span>
             <span class="acc-scope-txt"><b>{{t .Lang "acct.m.write"}} <code>write</code></b><small>{{if .CanWrite}}{{t .Lang "acct.m.writeD"}}{{else}}{{t .Lang "acct.m.writeViewer"}}{{end}}</small></span>
           </label>
+          {{if .IsAdmin}}
+          <label class="acc-scope-opt s-metrics">
+            <input type="radio" name="tok-scope" value="metrics">
+            <span class="acc-scope-ic">{{icon "analytics"}}</span>
+            <span class="acc-scope-txt"><b>{{t .Lang "acct.m.metrics"}} <code>metrics</code></b><small>{{t .Lang "acct.m.metricsD"}}</small></span>
+          </label>
+          {{end}}
         </fieldset>
         <div class="kh-field">
           <label class="kh-label" for="tok-expiry">{{t .Lang "acct.m.expiry"}}</label>

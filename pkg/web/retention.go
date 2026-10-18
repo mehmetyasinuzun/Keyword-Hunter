@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
@@ -98,6 +99,14 @@ func (s *Server) runRetention() (storage.PurgeStats, error) {
 		}
 	}
 	err := errors.Join(errs...)
+	// Yarıda kesilen çalışmada da silinmiş olan satırlar sayılır.
+	for kind, n := range map[string]int64{
+		"results": total.Results, "tags": total.Tags, "artifacts": total.Artifacts,
+		"misp_pushed": total.MISPPushed, "graph_nodes": total.GraphNodes,
+		"screenshots": total.Screenshots, "screenshot_files": int64(removed),
+	} {
+		metrics.RetentionPurged(kind, n)
+	}
 	if err != nil && ctx.Err() != nil {
 		err = fmt.Errorf("sunucu kapanırken yarıda kesildi: %w", err)
 	}

@@ -194,6 +194,11 @@ func TestSearchAllPages_PaginationAndDedup(t *testing.T) {
 		t.Fatalf("sayfa istekleri: %v", reqs)
 	}
 
+	// Motor özeti: 3 etkin motordan Broken hata verir → 2 yanıt.
+	if _, st := s.SearchAllStats(context.Background(), "leak"); st.Engines != 3 || st.Answered != 2 {
+		t.Fatalf("motor özeti: %+v", st)
+	}
+
 	// Filtre: yalnız "Single" etkin → yalnız onun sonuçları
 	s.SetEngineFilter(func(name string) bool { return name == "Single" })
 	if got := s.SearchAll(context.Background(), "leak"); len(got) != 2 {
@@ -203,6 +208,9 @@ func TestSearchAllPages_PaginationAndDedup(t *testing.T) {
 	s.SetEngineFilter(func(string) bool { return false })
 	if got := s.SearchAll(context.Background(), "leak"); got != nil {
 		t.Fatalf("motorsuz arama nil dönmeli: %+v", got)
+	}
+	if got, st := s.SearchAllStats(context.Background(), "leak"); got != nil || st != (SearchStats{}) {
+		t.Fatalf("motorsuz arama özeti: %v %+v", got, st)
 	}
 }
 

@@ -26,9 +26,9 @@
 
     // ── Rozetler ────────────────────────────────────────────────────────
     function scopeBadge(scope) {
-        return scope === 'write'
-            ? KH.html`<span class="kh-badge warn">${KH.raw(KH.icon('lightning'))} ${KH.t('acct.m.write')}</span>`
-            : KH.html`<span class="kh-badge info">${KH.raw(KH.icon('eye'))} ${KH.t('acct.m.read')}</span>`;
+        if (scope === 'write') return KH.html`<span class="kh-badge warn">${KH.raw(KH.icon('lightning'))} ${KH.t('acct.m.write')}</span>`;
+        if (scope === 'metrics') return KH.html`<span class="kh-badge ok">${KH.raw(KH.icon('analytics'))} ${KH.t('acct.m.metrics')}</span>`;
+        return KH.html`<span class="kh-badge info">${KH.raw(KH.icon('eye'))} ${KH.t('acct.m.read')}</span>`;
     }
     function statusBadge(status) {
         if (status === 'revoked') return KH.html`<span class="kh-badge neutral">${T('iptal edildi', 'revoked')}</span>`;

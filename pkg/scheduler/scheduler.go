@@ -5,14 +5,16 @@ package scheduler
 
 import (
 	"context"
-	"keywordhunter-mvp/pkg/shared"
+	"errors"
 	"strings"
 	"sync"
 	"time"
 
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/notify"
 	"keywordhunter-mvp/pkg/search"
+	"keywordhunter-mvp/pkg/shared"
 	"keywordhunter-mvp/pkg/storage"
 )
 
@@ -22,7 +24,7 @@ const searchTimeout = 4 * time.Minute
 // searchRunner zamanlanmış taramanın kullandığı arama yüzeyi (*search.Searcher;
 // testler Tor'suz sahte sonuç verir).
 type searchRunner interface {
-	SearchAll(ctx context.Context, query string) []search.Result
+	SearchAllStats(ctx context.Context, query string) ([]search.Result, search.SearchStats)
 }
 
 // Scheduler zamanlanmış taramaları yönetir
@@ -133,7 +135,9 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 	// Taramayı çalıştır (zaman aşımlı, iptal-edilebilir context ile)
 	ctx, cancel := context.WithTimeout(context.Background(), searchTimeout)
 	defer cancel()
-	results := s.searcher.SearchAll(ctx, ss.Query)
+	results, stats := s.searcher.SearchAllStats(ctx, ss.Query)
+	metrics.SearchRun(metrics.TriggerScheduled, time.Since(startTime))
+	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
 
 	// Yeni URL'leri tespit et (diff)
 	var newFindings, allNewFindings []notify.Finding
@@ -169,6 +173,20 @@ func (s *Scheduler) runSearch(ss *storage.ScheduledSearch) {
 	savedCount, err := s.db.SaveResults(storageResults)
 	if err != nil {
 		logger.Warn("Scheduler: sonuçlar kaydedilemedi: %v", err)
+	}
+	switch {
+	case err != nil:
+		metrics.ScheduledRun(metrics.ResultError)
+	case timedOut:
+		// Bütçe doldu: o ana dek gelen sonuçlar kaydedildi ama tarama yarımdır.
+		metrics.ScheduledRun(metrics.ResultTimeout)
+	case stats.Answered == 0:
+		// Hiçbir motor yanıt vermedi (etkin motor yok ya da hepsi hata verdi,
+		// ör. Tor kapalı): "0 sonuç" başarı sayılmaz.
+		logger.Warn("SCHEDULER: '%s' taramasında hiçbir motor yanıt vermedi (%d etkin motor)", ss.Query, stats.Engines)
+		metrics.ScheduledRun(metrics.ResultEnginesFailed)
+	default:
+		metrics.ScheduledRun(metrics.ResultSuccess)
 	}
 
 	// Arama geçmişine ekle

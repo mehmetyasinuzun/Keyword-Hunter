@@ -1,0 +1,100 @@
+# KeywordHunter için örnek uyarı kuralları (Prometheus rule file; bkz. docs/METRICS.md).
+# Eşikleri kendi ortamınıza göre ayarlayın.
+groups:
+  - name: keywordhunter
+    rules:
+      - alert: KeywordHunterDown
+        expr: up{job="keywordhunter"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "KeywordHunter /metrics kazınamıyor ({{ $labels.instance }})"
+          description: "Hizmet kapalı, METRICS_ENABLED kapalı (404) ya da token geçersiz/iptal (401/403) olabilir."
+
+      - alert: KeywordHunterAuditChainBroken
+        # Doğrulama HATA verdiğinde de (taranamayan satır, silinmiş zincir
+        # durumu) 0 olur; ayrım için keywordhunter_audit_chain_verify_error.
+        expr: keywordhunter_audit_chain_ok == 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Denetim kaydı hash zinciri kırık ya da doğrulanamıyor ({{ $labels.instance }})"
+          description: "Denetim kaydı kurcalanmış olabilir: /audit sayfasından zinciri doğrulayın. keywordhunter_audit_chain_verify_error 1 ise doğrulama hata verdi (taranamayan satır, silinmiş zincir durumu): sunucu günlüğüne bakın."
+
+      - alert: KeywordHunterAuditChainNotVerified
+        expr: time() - keywordhunter_audit_chain_last_verify_timestamp_seconds > 8 * 3600
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Denetim zinciri 8 saattir tam doğrulanmadı ({{ $labels.instance }})"
+
+      - alert: KeywordHunterAuditChainNeverVerified
+        # Açılıştan beri hiç başarılı tam doğrulama yok (zaman damgası serisi
+        # hiç oluşmadı); doğrulama açılışta çalışır, 1 saat yeterli paydır.
+        expr: keywordhunter_build_info unless on (instance, job) keywordhunter_audit_chain_last_verify_timestamp_seconds
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "Denetim zinciri açılıştan beri başarıyla doğrulanmadı ({{ $labels.instance }})"
+
+      - alert: KeywordHunterBackupFailed
+        expr: keywordhunter_backup_last_status == 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Son zamanlanmış yedek başarısız ({{ $labels.instance }})"
+          description: "Ayrıntı: Ayarlar → Yedekleme ve sunucu günlüğü."
+
+      - alert: KeywordHunterBackupStale
+        # BACKUP_INTERVAL_HOURS=24 için ~2 gün; aralığınıza göre ayarlayın.
+        expr: keywordhunter_backup_enabled == 1 and (time() - keywordhunter_backup_last_success_timestamp_seconds) > 2 * 86400
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "48 saattir başarılı yedek yok ({{ $labels.instance }})"
+
+      - alert: KeywordHunterTorUnreachable
+        expr: keywordhunter_tor_reachable == 0
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "Tor SOCKS vekiline ulaşılamıyor ({{ $labels.instance }})"
+          description: "Aramalar, izleme listesi ve ekran görüntüleri Tor olmadan çalışmaz."
+
+      - alert: KeywordHunterAllEnginesDown
+        expr: sum by (instance) (keywordhunter_engine_up * on(instance, engine) keywordhunter_engine_active) == 0
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Etkin arama motorlarının hiçbiri yanıt vermiyor ({{ $labels.instance }})"
+
+      - alert: KeywordHunterLoginFailureSpike
+        expr: sum by (instance) (increase(keywordhunter_login_attempts_total{result=~"failure|locked"}[15m])) > 30
+        labels: {severity: warning}
+        annotations:
+          summary: "15 dakikada 30'dan fazla başarısız/kilitli giriş ({{ $labels.instance }})"
+          description: "Kaba kuvvet denemesi olabilir: /audit → auth kategorisi."
+
+      - alert: KeywordHunterScheduledScansFailing
+        expr: sum by (instance) (increase(keywordhunter_scheduled_scan_runs_total{result!="success"}[6h])) > 0 and sum by (instance) (increase(keywordhunter_scheduled_scan_runs_total{result="success"}[6h])) == 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Son 6 saatte hiçbir planlı tarama başarılı olmadı ({{ $labels.instance }})"
+          description: "engines_failed: hiçbir motor yanıt vermedi (Tor kapalı ya da etkin motor yok); error: sonuçlar kaydedilemedi; timeout: 4 dk bütçe doldu."
+
+      - alert: KeywordHunterNotificationsFailing
+        expr: sum by (instance, channel) (increase(keywordhunter_notification_sends_total{result="failure"}[1h])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.channel }} bildirimleri gönderilemiyor ({{ $labels.instance }})"
+
+      - alert: KeywordHunterHTTP5xx
+        expr: sum by (instance) (rate(keywordhunter_http_requests_total{status_class="5xx"}[5m])) > 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Sürekli 5xx yanıtları ({{ $labels.instance }})"
+
+      - alert: KeywordHunterNewCriticalFindings
+        expr: sum by (instance) (increase(keywordhunter_new_findings_total{severity="5"}[30m])) > 0
+        labels: {severity: info}
+        annotations:
+          summary: "Yeni kritik (sev 5) bulgu ({{ $labels.instance }})"

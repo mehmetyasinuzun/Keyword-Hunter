@@ -14,6 +14,7 @@ import (
 
 	"keywordhunter-mvp/pkg/i18n"
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/notify"
 	"keywordhunter-mvp/pkg/scheduler"
 	"keywordhunter-mvp/pkg/shared"
@@ -112,6 +113,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 	// istekler kilidin izin verdiğinden fazla parola denemesi yaptıramaz.
 	if s.loginGuard != nil {
 		if ok, wait := s.loginGuard.Acquire(clientIP); !ok {
+			metrics.LoginAttempt(metrics.LoginPassword, metrics.ResultLocked)
 			logger.Warn("USER LOGIN BLOCKED: IP=%s kilitli (%s kaldı)", clientIP, wait.Round(time.Second))
 			// Kilitliyken her deneme kaydedilirse saldırgan tabloyu şişirir: IP başına dakikada bir.
 			if s.auditNoise.allow("login-locked:"+clientIP, time.Minute) {
@@ -130,6 +132,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 		if s.loginGuard != nil {
 			s.loginGuard.Fail(clientIP)
 		}
+		metrics.LoginAttempt(metrics.LoginPassword, metrics.ResultFailure)
 		s.audit(c, "auth.login.failure", attempted, map[string]any{"reason": "too_long"}, false)
 		c.Redirect(http.StatusFound, "/login?error=1")
 		return
@@ -165,6 +168,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 		// DB hatasında bootstrap deposuna DÜŞÜLMEZ: aksi halde geçici bir hata
 		// 2FA'lı bir hesabın .env parolasıyla ikinci adımsız girişine yol açabilirdi.
 		logger.Error("Login: kullanıcı okunamadı: %v", err)
+		metrics.LoginAttempt(metrics.LoginPassword, metrics.ResultError)
 		c.Redirect(http.StatusFound, "/login?error=1&message=session")
 		return
 	}
@@ -175,10 +179,12 @@ func (s *Server) handleLogin(c *gin.Context) {
 			on, err := s.db.TwoFactorEnabled(managed.ID)
 			if err != nil {
 				logger.Error("Login: 2FA durumu okunamadı: %v", err)
+				metrics.LoginAttempt(metrics.LoginPassword, metrics.ResultError)
 				c.Redirect(http.StatusFound, "/login?error=1&message=session")
 				return
 			}
 			if on {
+				metrics.LoginAttempt(metrics.LoginPassword, metrics.ResultChallenge)
 				s.beginTwoFactorLogin(c, managed)
 				return
 			}
@@ -192,6 +198,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 	if s.loginGuard != nil {
 		s.loginGuard.Fail(clientIP)
 	}
+	metrics.LoginAttempt(metrics.LoginPassword, metrics.ResultFailure)
 	logger.UserLogin(shared.TruncateRunes(username, 32), false, clientIP)
 	s.audit(c, "auth.login.failure", attempted, map[string]any{"reason": reason}, false)
 	c.Redirect(http.StatusFound, "/login?error=1")
@@ -204,6 +211,11 @@ func (s *Server) handleLogin(c *gin.Context) {
 // bu yolu kullanır. Başarısızsa yönlendirmeyi kendisi yapar ve false döner.
 func (s *Server) startSession(c *gin.Context, username, role string, details map[string]any) bool {
 	clientIP := c.ClientIP()
+	// Metrik yöntemi: 2FA ikinci adımından geliyorsa o adımın yöntemi.
+	method := metrics.LoginPassword
+	if mfa, _ := details["mfa"].(string); mfa != "" {
+		method = loginMetricMethod(mfa)
+	}
 	if s.loginGuard != nil {
 		s.loginGuard.Success(clientIP)
 	}
@@ -213,12 +225,14 @@ func (s *Server) startSession(c *gin.Context, username, role string, details map
 	expiresAt := time.Now().Add(s.sessionTTL)
 	if err := s.db.CreateSession(sessionID, username, csrfToken, expiresAt); err != nil {
 		logger.Error("Session kaydı oluşturulamadı: %v", err)
+		metrics.LoginAttempt(method, metrics.ResultError)
 		s.recordAudit(c, storage.AuditEvent{Action: "auth.login.failure", Target: "user:" + username, Actor: username, Role: role,
 			AuthMethod: storage.AuthMethodAnonymous}, map[string]any{"reason": "session_error"})
 		c.Redirect(http.StatusFound, "/login?error=1&message=session")
 		return false
 	}
 
+	metrics.LoginAttempt(method, metrics.ResultSuccess)
 	logger.UserLogin(username, true, clientIP)
 	s.recordAudit(c, storage.AuditEvent{Action: "auth.login.success", Target: "user:" + username, Actor: username, Role: role,
 		AuthMethod: storage.AuthMethodSession, Success: true}, details)
@@ -511,6 +525,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 	startTime := time.Now()
 	results := s.searcher.SearchAllPages(ctx, query, pages)
 	elapsed := time.Since(startTime)
+	metrics.SearchRun(metrics.TriggerManual, elapsed)
 
 	// Sonuçları kaydet (KeywordHits ile birlikte)
 	var storageResults []storage.SearchResult
@@ -684,10 +699,11 @@ func (s *Server) handleSettingsPage(c *gin.Context) {
 		return
 	}
 	s.render(c, http.StatusOK, "settings.html", gin.H{
-		"ActivePage": "settings",
-		"taxii":      s.taxiiInfo(c),
-		"backup":     s.backupStatus(),
-		"retention":  s.retentionStatus(),
+		"ActivePage":     "settings",
+		"taxii":          s.taxiiInfo(c),
+		"backup":         s.backupStatus(),
+		"retention":      s.retentionStatus(),
+		"metricsEnabled": s.metricsEnabled,
 	})
 }
 

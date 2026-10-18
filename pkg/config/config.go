@@ -62,6 +62,9 @@ type AppConfig struct {
 	AppSecret string
 	// Require2FA iki adımlı doğrulama zorunluluğu: none | admins | all.
 	Require2FA string
+	// MetricsEnabled GET /metrics (Prometheus) ucunu açar; varsayılan kapalı.
+	// Açıkken bile anonim değildir: admin hesabına ait API token gerekir.
+	MetricsEnabled bool
 }
 
 // REQUIRE_2FA değerleri.
@@ -194,6 +197,7 @@ func Load(envFilePath string) (AppConfig, error) {
 		ScreenshotRetentionDays: screenshotRetention,
 		AppSecret:               strings.ToLower(appSecret),
 		Require2FA:              require2FA,
+		MetricsEnabled:          parseBool(get("METRICS_ENABLED", "false")),
 	}
 
 	return cfg, nil

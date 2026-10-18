@@ -153,7 +153,8 @@ func (s *Server) auditTokenFailure(c *gin.Context, reason string, t *storage.API
 }
 
 // setTokenContext doğrulanmış token'ın kimliğini istek bağlamına yazar.
-// "read" kapsamı rol ne olursa olsun viewer'a indirgenir (yazma yok).
+// "read" (ve "metrics") kapsamı rol ne olursa olsun viewer'a indirgenir
+// (yazma yok); "metrics" ayrıca /api/ ve /taxii2/'de tümden reddedilir.
 func setTokenContext(c *gin.Context, t *storage.APIToken, u *storage.User) {
 	role := u.Role
 	if t.Scope != storage.TokenScopeWrite {
@@ -188,6 +189,13 @@ func (s *Server) authenticateToken(c *gin.Context, raw string) {
 	}
 	setTokenContext(c, t, u)
 
+	// "metrics" kapsamlı token yalnız /metrics içindir: kazıma sunucusundan
+	// sızan bir kimlik bulgu/IOC okuyamaz.
+	if t.Scope == storage.TokenScopeMetrics {
+		s.auditDenied(c, "token_scope", "read")
+		apiAbort(c, http.StatusForbidden, "token_metrics_only")
+		return
+	}
 	if tokenForbiddenRoute(c.FullPath()) {
 		s.auditDenied(c, "token_session_required", "")
 		apiAbort(c, http.StatusForbidden, "session_required")
@@ -303,6 +311,12 @@ func (s *Server) handleTokenCreate(c *gin.Context) {
 	}
 	if req.Scope == storage.TokenScopeWrite && roleRank(u.Role) < roleRank(storage.RoleAnalyst) {
 		apiFail(c, http.StatusBadRequest, "token_viewer_read_only")
+		return
+	}
+	// Kazıma token'ı yalnız admin'e: /metrics zaten admin sahibi ister;
+	// başka rol bu kapsamla işe yaramaz bir token biriktirmesin.
+	if req.Scope == storage.TokenScopeMetrics && u.Role != storage.RoleAdmin {
+		apiFail(c, http.StatusBadRequest, "token_metrics_admin_only")
 		return
 	}
 	now := time.Now()

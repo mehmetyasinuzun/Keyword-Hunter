@@ -146,6 +146,7 @@ func main() {
 
 		ResultRetentionDays:     appConfig.ResultRetentionDays,
 		ScreenshotRetentionDays: appConfig.ScreenshotRetentionDays,
+		MetricsEnabled:          appConfig.MetricsEnabled,
 	})
 	if err != nil {
 		logger.Error("Web server could not be initialized: %v", err)

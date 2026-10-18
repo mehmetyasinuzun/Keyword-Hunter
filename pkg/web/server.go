@@ -21,6 +21,7 @@ import (
 	"keywordhunter-mvp/pkg/config"
 	"keywordhunter-mvp/pkg/crawler"
 	"keywordhunter-mvp/pkg/logger"
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/monitor"
 	"keywordhunter-mvp/pkg/scheduler"
 	"keywordhunter-mvp/pkg/scraper"
@@ -142,6 +143,12 @@ type Server struct {
 
 	// now bakım işleri için saat (nil → time.Now; testlerde sahte saat).
 	now func() time.Time
+
+	// Prometheus metrikleri (METRICS_ENABLED; kapalıyken /metrics kaydedilmez).
+	metricsEnabled   bool
+	metricsHandler   http.Handler
+	metricsCollector *dbMetricsCollector
+	auditChainSample atomic.Pointer[auditChainSample]
 }
 
 // Config sunucu yapılandırması
@@ -177,6 +184,22 @@ type Config struct {
 	// ResultRetentionDays / ScreenshotRetentionDays saklama süresi (gün; 0 = süresiz).
 	ResultRetentionDays     int
 	ScreenshotRetentionDays int
+	// MetricsEnabled GET /metrics ucunu açar (bkz. metrics.go).
+	MetricsEnabled bool
+}
+
+// useBaseMiddleware tüm isteklere uygulanan ara katmanları SIRAYLA kurar.
+// HTTP metrik ara katmanı (yalnız metricsEnabled iken) en dıştadır:
+// Recovery'nin panikten ürettiği 500'ler de sayılır. Testler de bu işlevi
+// kullanır; sıra yalnız burada tanımlıdır.
+func useBaseMiddleware(router *gin.Engine, metricsEnabled, cookieSecure bool) {
+	if metricsEnabled {
+		router.Use(httpMetricsMiddleware())
+	}
+	router.Use(gin.Recovery())
+	router.Use(securityHeaders(cookieSecure))
+	router.Use(bodyLimit(1 << 20))
+	router.Use(requestLogger())
 }
 
 // New yeni web sunucusu oluşturur
@@ -217,10 +240,7 @@ func New(cfg Config) (*Server, error) {
 	// Proxy başlıklarına (X-Forwarded-For) güvenme - ClientIP spoofing önlenir
 	_ = router.SetTrustedProxies(nil)
 	router.MaxMultipartMemory = 1 << 20
-	router.Use(gin.Recovery())
-	router.Use(securityHeaders(cfg.CookieSecure))
-	router.Use(bodyLimit(1 << 20))
-	router.Use(requestLogger())
+	useBaseMiddleware(router, cfg.MetricsEnabled, cfg.CookieSecure)
 
 	s := &Server{
 		db:            cfg.DB,
@@ -249,6 +269,8 @@ func New(cfg Config) (*Server, error) {
 
 		resultRetentionDays:     cfg.ResultRetentionDays,
 		screenshotRetentionDays: cfg.ScreenshotRetentionDays,
+
+		metricsEnabled: cfg.MetricsEnabled,
 	}
 	s.bgCtx, s.bgCancel = context.WithCancel(context.Background())
 	if cfg.AppSecret != "" {
@@ -376,6 +398,19 @@ func requestLogger() gin.HandlerFunc {
 	}
 }
 
+// renewTorAllEnginesDown motor izleyicisi tüm motorları düşük bulduğunda
+// (bekleme süresine uyarak) yeni Tor devresi ister.
+func (s *Server) renewTorAllEnginesDown() {
+	if err := s.torCtl.NewNym(false); err != nil {
+		metrics.TorRenewal(metrics.TorReasonAllEnginesDown, torRenewalResult(err))
+		logger.Debug("Otomatik NEWNYM atlandı: %v", err)
+		return
+	}
+	metrics.TorRenewal(metrics.TorReasonAllEnginesDown, metrics.ResultSuccess)
+	s.invalidateEngineCache()
+	s.auditSystem("tor.newnym", s.torCtl.Addr(), map[string]any{"auto": true, "trigger": "all_engines_down"}, true)
+}
+
 // startScheduler planlı arama motorunu ve arama motoru sağlık izleyicisini başlatır.
 // Her ikisi de kaynak-verimli arka plan worker'larıdır; hata olsa bile uygulama açılır.
 func (s *Server) startScheduler() {
@@ -390,14 +425,7 @@ func (s *Server) startScheduler() {
 	}
 	// Tüm motorlar düşerse yeni Tor devresi iste (yapılandırıldıysa)
 	if s.torCtl != nil {
-		em.SetAllDownHook(func() {
-			if err := s.torCtl.NewNym(false); err != nil {
-				logger.Debug("Otomatik NEWNYM atlandı: %v", err)
-			} else {
-				s.invalidateEngineCache()
-				s.auditSystem("tor.newnym", s.torCtl.Addr(), map[string]any{"auto": true, "trigger": "all_engines_down"}, true)
-			}
-		})
+		em.SetAllDownHook(s.renewTorAllEnginesDown)
 	}
 	em.Start()
 	s.engineMonitor = em
@@ -530,6 +558,7 @@ func (s *Server) runWatchlistChecks() {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		result := s.checkWatchlistItem(ctx, item)
 		cancel()
+		metrics.WatchlistCheck(result.Status, result.Changed)
 
 		if err := s.db.RecordWatchlistCheck(item.ID, result.Status, result.HTTPCode, result.ResponseMs, result.ContentHash, result.Title, result.Changed); err != nil {
 			logger.Warn("Watchlist kontrol kaydedilemedi (ID: %d): %v", item.ID, err)
@@ -628,6 +657,21 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/favicon.svg", s.handleFavicon)
 	s.router.GET("/api/i18n", s.handleI18nCatalog)
 	s.router.POST("/api/lang", s.handleSetLang)
+
+	// Prometheus metrikleri: yalnız METRICS_ENABLED=true iken (kapalıyken 404);
+	// admin hesabına ait "metrics" kapsamlı API token ister, oturum çerezi
+	// okunmaz (bkz. metrics.go).
+	if s.metricsEnabled {
+		if s.metricsHandler == nil {
+			if err := s.initMetrics(); err != nil {
+				logger.Error("Prometheus metrikleri kurulamadı; /metrics kapalı: %v", err)
+			}
+		}
+		if s.metricsHandler != nil {
+			s.router.GET("/metrics", s.metricsAuth(), s.handleMetrics)
+			logger.Info("Prometheus metrikleri etkin: GET /metrics (admin hesabına ait \"metrics\" kapsamlı API token gerekir)")
+		}
+	}
 
 	// TAXII 2.1 (salt okunur): yalnız API token (Bearer ya da Basic parolası);
 	// oturum çerezi okunmaz, CSRF yüzeyi yok (bkz. taxii.go).

@@ -32,6 +32,7 @@
       <a href="#sec-tor">{{t .Lang "set.tor.title"}}</a>
       <a href="#sec-backup">{{t .Lang "set.bk.title"}}</a>
       <a href="#sec-retention">{{t .Lang "set.ret.title"}}</a>
+      <a href="#sec-metrics">{{t .Lang "set.met.title"}}</a>
       <a href="#sec-integrations">{{t .Lang "int.nav"}}</a>
     </nav>
   </div>
@@ -246,6 +247,21 @@
     <p class="kh-hint" id="ret-last">{{t .Lang "set.ret.offHint"}} <code>RESULT_RETENTION_DAYS=180</code> · <code>SCREENSHOT_RETENTION_DAYS=90</code></p>
     {{with .retention.Last}}<p class="kh-hint" id="ret-history">{{t $.Lang "set.ret.history"}}: <time datetime="{{isoTime .At}}">{{formatTime .At}}</time> — {{if .OK}}{{t $.Lang "set.bk.histOk"}}{{else}}{{t $.Lang "set.bk.histFail"}}{{end}}</p>{{end}}
     {{end}}
+  </section>
+
+  <section class="kh-card st-sec kh-section" id="sec-metrics" aria-labelledby="sec-metrics-t">
+    <div class="st-sec-head">
+      <span class="st-ic tone-violet">{{icon "activity"}}</span>
+      <div class="min-w-0"><h2 id="sec-metrics-t">{{t .Lang "set.met.title"}}</h2><p>{{t .Lang "set.met.desc"}}</p></div>
+      {{if .metricsEnabled}}<span class="kh-badge ok st-apply">{{icon "check"}} {{t .Lang "set.met.on"}}</span>{{else}}<span class="kh-badge neutral st-apply">{{t .Lang "set.met.off"}}</span>{{end}}
+    </div>
+    <dl class="st-kv">
+      <div><dt>METRICS_ENABLED</dt><dd class="kh-mono">{{if .metricsEnabled}}true{{else}}false{{end}}</dd></div>
+      <div><dt>{{t .Lang "set.met.endpoint"}}</dt><dd class="kh-mono">GET /metrics</dd></div>
+      <div><dt>{{t .Lang "set.met.auth"}}</dt><dd>{{t .Lang "set.met.authVal"}}</dd></div>
+    </dl>
+    {{if not .metricsEnabled}}<p class="kh-hint" id="met-off">{{t .Lang "set.met.offHint"}} <code>METRICS_ENABLED=true</code></p>{{end}}
+    <p class="kh-hint int-note">{{icon "key"}} <span>{{t .Lang "set.met.hint"}}</span></p>
   </section>
 
   <div class="int-head kh-section" id="sec-integrations">

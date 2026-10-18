@@ -35,6 +35,8 @@ var migrations = []migration{
 	{name: "maintenance_runs", up: migrateMaintenanceRuns},
 	{name: "search_results_last_seen", up: migrateResultsLastSeen},
 	{name: "screenshots_file_index", up: migrateScreenshotsFileIndex},
+	{name: "metrics_indexes", up: migrateMetricsIndexes},
+	{name: "api_token_metrics_scope", up: migrateAPITokenMetricsScope},
 }
 
 // LatestSchemaVersion bu ikilinin bildiği en yüksek şema sürümü.

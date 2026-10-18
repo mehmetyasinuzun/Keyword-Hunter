@@ -1,5 +1,6 @@
 // Package notify Slack/Discord webhook bildirimleri gönderir.
-// Basit, kaynak verimlisi — harici bağımlılık yok.
+// Basit, kaynak verimlisi — harici bağımlılık yok (gönderim sonuçları
+// pkg/metrics sayaçlarına işlenir).
 package notify
 
 import (
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"keywordhunter-mvp/pkg/metrics"
 	"keywordhunter-mvp/pkg/shared"
 )
 
@@ -64,7 +66,13 @@ func SendWebhook(webhookURL string, payload AlertPayload) error {
 	if webhookURL == "" {
 		return nil
 	}
+	err := sendWebhook(webhookURL, payload)
+	metrics.NotificationSent(metrics.ChannelWebhook, err == nil)
+	return err
+}
 
+// sendWebhook gönderimi yapar (SendWebhook sonucu metriklere işler).
+func sendWebhook(webhookURL string, payload AlertPayload) error {
 	// Hem Slack hem Discord'un anlayacağı basit format
 	body := buildMessage(payload)
 

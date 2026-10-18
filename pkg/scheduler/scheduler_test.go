@@ -25,13 +25,19 @@ type fakeSearcher struct {
 	queries []string
 	gate    chan struct{}
 	started chan string
+	// stats verilirse motor özeti olarak döner (varsayılan: 3/3 yanıt).
+	stats *search.SearchStats
 }
 
-func (f *fakeSearcher) SearchAll(ctx context.Context, query string) []search.Result {
+func (f *fakeSearcher) SearchAllStats(ctx context.Context, query string) ([]search.Result, search.SearchStats) {
 	f.mu.Lock()
 	f.queries = append(f.queries, query)
 	res := f.results[query]
 	gate, started := f.gate, f.started
+	stats := search.SearchStats{Engines: 3, Answered: 3}
+	if f.stats != nil {
+		stats = *f.stats
+	}
 	f.mu.Unlock()
 	if started != nil {
 		started <- query
@@ -42,7 +48,7 @@ func (f *fakeSearcher) SearchAll(ctx context.Context, query string) []search.Res
 		case <-ctx.Done():
 		}
 	}
-	return res
+	return res, stats
 }
 
 func (f *fakeSearcher) calls() []string {

@@ -286,6 +286,12 @@ func (s *Server) taxiiAuth() gin.HandlerFunc {
 			return
 		}
 		setTokenContext(c, t, u)
+		// Kazıma token'ı ("metrics") yalnız /metrics içindir; bulgu okuyamaz.
+		if t.Scope == storage.TokenScopeMetrics {
+			s.auditDenied(c, "token_scope", "read")
+			taxiiError(c, http.StatusForbidden, "Forbidden", "This API token has the 'metrics' scope and can only scrape /metrics; use a 'read' token for TAXII")
+			return
+		}
 		// REQUIRE_2FA kapsamındaki ama 2FA'sı olmayan hesabın token'ı /api/'de
 		// olduğu gibi burada da çalışmaz (bkz. twoFactorGate).
 		if s.twoFactorPolicyActive() && s.twoFactorRequiredFor(u.Role) {
