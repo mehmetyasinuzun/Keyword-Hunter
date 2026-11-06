@@ -3,8 +3,8 @@ module keywordhunter-mvp
 go 1.27.2
 
 require (
-	github.com/chromedp/cdproto v0.158.0
-	github.com/chromedp/chromedp v0.21.0
+	github.com/chromedp/cdproto v0.159.0
+	github.com/chromedp/chromedp v0.21.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.25.0
